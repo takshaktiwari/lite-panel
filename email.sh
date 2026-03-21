@@ -163,7 +163,17 @@ install_mailserver() {
     # -----------------------------
     echo "📦 Installing mail server packages..."
     apt update
-    apt install -y postfix dovecot-imapd dovecot-pop3d dovecot-mysql opendkim opendkim-tools spamassassin spamc
+    
+    # Pre-seed Postfix configuration
+    echo "postfix postfix/mailname string $HOSTNAME" | debconf-set-selections
+    echo "postfix postfix/main_mailer_type string 'Internet Site'" | debconf-set-selections
+    
+    DEBIAN_FRONTEND=noninteractive apt install -y postfix dovecot-imapd dovecot-pop3d dovecot-lmtpd dovecot-mysql opendkim opendkim-tools spamassassin spamc ssl-cert
+    
+    # Ensure snakeoil certificates exist
+    if [[ ! -f "/etc/ssl/certs/ssl-cert-snakeoil.pem" ]]; then
+        make-ssl-cert generate-default-snakeoil --force-overwrite
+    fi
 
     # -----------------------------
     # POSTFIX CONFIGURATION
@@ -190,26 +200,41 @@ install_mailserver() {
     # -----------------------------
     echo "🕊️ Configuring Dovecot..."
     
-    # Remove old config completely
-    rm -f /etc/dovecot/dovecot.conf
+    # Ensure directory exists
+    mkdir -p /etc/dovecot
     
-    # Create fresh, complete config
-    cat > /etc/dovecot/dovecot.conf << 'EOF'
-!include conf.d/*.conf
-
+    # Create a 100% complete, standalone config (eliminates Error 89)
+    cat > /etc/dovecot/dovecot.conf << EOF
+# Dovecot configuration - Standalone
 protocols = imap pop3 lmtp
 listen = *
 mail_location = maildir:~/Maildir
 auth_mechanisms = plain login
+disable_plaintext_auth = no
 
+# SSL configuration - using snakeoil as fallback
+ssl = yes
+ssl_cert = </etc/ssl/certs/ssl-cert-snakeoil.pem>
+ssl_key = </etc/ssl/private/ssl-cert-snakeoil.key>
+
+# Required Namespace
+namespace inbox {
+  inbox = yes
+  separator = /
+  prefix = 
+  location = 
+  type = private
+}
+
+# Authentication
 passdb {
   driver = pam
 }
-
 userdb {
   driver = passwd
 }
 
+# Service configuration
 service auth {
   unix_listener /var/spool/postfix/private/auth {
     mode = 0666
@@ -222,10 +247,14 @@ service imap-login {
   inet_listener imap { port = 143 }
   inet_listener imaps { port = 993; ssl = yes }
 }
+
 service pop3-login {
   inet_listener pop3 { port = 110 }
   inet_listener pop3s { port = 995; ssl = yes }
 }
+
+# Optional settings
+!include_try conf.d/*.conf
 EOF
 
     # -----------------------------
@@ -233,8 +262,16 @@ EOF
     # -----------------------------
     echo "🔐 Configuring OpenDKIM..."
     mkdir -p /etc/opendkim/keys/$DOMAIN
-    opendkim-genkey -s mail -d $DOMAIN -D /etc/opendkim/keys/$DOMAIN
-    chown opendkim:opendkim /etc/opendkim/keys/$DOMAIN/mail.private
+    mkdir -p /var/run/opendkim
+    chown opendkim:opendkim /var/run/opendkim
+
+    # Generate key only if it doesn't exist
+    if [[ ! -f "/etc/opendkim/keys/$DOMAIN/mail.private" ]]; then
+        opendkim-genkey -s mail -d $DOMAIN -D /etc/opendkim/keys/$DOMAIN
+    fi
+    
+    chown -R opendkim:opendkim /etc/opendkim
+    chmod 600 /etc/opendkim/keys/$DOMAIN/mail.private
 
     cat > /etc/opendkim.conf <<EOF
 Syslog yes
@@ -247,7 +284,15 @@ SigningTable refile:/etc/opendkim/SigningTable
 Mode sv
 UserID opendkim:opendkim
 Socket inet:12301@localhost
+PidFile /var/run/opendkim/opendkim.pid
 EOF
+
+    # Sync the default socket setting and fix potential startup hang
+    if [[ -f "/etc/default/opendkim" ]]; then
+        sed -i 's|^SOCKET=.*|SOCKET="inet:12301@localhost"|' /etc/default/opendkim
+    else
+        echo 'SOCKET="inet:12301@localhost"' > /etc/default/opendkim
+    fi
 
     echo "127.0.0.1" > /etc/opendkim/TrustedHosts
     echo "localhost" >> /etc/opendkim/TrustedHosts
@@ -310,9 +355,19 @@ EOF
     echo "🔐 Setting up SSL certificate..."
     if command -v certbot >/dev/null 2>&1; then
         certbot --nginx -d "$HOSTNAME" --redirect --non-interactive --agree-tos -m admin@$DOMAIN || true
-        postconf -e "smtpd_tls_cert_file = /etc/letsencrypt/live/$HOSTNAME/fullchain.pem"
-        postconf -e "smtpd_tls_key_file = /etc/letsencrypt/live/$HOSTNAME/privkey.pem"
-        postconf -e "smtpd_use_tls = yes"
+        
+        if [[ -f "/etc/letsencrypt/live/$HOSTNAME/fullchain.pem" ]]; then
+            echo "🔧 Configuring Postfix and Dovecot with SSL certificates..."
+            postconf -e "smtpd_tls_cert_file = /etc/letsencrypt/live/$HOSTNAME/fullchain.pem"
+            postconf -e "smtpd_tls_key_file = /etc/letsencrypt/live/$HOSTNAME/privkey.pem"
+            postconf -e "smtpd_use_tls = yes"
+            
+            # Update Dovecot to use new SSL certificates
+            sed -i "s|ssl_cert = .*|ssl_cert = </etc/letsencrypt/live/$HOSTNAME/fullchain.pem>|" /etc/dovecot/dovecot.conf
+            sed -i "s|ssl_key = .*|ssl_key = </etc/letsencrypt/live/$HOSTNAME/privkey.pem>|" /etc/dovecot/dovecot.conf
+        else
+            echo "⚠️ SSL certificate not found. Using fallback self-signed certificates for now."
+        fi
     fi
 
     # -----------------------------
@@ -530,9 +585,11 @@ case $CHOICE in
     3) change_password ;;
     4) delete_email ;;
     5) 
-        echo "⚠️ Removing existing mail server..."
+        echo "⚠️ Removing existing mail server packages..."
         systemctl stop postfix dovecot opendkim 2>/dev/null || true
-        apt remove --purge -y postfix dovecot-* opendkim* 2>/dev/null || true
+        # Use purge to clean old configs
+        DEBIAN_FRONTEND=noninteractive apt remove --purge -y postfix dovecot-* opendkim* 2>/dev/null || true
+        # Manual cleanup of specific configs
         rm -rf /etc/postfix /etc/dovecot /etc/opendkim /var/mail/*
         echo "🔄 Proceeding with fresh installation..."
         install_mailserver
