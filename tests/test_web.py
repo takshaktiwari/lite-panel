@@ -109,7 +109,29 @@ def test_repeated_failures_lock_the_address_out(client):
 # --------------------------------------------------------------------------
 
 
-def test_dashboard_renders_when_signed_in(signed_in):
+def test_dashboard_redirects_to_setup_before_anything_is_installed(signed_in):
+    """A fresh install has no InstalledProvider rows yet, so the dashboard
+    sends the operator to the setup wizard instead of an empty page."""
+    response = signed_in.get("/")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/setup"
+
+
+def test_setup_wizard_renders(signed_in):
+    """On a non-Ubuntu/Debian machine (this test runs on macOS in CI) the
+    wizard correctly refuses to offer stack management rather than pretending
+    it can install packages that don't apply here."""
+    response = signed_in.get("/setup")
+    assert response.status_code == 200
+    assert "isn't Ubuntu or Debian" in response.text
+
+
+def test_dashboard_renders_once_something_is_installed(signed_in, db):
+    from app.models import InstalledProvider
+
+    db.add(InstalledProvider(key="nginx", version=""))
+    db.commit()
+
     response = signed_in.get("/")
     assert response.status_code == 200
     assert "Services" in response.text
@@ -139,7 +161,7 @@ def test_logout_without_a_csrf_token_is_rejected(signed_in):
     assert "could not be verified" in response.text
 
     # The session must survive a rejected request.
-    assert signed_in.get("/").status_code == 200
+    assert signed_in.get("/setup").status_code == 200
 
 
 def test_logout_with_a_wrong_csrf_token_is_rejected(signed_in):
@@ -148,7 +170,7 @@ def test_logout_with_a_wrong_csrf_token_is_rejected(signed_in):
 
 
 def test_logout_with_the_right_csrf_token_ends_the_session(signed_in):
-    page = signed_in.get("/")
+    page = signed_in.get("/setup")
     token = _extract_csrf(page.text)
 
     response = signed_in.post("/logout", data={"csrf_token": token})
@@ -156,7 +178,7 @@ def test_logout_with_the_right_csrf_token_ends_the_session(signed_in):
     assert response.headers["location"] == "/login"
 
     # The session is revoked server-side, not merely cleared in the browser.
-    assert signed_in.get("/").status_code == 303
+    assert signed_in.get("/setup").status_code == 303
 
 
 def _extract_csrf(html: str) -> str:

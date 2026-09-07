@@ -1,0 +1,44 @@
+{#- Per-site PHP-FPM pool.
+
+    Each site gets its own pool running as its own system user. That is what
+    makes per-site PHP versions possible, and it means one compromised site
+    cannot read another's files or sessions -- which a single shared www-data
+    pool cannot prevent.
+-#}
+; {{ banner }}
+; Site: {{ site.name }} ({{ site.domain }})
+
+[{{ site.name }}]
+
+user = {{ site.system_user }}
+group = {{ site.system_user }}
+
+; nginx (www-data) must be able to connect to the socket, but only nginx.
+listen = {{ socket_path }}
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+
+pm = {{ fpm.pm }}
+pm.max_children = {{ fpm.max_children }}
+{% if fpm.pm == 'ondemand' %}
+pm.process_idle_timeout = {{ fpm.process_idle_timeout }}
+{% else %}
+pm.start_servers = {{ fpm.start_servers }}
+pm.min_spare_servers = {{ fpm.min_spare_servers }}
+pm.max_spare_servers = {{ fpm.max_spare_servers }}
+{% endif %}
+pm.max_requests = {{ fpm.max_requests }}
+
+; Confine the site to its own tree. Without this, any site could read every
+; other site's source and configuration through PHP.
+php_admin_value[open_basedir] = {{ site.root_dir }}:/tmp:/usr/share/php
+php_admin_value[session.save_path] = {{ session_path }}
+php_admin_value[upload_tmp_dir] = {{ tmp_path }}
+php_admin_value[error_log] = /var/log/php/{{ site.name }}.error.log
+php_admin_flag[log_errors] = on
+
+php_value[memory_limit] = {{ php.memory_limit }}
+php_value[upload_max_filesize] = {{ php.upload_max_filesize }}
+php_value[post_max_size] = {{ php.post_max_size }}
+php_value[max_execution_time] = {{ php.max_execution_time }}

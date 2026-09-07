@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}{{ job.description }} · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <h1>{{ job.description }}</h1>
+  <p class="muted">{{ ui.badge(job.status.value, job.status.value) }}
+    {% if job.error %}<span class="alert-error" style="margin-left:8px;">{{ job.error }}</span>{% endif %}</p>
+</header>
+
+<pre class="job-log" id="log">{{ static_log }}</pre>
+
+{% if live %}
+<script>
+(function () {
+  const log = document.getElementById("log");
+  const source = new EventSource("/jobs/{{ job.id }}/stream");
+
+  source.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    for (const line of data.lines) {
+      log.textContent += line + "\n";
+    }
+    log.scrollTop = log.scrollHeight;
+  };
+
+  source.addEventListener("done", () => {
+    source.close();
+    setTimeout(() => window.location.reload(), 400);
+  });
+
+  source.onerror = () => {
+    // The browser retries automatically; nothing to do here.
+  };
+})();
+</script>
+{% endif %}
+{% endblock %}

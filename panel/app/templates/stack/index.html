@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Stack · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head"><h1>Stack</h1><p class="muted">Install or remove server components. Nothing here is fixed at install time.</p></header>
+
+<section class="panel">
+  <table class="table">
+    <thead><tr><th>Component</th><th>Status</th><th>Version(s)</th><th></th></tr></thead>
+    <tbody>
+      {% for p in providers %}
+      <tr>
+        <td>
+          <strong>{{ p.name }}</strong>
+          {% if p.key == 'php' %}<div class="muted">Manage per-version separately below.</div>{% endif %}
+        </td>
+        <td>
+          <span class="dot {{ 'ok' if p.service_active else ('warn' if p.installed else 'off') }}"></span>
+          {% if p.installed %}installed{% else %}not installed{% endif %}
+        </td>
+        <td class="muted">{{ p.versions | join(', ') if p.versions else '—' }}</td>
+        <td style="text-align:right;">
+          {% if p.key != 'php' %}
+          {% if p.installed %}
+          <form method="post" action="/stack/uninstall" style="display:inline;">
+            {{ ui.csrf(session) }}
+            <input type="hidden" name="key" value="{{ p.key }}">
+            <button class="button" type="submit" onclick="return confirm('Remove {{ p.name }}?')">Remove</button>
+          </form>
+          {% else %}
+          <form method="post" action="/stack/install" style="display:inline;">
+            {{ ui.csrf(session) }}
+            <input type="hidden" name="key" value="{{ p.key }}">
+            <button class="button primary" type="submit">Install</button>
+          </form>
+          {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2>PHP versions</h2>
+  <p class="muted">Discovered from apt. Install several side by side and assign each site its own.</p>
+
+  {% if php_installed %}
+  <table class="table" style="margin-bottom:16px;">
+    <thead><tr><th>Version</th><th></th></tr></thead>
+    <tbody>
+      {% for version in php_installed %}
+      <tr>
+        <td><a href="/stack/php/{{ version }}">PHP {{ version }}</a></td>
+        <td style="text-align:right;">
+          <form method="post" action="/stack/uninstall" style="display:inline;">
+            {{ ui.csrf(session) }}
+            <input type="hidden" name="key" value="php">
+            <input type="hidden" name="version" value="{{ version }}">
+            <button class="button" type="submit" onclick="return confirm('Remove PHP {{ version }}? Sites using it must be moved first.')">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if php_available %}
+  <form method="post" action="/stack/install" style="display:flex;gap:10px;align-items:flex-end;">
+    {{ ui.csrf(session) }}
+    <input type="hidden" name="key" value="php">
+    <div style="flex:1;">
+      <label for="version">Install another version</label>
+      <select name="version" id="version">
+        {% for version in php_available %}
+        <option value="{{ version }}">PHP {{ version }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="button primary" type="submit" style="margin-bottom:14px;">Install</button>
+  </form>
+  {% else %}
+  <p class="muted">No additional versions available.</p>
+  {% endif %}
+</section>
+{% endblock %}

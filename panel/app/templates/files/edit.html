@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}{{ name }} · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head"><p class="muted"><a href="/files?path={{ parent }}">← {{ parent }}</a></p><h1>{{ name }}</h1></header>
+
+<form method="post" action="/files/edit" class="panel">
+  {{ ui.csrf(session) }}
+  <input type="hidden" name="path" value="{{ path }}">
+  <textarea name="content" rows="28" spellcheck="false"
+    style="width:100%;font-family:var(--mono);font-size:13px;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">{{ content }}</textarea>
+  <button type="submit" class="button primary" style="margin-top:14px;">Save</button>
+</form>
+{% endblock %}

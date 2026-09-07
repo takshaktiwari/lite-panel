@@ -16,3 +16,6 @@ panel.db
 .DS_Store
 .idea/
 .vscode/
+
+test-server-key.pem
+server-details.md

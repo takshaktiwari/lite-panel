@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}{{ site.domain }} · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head"><p class="muted"><a href="/sites">← Sites</a></p><h1>{{ site.domain }}</h1></header>
+
+<div class="columns">
+  <section class="panel">
+    <h2>Overview</h2>
+    <dl class="stats">
+      <div><dt>System user</dt><dd>{{ site.system_user }}</dd></div>
+      <div><dt>Home directory</dt><dd>{{ site.root_dir }}</dd></div>
+      <div><dt>Webroot</dt><dd>{{ site.webroot }}</dd></div>
+      <div><dt>FPM socket</dt><dd>{{ socket or '—' }}</dd></div>
+      <div><dt>SSL</dt><dd>{{ 'Enabled' if site.ssl_enabled else 'Disabled' }}</dd></div>
+    </dl>
+    <p style="margin-top:12px;">
+      <a class="button" href="/files?path={{ site.name }}">Browse files</a>
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2>PHP version</h2>
+    <form method="post" action="/sites/{{ site.id }}/php" style="display:flex;gap:10px;align-items:flex-end;">
+      {{ ui.csrf(session) }}
+      <div style="flex:1;">
+        <select name="php_version">
+          <option value="">None</option>
+          {% for version in php_versions %}
+          <option value="{{ version }}" {{ 'selected' if version == site.php_version }}>PHP {{ version }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="button primary" type="submit" style="margin-bottom:14px;">Apply</button>
+    </form>
+  </section>
+</div>
+
+<section class="panel">
+  <h2>SSL</h2>
+  {% if not certbot_ready %}
+  <p class="muted">Install SSL support from the <a href="/stack">Stack page</a> first.</p>
+  {% elif site.ssl_enabled %}
+  <p>HTTPS is active for this site.</p>
+  <form method="post" action="/sites/{{ site.id }}/ssl">
+    {{ ui.csrf(session) }}
+    <input type="hidden" name="action" value="disable">
+    <button class="button" type="submit">Disable HTTPS</button>
+  </form>
+  {% else %}
+  <form method="post" action="/sites/{{ site.id }}/ssl" style="max-width:420px;">
+    {{ ui.csrf(session) }}
+    <input type="hidden" name="action" value="enable">
+    <label for="email">Contact email <span class="muted">(optional, for renewal notices)</span></label>
+    <input type="text" id="email" name="email" placeholder="you@example.com">
+    <p class="muted" style="margin:-8px 0 12px;">
+      {{ site.domain }} must already point at this server's public IP before requesting a certificate.
+    </p>
+    <button class="button primary" type="submit">Enable HTTPS</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Databases</h2>
+  {% if databases %}
+  <table class="table">
+    <thead><tr><th>Database</th><th>User</th></tr></thead>
+    <tbody>
+      {% for entry in databases %}
+      <tr><td>{{ entry.db_name }}</td><td>{{ entry.db_user }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No databases linked to this site yet. <a href="/databases">Create one</a>.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>FTP</h2>
+  {% if ftp_account %}
+  <p>FTP user <code>{{ ftp_account.username }}</code> is enabled. Manage it from the <a href="/ftp">FTP page</a>.</p>
+  {% else %}
+  <p class="muted">Not enabled. <a href="/ftp">Enable FTP</a> for this site.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Delete site</h2>
+  <p class="muted">Type <code>{{ site.domain }}</code> to confirm. Files are kept by default.</p>
+  <form method="post" action="/sites/{{ site.id }}/delete" style="max-width:420px;">
+    {{ ui.csrf(session) }}
+    <label for="confirm">Confirm domain</label>
+    <input type="text" id="confirm" name="confirm" required>
+    <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
+      <input type="checkbox" name="remove_files" value="1" style="width:auto;margin:0;">
+      Also delete files in {{ site.root_dir }}
+    </label>
+    <button type="submit" class="button" style="margin-top:14px;color:var(--danger);">Delete site</button>
+  </form>
+</section>
+{% endblock %}

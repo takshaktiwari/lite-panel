@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Databases · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head"><h1>Databases</h1><p class="muted">Row and table browsing is delegated to Adminer.</p></header>
+
+{% if not mariadb_ready %}
+<div class="alert alert-notice">MariaDB isn't installed yet. <a href="/setup">Run setup</a> first.</div>
+{% else %}
+
+<section class="panel">
+  <h2>Create a database</h2>
+  <form method="post" action="/databases/new" style="max-width:480px;">
+    {{ ui.csrf(session) }}
+    <label for="db_name">Database name</label>
+    <input type="text" id="db_name" name="db_name" required>
+
+    <label for="db_user">User <span class="muted">(defaults to the database name)</span></label>
+    <input type="text" id="db_user" name="db_user">
+
+    <label for="password">Password</label>
+    <input type="text" id="password" name="password" value="{{ suggested_password }}" required>
+
+    {% if sites %}
+    <label for="site_id">Link to a site <span class="muted">(optional)</span></label>
+    <select id="site_id" name="site_id">
+      <option value="">None</option>
+      {% for site in sites %}
+      <option value="{{ site.id }}">{{ site.domain }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+
+    <button type="submit" class="button primary" style="margin-top:6px;">Create database</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Managed databases</h2>
+  {% if databases %}
+  <table class="table">
+    <thead><tr><th>Database</th><th>User</th><th>Size</th><th></th></tr></thead>
+    <tbody>
+      {% for entry in databases %}
+      <tr>
+        <td>{{ entry.db_name }}</td>
+        <td>{{ entry.db_user }}</td>
+        <td class="muted">{{ sizes.get(entry.db_name, 0) }} MB</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <a class="button" href="/adminer/?db={{ entry.db_name }}" target="_blank" rel="noopener">Open in Adminer</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted empty">No databases yet.</p>
+  {% endif %}
+</section>
+
+{% if unmanaged %}
+<section class="panel">
+  <h2>Other databases on this server</h2>
+  <p class="muted">These exist in MariaDB but were not created through the panel.</p>
+  <table class="table">
+    <thead><tr><th>Database</th><th>Size</th></tr></thead>
+    <tbody>
+      {% for entry in unmanaged %}
+      <tr><td>{{ entry.name }}</td><td class="muted">{{ entry.size_mb }} MB</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

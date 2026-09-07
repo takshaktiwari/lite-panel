@@ -1,0 +1,40 @@
+# {{ banner }}
+# The panel owns this file outright rather than patching lines into the
+# distribution default, so the result is identical every time it renders.
+# The original was saved alongside it as vsftpd.conf.pre-lite-panel.
+
+listen=YES
+listen_ipv6=NO
+
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+local_umask=022
+
+dirmessage_enable=YES
+use_localtime=YES
+xferlog_enable=YES
+connect_from_port_20=YES
+
+# Confine each account to its own directory.
+chroot_local_user=YES
+allow_writeable_chroot=YES
+user_config_dir={{ user_config_dir }}
+
+# Only accounts the panel has explicitly listed may log in.
+userlist_enable=YES
+userlist_file=/etc/vsftpd.userlist
+userlist_deny=NO
+
+# Passive mode. Behind NAT -- which includes every EC2 instance -- the address
+# advertised to the client has to be the public one, or the client is told to
+# connect somewhere unroutable and the transfer hangs after login.
+pasv_enable=YES
+pasv_min_port={{ passive_min }}
+pasv_max_port={{ passive_max }}
+{% if public_ip %}
+pasv_address={{ public_ip }}
+{% endif %}
+
+secure_chroot_dir=/var/run/vsftpd/empty
+pam_service_name=vsftpd

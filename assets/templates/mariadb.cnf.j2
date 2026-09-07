@@ -1,0 +1,38 @@
+# {{ banner }}
+# Sized from this machine's RAM. Re-rendered when the panel is asked to
+# rebuild, so resizing the server is a re-render rather than a re-install.
+
+[mysqld]
+
+# --- memory ---------------------------------------------------------------
+innodb_buffer_pool_size = {{ settings.innodb_buffer_pool_size_mb }}M
+innodb_buffer_pool_instances = 1
+innodb_log_file_size = {{ settings.innodb_log_file_size_mb }}M
+innodb_log_buffer_size = {{ settings.innodb_log_buffer_size_mb }}M
+
+tmp_table_size = {{ settings.tmp_table_size_mb }}M
+max_heap_table_size = {{ settings.tmp_table_size_mb }}M
+
+# --- connections ----------------------------------------------------------
+max_connections = {{ settings.max_connections }}
+thread_cache_size = {{ settings.thread_cache_size }}
+table_open_cache = {{ settings.table_open_cache }}
+open_files_limit = {{ settings.open_files_limit }}
+
+wait_timeout = {{ settings.wait_timeout }}
+interactive_timeout = {{ settings.interactive_timeout }}
+
+# --- durability -----------------------------------------------------------
+innodb_flush_method = O_DIRECT
+# 2 trades at most one second of transactions on an OS crash for a large
+# write-throughput gain. Appropriate for the small application servers this
+# panel targets; raise to 1 if losing a second of writes is unacceptable.
+innodb_flush_log_at_trx_commit = 2
+
+# --- trimmed for small servers -------------------------------------------
+performance_schema = OFF
+
+# --- logging --------------------------------------------------------------
+slow_query_log = 1
+long_query_time = {{ settings.long_query_time }}
+slow_query_log_file = /var/log/mysql/slow.log

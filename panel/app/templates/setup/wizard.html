@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Setup · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <h1>Set up this server</h1>
+  <p class="muted">{{ os_name }} · {{ tuning.total_ram_mb }} MB RAM detected</p>
+</header>
+
+{% if not supported_os %}
+<div class="alert alert-error">
+  This machine isn't Ubuntu or Debian. lite-panel cannot manage the stack here.
+</div>
+{% else %}
+
+{% if already_done %}
+<div class="alert alert-notice">
+  Some components are already installed. Running this again only adds what
+  you select below — existing components are left alone.
+  <a href="/stack">Manage the stack directly</a> instead.
+</div>
+{% endif %}
+
+<form method="post" action="/setup/run" class="panel">
+  {{ ui.csrf(session) }}
+
+  <h2>PHP versions</h2>
+  <p class="muted">Discovered from apt on this machine — install as many as you need; each site picks one.</p>
+  {% if php_available %}
+    {% for version in php_available %}
+    <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:8px;">
+      <input type="checkbox" name="php_versions" value="{{ version }}"
+             style="width:auto;margin:0;" {{ 'checked' if version == suggested_php }}>
+      PHP {{ version }}
+    </label>
+    {% endfor %}
+  {% else %}
+    <p class="muted">No PHP versions found yet — the ondrej/php repository will be added first.</p>
+  {% endif %}
+
+  <h2 style="margin-top:20px;">Also install</h2>
+  <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:8px;">
+    <input type="checkbox" name="mariadb" value="1" checked style="width:auto;margin:0;">
+    MariaDB — database server, with Adminer for browsing
+  </label>
+  <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:8px;">
+    <input type="checkbox" name="certbot" value="1" checked style="width:auto;margin:0;">
+    SSL (Let's Encrypt) — free HTTPS certificates
+  </label>
+  <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:14px;">
+    <input type="checkbox" name="vsftpd" value="1" checked style="width:auto;margin:0;">
+    FTP (vsftpd) — file access per site
+  </label>
+
+  <button type="submit" class="button primary">Set up server</button>
+</form>
+
+<section class="panel">
+  <h2>Computed tuning (from {{ tuning.total_ram_mb }} MB RAM)</h2>
+  <dl class="stats">
+    <div><dt>MariaDB buffer pool</dt><dd>{{ tuning.mariadb.innodb_buffer_pool_size_mb }} MB</dd></div>
+    <div><dt>MariaDB max connections</dt><dd>{{ tuning.mariadb.max_connections }}</dd></div>
+    <div><dt>PHP memory limit</dt><dd>{{ tuning.php.memory_limit }}</dd></div>
+    <div><dt>PHP-FPM mode</dt><dd>{{ tuning.fpm.pm }}, max {{ tuning.fpm.max_children }} children</dd></div>
+  </dl>
+  <p class="muted" style="margin-top:10px;">
+    These are recalculated from the machine's RAM and can be overridden per
+    site later. On a very small instance, adding swap first is recommended.
+  </p>
+</section>
+{% endif %}
+{% endblock %}

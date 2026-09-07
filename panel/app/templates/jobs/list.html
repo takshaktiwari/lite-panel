@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Jobs · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head"><h1>Jobs</h1><p class="muted">Every privileged operation the panel has run.</p></header>
+
+<section class="panel">
+  {% if jobs %}
+  <table class="table">
+    <thead><tr><th>Job</th><th>Status</th><th>Started</th><th>Finished</th></tr></thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr>
+        <td><a href="/jobs/{{ job.id }}">{{ job.description }}</a></td>
+        <td>{{ ui.badge(job.status.value, job.status.value) }}</td>
+        <td class="muted">{{ job.started_at.strftime('%Y-%m-%d %H:%M') if job.started_at else '—' }}</td>
+        <td class="muted">{{ job.finished_at.strftime('%Y-%m-%d %H:%M') if job.finished_at else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted empty">No jobs have run yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

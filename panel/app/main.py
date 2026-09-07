@@ -14,8 +14,22 @@ from app.config import get_settings
 from app.database import init_db, session_scope
 from app.deps import CsrfError, NotAuthenticated, render
 from app.jobs import worker
-from app.routers import auth, dashboard
+from app.routers import (
+    auth,
+    dashboard,
+    databases,
+    files,
+    ftp,
+    internal,
+    jobs as jobs_router,
+    setup,
+    sites,
+    stack,
+)
 from app.security import purge_expired_sessions
+
+# Importing this registers every job handler with the worker.
+from app import tasks  # noqa: F401  isort:skip
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -59,6 +73,14 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router)
     app.include_router(dashboard.router)
+    app.include_router(setup.router)
+    app.include_router(sites.router)
+    app.include_router(databases.router)
+    app.include_router(ftp.router)
+    app.include_router(files.router)
+    app.include_router(stack.router)
+    app.include_router(jobs_router.router)
+    app.include_router(internal.router)
 
     @app.exception_handler(NotAuthenticated)
     async def _needs_login(request: Request, _exc: NotAuthenticated):

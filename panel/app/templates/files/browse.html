@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Files · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <h1>Files</h1>
+  <p class="muted">
+    {% for crumb in crumbs %}<a href="/files?path={{ crumb.path }}">{{ crumb.name }}</a>{% if not loop.last %} / {% endif %}{% endfor %}
+  </p>
+</header>
+
+<section class="panel" style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end;">
+  <form method="post" action="/files/mkdir" style="display:flex;gap:8px;align-items:flex-end;">
+    {{ ui.csrf(session) }}
+    <input type="hidden" name="path" value="{{ current }}">
+    <div><label for="dirname">New folder</label><input type="text" id="dirname" name="name" required style="margin:0;"></div>
+    <button class="button" type="submit" style="margin-bottom:14px;">Create</button>
+  </form>
+
+  <form method="post" action="/files/new-file" style="display:flex;gap:8px;align-items:flex-end;">
+    {{ ui.csrf(session) }}
+    <input type="hidden" name="path" value="{{ current }}">
+    <div><label for="filename">New file</label><input type="text" id="filename" name="name" required style="margin:0;"></div>
+    <button class="button" type="submit" style="margin-bottom:14px;">Create</button>
+  </form>
+
+  <form method="post" action="/files/upload" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:flex-end;">
+    {{ ui.csrf(session) }}
+    <input type="hidden" name="path" value="{{ current }}">
+    <div><label for="upload">Upload</label><input type="file" id="upload" name="upload" required style="margin:0;"></div>
+    <button class="button" type="submit" style="margin-bottom:14px;">Upload</button>
+  </form>
+</section>
+
+<section class="panel">
+  {% if current != '.' %}
+  <p><a href="/files?path={{ parent }}">.. (up)</a></p>
+  {% endif %}
+
+  {% if entries %}
+  <table class="table">
+    <thead><tr><th>Name</th><th>Size</th><th>Modified</th><th>Owner</th><th></th></tr></thead>
+    <tbody>
+      {% for entry in entries %}
+      <tr>
+        <td>
+          {% if entry.is_dir %}
+          <a href="/files?path={{ entry.relative }}">📁 {{ entry.name }}</a>
+          {% elif entry.editable %}
+          <a href="/files/edit?path={{ entry.relative }}">{{ entry.name }}</a>
+          {% else %}
+          {{ entry.name }}
+          {% endif %}
+          {% if entry.is_symlink %}<span class="muted"> (link)</span>{% endif %}
+        </td>
+        <td class="muted">{{ entry.size_display }}</td>
+        <td class="muted">{{ entry.modified.strftime('%Y-%m-%d %H:%M') if entry.modified else '—' }}</td>
+        <td class="muted">{{ entry.owner }}</td>
+        <td style="text-align:right;white-space:nowrap;">
+          {% if not entry.is_dir %}
+          <a class="button" href="/files/download?path={{ entry.relative }}">Download</a>
+          {% endif %}
+          <form method="post" action="/files/rename" style="display:inline;" id="rename-{{ loop.index }}">
+            {{ ui.csrf(session) }}
+            <input type="hidden" name="path" value="{{ current }}">
+            <input type="hidden" name="target" value="{{ entry.relative }}">
+            <input type="hidden" name="new_name" value="">
+            <button class="button" type="button"
+                    onclick="const n=prompt('New name', '{{ entry.name }}'); if(n){this.form.new_name.value=n; this.form.submit();}">
+              Rename
+            </button>
+          </form>
+          <form method="post" action="/files/delete" style="display:inline;">
+            {{ ui.csrf(session) }}
+            <input type="hidden" name="path" value="{{ current }}">
+            <input type="hidden" name="target" value="{{ entry.relative }}">
+            <button class="button" type="submit" style="color:var(--danger);"
+                    onclick="return confirm('Delete {{ entry.name }}?')">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted empty">This directory is empty.</p>
+  {% endif %}
+</section>
+{% endblock %}

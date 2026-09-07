@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}New site · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head"><p class="muted"><a href="/sites">← Sites</a></p><h1>New site</h1></header>
+
+{% if not nginx_ready %}
+<div class="alert alert-error">Nginx isn't installed yet. <a href="/setup">Run setup</a> first.</div>
+{% else %}
+
+<form method="post" action="/sites/new" class="panel" style="max-width:480px;">
+  {{ ui.csrf(session) }}
+
+  <label for="domain">Domain</label>
+  <input type="text" id="domain" name="domain" placeholder="example.com" required
+         value="{{ form.domain if form else '' }}" autofocus>
+
+  <label for="name">Short name <span class="muted">(optional — derived from the domain)</span></label>
+  <input type="text" id="name" name="name" placeholder="example" value="{{ form.name if form else '' }}">
+
+  <label for="php_version">PHP version</label>
+  {% if php_versions %}
+  <select id="php_version" name="php_version">
+    <option value="">None (static site)</option>
+    {% for version in php_versions %}
+    <option value="{{ version }}">PHP {{ version }}</option>
+    {% endfor %}
+  </select>
+  {% else %}
+  <p class="muted">No PHP versions installed. <a href="/stack">Install one</a>, or continue without PHP.</p>
+  {% endif %}
+
+  <label for="subfolder">Webroot subfolder <span class="muted">(inside the site's home directory)</span></label>
+  <input type="text" id="subfolder" name="subfolder" value="public">
+
+  <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
+    <input type="checkbox" name="redirect_www" value="1" checked style="width:auto;margin:0;">
+    Redirect www to the bare domain
+  </label>
+
+  <button type="submit" class="button primary" style="margin-top:14px;">Create site</button>
+</form>
+{% endif %}
+{% endblock %}

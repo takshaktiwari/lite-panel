@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}FTP · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head"><h1>FTP</h1><p class="muted">Each site's own system user is its FTP login.</p></header>
+
+{% if not vsftpd_ready %}
+<div class="alert alert-notice">vsftpd isn't installed yet. <a href="/setup">Run setup</a> first.</div>
+{% else %}
+
+<section class="panel">
+  <p><strong>Server:</strong> {{ public_ip }} &nbsp; <strong>Passive ports:</strong> {{ passive_range }}
+     <span class="muted">— make sure these are open in your firewall / security group.</span></p>
+</section>
+
+{% if available_sites %}
+<section class="panel">
+  <h2>Enable FTP for a site</h2>
+  <form method="post" action="/ftp/enable" style="max-width:480px;">
+    {{ ui.csrf(session) }}
+    <label for="site_id">Site</label>
+    <select id="site_id" name="site_id" required>
+      {% for site in available_sites %}
+      <option value="{{ site.id }}">{{ site.domain }} ({{ site.system_user }})</option>
+      {% endfor %}
+    </select>
+
+    <label for="password">Password</label>
+    <input type="text" id="password" name="password" value="{{ suggested_password }}" required>
+
+    <button type="submit" class="button primary" style="margin-top:6px;">Enable FTP</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2>Accounts</h2>
+  {% if accounts %}
+  <table class="table">
+    <thead><tr><th>Username</th><th>Home directory</th><th></th></tr></thead>
+    <tbody>
+      {% for account in accounts %}
+      <tr>
+        <td>{{ account.username }}</td>
+        <td class="muted">{{ account.home_dir }}</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <form method="post" action="/ftp/{{ account.id }}/password" style="display:inline-flex;gap:6px;">
+            {{ ui.csrf(session) }}
+            <input type="text" name="password" placeholder="new password" style="margin:0;width:160px;">
+            <button class="button" type="submit">Change</button>
+          </form>
+          <form method="post" action="/ftp/{{ account.id }}/disable" style="display:inline;">
+            {{ ui.csrf(session) }}
+            <button class="button" type="submit" onclick="return confirm('Disable FTP for {{ account.username }}?')">Disable</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted empty">No FTP accounts yet.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

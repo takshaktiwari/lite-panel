@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 
+from fastapi.responses import RedirectResponse
+
 from app.database import get_session
 from app.deps import render, require_session
 from app.models import Job, JobStatus, Site, SiteDatabase
@@ -20,6 +22,11 @@ def dashboard(
     session=Depends(require_session),
     db: OrmSession = Depends(get_session),
 ):
+    from app.routers.setup import is_complete
+
+    if not is_complete(db):
+        return RedirectResponse("/setup", status_code=303)
+
     info = system.collect()
 
     recent_jobs = db.scalars(select(Job).order_by(Job.id.desc()).limit(5)).all()

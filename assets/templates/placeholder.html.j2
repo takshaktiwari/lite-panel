@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ site.domain }}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f6f7f9; color: #1a1d21;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #14161a; color: #e6e8eb; }
+    .card { background: #1c1f24 !important; border-color: #2c3037 !important; }
+    code { background: #14161a !important; }
+  }
+  .card {
+    background: #fff; border: 1px solid #e2e5ea; border-radius: 8px;
+    padding: 32px 36px; max-width: 460px;
+  }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  p { margin: 0 0 12px; color: #6b7280; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px; background: #f6f7f9; padding: 2px 6px; border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>{{ site.domain }} is ready</h1>
+    <p>This site was created by lite-panel and is serving from:</p>
+    <p><code>{{ site.webroot }}</code></p>
+    <p>Upload your files there — over FTP, or through the panel's file
+       manager — and replace this page.</p>
+  </div>
+</body>
+</html>

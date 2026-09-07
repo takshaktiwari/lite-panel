@@ -1,0 +1,18 @@
+; {{ banner }}
+; PHP {{ version }} — panel-owned drop-in. The distribution's php.ini is left
+; untouched; anything set here simply overrides it, so removing this file
+; restores the stock configuration exactly.
+
+memory_limit = {{ settings.memory_limit }}
+post_max_size = {{ settings.post_max_size }}
+upload_max_filesize = {{ settings.upload_max_filesize }}
+max_execution_time = {{ settings.max_execution_time }}
+max_input_time = {{ settings.max_input_time }}
+
+; Do not advertise the PHP version in response headers.
+expose_php = Off
+
+opcache.enable = 1
+opcache.memory_consumption = {{ settings.opcache_memory_consumption }}
+opcache.max_accelerated_files = {{ settings.opcache_max_accelerated_files }}
+opcache.validate_timestamps = {{ settings.opcache_validate_timestamps }}
