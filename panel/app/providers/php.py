@@ -30,6 +30,14 @@ DEFAULT_EXTENSIONS = (
 # Always installed with a version; not offered as removable extensions.
 CORE_PACKAGES = ("fpm", "cli", "common")
 
+# Versions that ondrej/php (Ubuntu) and Sury (Debian) are known to carry.
+# This list is shown in the setup wizard before the PPA is added, so the
+# operator can pick any version without first having to run a separate
+# "add repository" step.  The setup.bootstrap job adds the PPA automatically
+# before installing — this is just the menu, not a guarantee of availability.
+# Update this list when a new PHP version reaches stable on ondrej/php.
+_KNOWN_PPA_VERSIONS = ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
+
 
 @register
 class PhpProvider(Provider):
@@ -42,7 +50,31 @@ class PhpProvider(Provider):
     # -- discovery ---------------------------------------------------------
 
     def available_versions(self) -> List[str]:
-        return apt.parse_php_versions("\n".join(apt.package_names("php")))
+        """PHP versions the operator can install via the wizard or Stack page.
+
+        Strategy: start with what apt-cache currently knows (exact, always
+        correct), then fill in the known-PPA list for any version not yet in
+        the cache.  This matters on a fresh server where the ondrej/php PPA
+        hasn't been added yet — apt only knows the OS default (e.g. 8.5 on
+        Ubuntu 26.04) but the PPA will offer 7.4–8.5 once added.  The
+        setup.bootstrap job adds the PPA before calling install(), so any
+        version shown here will genuinely be installable.
+        """
+        from_apt: List[str] = apt.parse_php_versions("\n".join(apt.package_names("php")))
+        apt_set = set(from_apt)
+
+        # Only supplement with the fallback list when the PPA isn't present.
+        # Once it's been added, apt-cache is the authoritative source.
+        if apt._ppa_present("ondrej") or apt._sury_present():
+            return from_apt
+
+        # PPA not yet added: merge apt results (may be empty or partial) with
+        # the known list, keeping stable ordering.
+        combined = {v: True for v in _KNOWN_PPA_VERSIONS}
+        for v in from_apt:
+            combined[v] = True
+        return apt.sort_versions(list(combined))
+
 
     def installed_versions(self) -> List[str]:
         installed = apt.installed_packages("php")

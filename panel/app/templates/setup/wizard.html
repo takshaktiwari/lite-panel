@@ -26,18 +26,20 @@
   {{ ui.csrf(session) }}
 
   <h2>PHP versions</h2>
-  <p class="muted">Discovered from apt on this machine — install as many as you need; each site picks one.</p>
+  <p class="muted">Pick any version — you can install multiple and assign one per site.
+    The ondrej/php repository is added automatically if needed.</p>
   {% if php_available %}
     {% for version in php_available %}
     <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:8px;">
       <input type="checkbox" name="php_versions" value="{{ version }}"
              style="width:auto;margin:0;" {{ 'checked' if version == suggested_php }}>
-      PHP {{ version }}
+      PHP {{ version }}{% if version == suggested_php %} <span class="muted">(latest)</span>{% endif %}
     </label>
     {% endfor %}
   {% else %}
-    <p class="muted">No PHP versions found yet — the ondrej/php repository will be added first.</p>
+    <p class="muted">Could not detect available versions — enter a version manually or try again.</p>
   {% endif %}
+
 
   <h2 style="margin-top:20px;">Also install</h2>
   <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:8px;">
