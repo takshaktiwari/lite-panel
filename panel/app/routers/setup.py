@@ -72,12 +72,27 @@ async def run_setup(
 
     form = await request.form()
 
-    php_versions: List[str] = []
+    submitted: List[str] = []
     try:
         for value in form.getlist("php_versions"):
-            php_versions.append(validate_php_version(value))
+            submitted.append(validate_php_version(value))
     except ValidationError as exc:
         return RedirectResponse(f"/setup?error={exc}", status_code=303)
+
+    # Re-check against the live machine rather than trusting the checkboxes
+    # the page was rendered with a moment ago: this is what stands between a
+    # stale wizard page and a job that runs apt-get on a version that turns
+    # out not to exist here.
+    really_available = get_provider("php").available_versions()
+    php_versions = [v for v in submitted if v in really_available]
+    skipped = [v for v in submitted if v not in really_available]
+    if skipped:
+        return RedirectResponse(
+            "/setup?error="
+            + f"PHP {', '.join(skipped)} {'is' if len(skipped) == 1 else 'are'} no longer "
+            + "available on this machine — reload the page and pick again.",
+            status_code=303,
+        )
 
     payload = {
         "php_versions": php_versions,

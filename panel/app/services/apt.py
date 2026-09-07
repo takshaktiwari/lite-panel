@@ -18,8 +18,6 @@ from typing import Dict, List, Optional, Sequence
 from app.shell import CommandError, run, which
 from app.validators import validate_package_name
 
-from functools import lru_cache
-
 logger = logging.getLogger(__name__)
 
 # ondrej/php is the de facto source of multiple PHP versions on Ubuntu; Debian
@@ -29,9 +27,15 @@ PHP_PPA_UBUNTU = "ppa:ondrej/php"
 SURY_REPO_DEBIAN = "https://packages.sury.org/php/"
 
 
-@lru_cache(maxsize=1)
 def is_php_ppa_supported(os_id: str) -> bool:
-    """Whether ondrej/php PPA has a release for this distribution."""
+    """Whether ondrej/php PPA has a release for this distribution's codename.
+
+    Deliberately uncached: this is a live probe of a third party's mirror, and
+    a brand-new release (like the "resolute" box this was caught on) can gain
+    support later. A cached wrong answer for the life of the process is worse
+    than the cost of re-checking the handful of times this is actually called
+    -- once per PHP repository setup attempt, not once per page load.
+    """
     if os_id == "debian":
         return True
     if os_id != "ubuntu":
@@ -70,6 +74,40 @@ def package_names(prefix: str) -> List[str]:
         logger.warning("apt-cache pkgnames failed: %s", exc)
         return []
     return sorted({line.strip() for line in result.stdout.splitlines() if line.strip()})
+
+
+def parse_apt_cache_policy_has_candidate(policy_output: str) -> bool:
+    """Whether ``apt-cache policy`` output shows a real install candidate.
+
+    Pure parser, tested against captured output. A package name can appear in
+    ``apt-cache pkgnames`` results, or be referenced in another package's
+    dependency metadata, without there being anything real to install -- that
+    mismatch is exactly what produced "Package X is not available, but is
+    referred to by another package" on a release the PHP PPA doesn't yet
+    cover. Absence of any "Candidate:" line at all (an unknown package name)
+    also means no candidate.
+    """
+    for line in policy_output.splitlines():
+        line = line.strip()
+        if line.startswith("Candidate:"):
+            return "(none)" not in line
+    return False
+
+
+def has_candidate(package: str) -> bool:
+    """Whether apt can actually install this package right now.
+
+    This is the check that stands between offering a version in the UI and it
+    actually being installable -- see parse_apt_cache_policy_has_candidate.
+    """
+    package = validate_package_name(package)
+    if not apt_available():
+        return False
+    try:
+        result = run(["apt-cache", "policy", package], check=False, timeout=30)
+    except (CommandError, OSError):
+        return False
+    return parse_apt_cache_policy_has_candidate(result.stdout)
 
 
 def is_installed(package: str) -> bool:

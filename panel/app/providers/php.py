@@ -30,13 +30,14 @@ DEFAULT_EXTENSIONS = (
 # Always installed with a version; not offered as removable extensions.
 CORE_PACKAGES = ("fpm", "cli", "common")
 
-# Versions that ondrej/php (Ubuntu) and Sury (Debian) are known to carry.
-# This list is shown in the setup wizard before the PPA is added, so the
-# operator can pick any version without first having to run a separate
-# "add repository" step.  The setup.bootstrap job adds the PPA automatically
-# before installing — this is just the menu, not a guarantee of availability.
-# Update this list when a new PHP version reaches stable on ondrej/php.
-_KNOWN_PPA_VERSIONS = ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
+# Used only when apt itself is unavailable (macOS development) so the UI has
+# something to render. Never trusted as evidence that a version can actually
+# be installed — see available_versions(). A prior version of this file used
+# a similar list as a *production* fallback merged into the real result,
+# which is what let PHP 8.2 be offered (and then fail) on a machine where it
+# does not exist: the ondrej/php PPA has no build yet for this Ubuntu release,
+# and OS repos on it ship only 8.5. Never reintroduce that merge.
+_DEV_FIXTURE_VERSIONS = ["8.1", "8.2", "8.3"]
 
 
 @register
@@ -50,34 +51,59 @@ class PhpProvider(Provider):
     # -- discovery ---------------------------------------------------------
 
     def available_versions(self) -> List[str]:
-        """PHP versions the operator can install via the wizard or Stack page.
+        """PHP versions genuinely installable on this machine right now.
 
-        Strategy: start with what apt-cache currently knows (exact, always
-        correct), then fill in the known-PPA list for any version not yet in
-        the cache if the distribution supports the PPA.
+        Only ever answers from live apt data -- never from a static list of
+        versions the PPA carries *in general*, because "the PPA generally
+        carries 8.2" and "8.2 is installable on this specific release right
+        now" are different facts, and only the second one is safe to act on.
+        A brand-new Ubuntu release with no PPA build yet, or OS repos that
+        ship only one version, are exactly the cases where they diverge.
+
+        Each candidate's ``-fpm`` package is verified with
+        ``apt.has_candidate`` rather than trusting ``apt-cache pkgnames``
+        alone: a name can appear there (or be referenced by another
+        package's dependencies) without anything real to install.
         """
-        from_apt: List[str] = apt.parse_php_versions("\n".join(apt.package_names("php")))
+        if not apt.apt_available():
+            # No apt on this machine at all (e.g. local development on
+            # macOS) -- fixture data so the UI has something to render.
+            from app.config import get_settings
 
-        # If PPA is already present, apt-cache is the authoritative source.
-        if apt._ppa_present("ondrej") or apt._sury_present():
-            return from_apt
+            if get_settings().dev_mode:
+                return apt.sort_versions(list(_DEV_FIXTURE_VERSIONS))
+            return []
 
-        # In dev mode, return fallback list if apt returns nothing so UI is testable.
-        from app.config import get_settings
-        if get_settings().dev_mode and not from_apt:
-            return apt.sort_versions(list(_KNOWN_PPA_VERSIONS))
+        candidates = apt.parse_php_versions("\n".join(apt.package_names("php")))
+        verified = [v for v in candidates if apt.has_candidate(f"php{v}-fpm")]
+        return apt.sort_versions(verified)
 
-        # Check if PPA is supported on this OS release (e.g. Ubuntu 26.04 is not yet supported).
-        # If unsupported, only OS-provided PHP packages are installable.
-        if not apt.is_php_ppa_supported(system.os_release_id()):
-            return from_apt
 
-        # PPA not yet added: merge apt results with the known list.
-        combined = {v: True for v in _KNOWN_PPA_VERSIONS}
-        for v in from_apt:
-            combined[v] = True
-        return apt.sort_versions(list(combined))
+    def repository_status(self) -> Dict:
+        """Whether ondrej/php (or Sury) is configured, and whether it could be.
 
+        Drives the explicit "add repository" affordance in the UI: the only
+        safe way to widen available_versions() beyond whatever the OS shipped
+        is to actually add the repository and let apt tell us what's really
+        there afterward -- never to guess.
+        """
+        os_id = system.os_release_id()
+        present = apt._ppa_present("ondrej") or apt._sury_present()
+        return {
+            "present": present,
+            "supported": True if present else apt.is_php_ppa_supported(os_id),
+            "os_id": os_id,
+        }
+
+    def add_repository(self, ctx) -> None:
+        """Add the PHP repository as its own action, independent of any
+        specific version install."""
+        os_id = system.os_release_id()
+        if not os_id:
+            raise ValidationError("Could not detect the OS distribution.")
+        apt.ensure_php_repository(ctx, os_id)
+        newly_available = self.available_versions()
+        ctx.log(f"Versions now available: {', '.join(newly_available) or 'none'}")
 
     def installed_versions(self) -> List[str]:
         installed = apt.installed_packages("php")

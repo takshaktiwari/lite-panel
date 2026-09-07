@@ -36,6 +36,7 @@ def stack_page(
         providers=[p.status() for p in all_providers()],
         php_available=[v for v in php.available_versions() if v not in installed_php],
         php_installed=installed_php,
+        php_repo=php.repository_status(),
     )
 
 
@@ -60,6 +61,20 @@ def install(
             version = validate_php_version(version) if key == "php" else version
         except ValidationError as exc:
             return _back(error=str(exc))
+
+    # Re-check against the live machine, not the possibly-stale page the form
+    # was submitted from: a version offered a minute ago (or in another
+    # browser tab) may no longer be real, and this is what turns that into a
+    # clean redirect instead of a job that runs apt-get and fails loudly.
+    if key == "php" and version:
+        really_available = provider.available_versions()
+        if version not in really_available:
+            return _back(
+                error=(
+                    f"PHP {version} is not installable on this server right now. "
+                    f"Available: {', '.join(really_available) or 'none yet — add the PHP repository below'}."
+                )
+            )
 
     label = f"Install {provider.name}" + (f" {version}" if version else "")
     job = enqueue(
@@ -96,6 +111,28 @@ def uninstall(
         user_id=session.user_id,
     )
     _audit(db, session, "stack.uninstall", f"{key} {version or ''}".strip())
+    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+
+
+@router.post("/php/add-repository", dependencies=[Depends(csrf_protect)])
+def add_php_repository(
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """Explicitly widen PHP's available_versions() by adding ondrej/Sury.
+
+    Kept separate from installing any particular version: this is the only
+    safe way to offer more than the OS-shipped PHP version, since it's a real
+    apt operation whose result (what's actually available afterward) is
+    re-queried from apt rather than assumed.
+    """
+    job = enqueue(
+        db,
+        "php.add_repository",
+        "Add PHP repository",
+        user_id=session.user_id,
+    )
+    _audit(db, session, "stack.php_add_repository", None)
     return RedirectResponse(f"/jobs/{job.id}", status_code=303)
 
 

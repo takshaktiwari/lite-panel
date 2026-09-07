@@ -45,7 +45,28 @@
 
 <section class="panel">
   <h2>PHP versions</h2>
-  <p class="muted">Discovered from apt. Install several side by side and assign each site its own.</p>
+  <p class="muted">Discovered from apt on this machine. Install several side by side and assign each site its own.</p>
+
+  {% if not php_repo.present %}
+    {% if php_repo.supported %}
+    <div class="alert alert-notice">
+      Only the PHP version this OS ships is available right now.
+      Add the PHP repository to unlock more versions (7.4–8.5, depending on what it carries for this release).
+      <form method="post" action="/stack/php/add-repository" style="margin-top:8px;">
+        {{ ui.csrf(session) }}
+        <button class="button primary" type="submit">Add PHP repository</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="alert alert-error">
+      The PHP repository (ondrej/php or Sury) does not yet have a build for this specific OS release.
+      Only the version{{ 's' if php_available|length != 1 }} already in this OS's own repositories
+      {{ 'are' if php_available|length != 1 else 'is' }} available: {{ php_available | join(', ') or 'none detected' }}.
+      This isn't something the panel can fix — it resolves itself once the repository maintainer adds support
+      for this release, or you can use an older/more widely-supported OS release instead.
+    </div>
+    {% endif %}
+  {% endif %}
 
   {% if php_installed %}
   <table class="table" style="margin-bottom:16px;">

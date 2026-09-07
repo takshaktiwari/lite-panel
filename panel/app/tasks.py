@@ -99,6 +99,14 @@ def change_php_extensions(ctx) -> None:
         raise _fail(exc) from exc
 
 
+@register("php.add_repository")
+def add_php_repository(ctx) -> None:
+    try:
+        get_provider("php").add_repository(ctx)
+    except (ValidationError, RuntimeError) as exc:
+        raise _fail(exc) from exc
+
+
 # --------------------------------------------------------------------------
 # Sites
 # --------------------------------------------------------------------------

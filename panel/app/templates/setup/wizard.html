@@ -26,8 +26,8 @@
   {{ ui.csrf(session) }}
 
   <h2>PHP versions</h2>
-  <p class="muted">Pick any version — you can install multiple and assign one per site.
-    The ondrej/php repository is added automatically if needed.</p>
+  <p class="muted">You can install multiple and assign one per site. These are the versions
+    genuinely installable on this machine right now — nothing here is a guess.</p>
   {% if php_available %}
     {% for version in php_available %}
     <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:8px;">
@@ -36,8 +36,12 @@
       PHP {{ version }}{% if version == suggested_php %} <span class="muted">(latest)</span>{% endif %}
     </label>
     {% endfor %}
+    <p class="muted" style="margin-top:8px;">
+      Only one version yet? Finish setup, then visit
+      <a href="/stack">Stack</a> to add the PHP repository and unlock more.
+    </p>
   {% else %}
-    <p class="muted">Could not detect available versions — enter a version manually or try again.</p>
+    <p class="muted">Could not detect any installable PHP version on this machine.</p>
   {% endif %}
 
 

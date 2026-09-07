@@ -89,3 +89,48 @@ def test_parse_dpkg_query_empty_output():
 
 def test_sort_versions():
     assert apt.sort_versions(["8.3", "7.4", "8.10", "8.1"]) == ["7.4", "8.1", "8.3", "8.10"]
+
+
+# --------------------------------------------------------------------------
+# has_candidate parsing
+#
+# This is the regression test for a real bug: PHP 8.2 was offered and then
+# failed to install on an Ubuntu release the ondrej/php PPA doesn't cover yet
+# (26.04 "resolute") and that the OS's own repos don't ship. `apt-cache
+# pkgnames` alone wasn't the culprit in the end (it correctly omitted 8.2),
+# but a package name can still be *referenced* by other packages' dependency
+# metadata without a real install candidate ever existing -- this is the
+# check that catches that case regardless of how a bad name reaches it.
+# --------------------------------------------------------------------------
+
+
+def test_has_candidate_true_when_a_real_candidate_exists():
+    output = (
+        "php8.5-fpm:\n"
+        "  Installed: (none)\n"
+        "  Candidate: 8.5.4-0ubuntu1.2\n"
+        "  Version table:\n"
+        "     8.5.4-0ubuntu1.2 500\n"
+        "        500 http://archive.ubuntu.com/ubuntu resolute/universe amd64 Packages\n"
+    )
+    assert apt.parse_apt_cache_policy_has_candidate(output) is True
+
+
+def test_has_candidate_false_when_candidate_is_none():
+    """The exact shape apt-cache policy prints for a name it has heard of
+    (e.g. via another package's dependency list) but cannot actually install."""
+    output = "php8.2-fpm:\n  Installed: (none)\n  Candidate: (none)\n  Version table:\n"
+    assert apt.parse_apt_cache_policy_has_candidate(output) is False
+
+
+def test_has_candidate_false_for_completely_unknown_package():
+    """apt-cache policy on a name it has never heard of prints nothing at
+    all -- no Candidate line to find."""
+    assert apt.parse_apt_cache_policy_has_candidate("") is False
+
+
+def test_has_candidate_false_for_installed_package_with_no_candidate():
+    """An installed package whose source was since removed: Installed is set
+    but Candidate reverts to none. Still not something we can (re)install."""
+    output = "some-pkg:\n  Installed: 1.0-1\n  Candidate: (none)\n  Version table:\n"
+    assert apt.parse_apt_cache_policy_has_candidate(output) is False
