@@ -1,0 +1,287 @@
+"""The web terminal: step-up re-auth, the page, and the websocket bridge.
+
+A terminal is the one place in this app where "unstructured root shell" is
+the point rather than the thing being guarded against -- see
+app/services/terminal.py for why that module is allowed to spawn a real
+shell when nothing else in the codebase is. Everything in this file exists
+to keep that power gated: a valid panel session alone is not enough, the
+websocket only accepts same-origin connections, and every open/close is
+logged.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Form, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import RedirectResponse
+from sqlalchemy.orm import Session as OrmSession
+
+from app import security
+from app.config import get_settings
+from app.database import SessionLocal, get_session
+from app.deps import client_ip, csrf_protect, render, require_session, require_terminal_unlock
+from app.models import AuditLog, Session
+from app.services.terminal import TerminalSession
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+settings = get_settings()
+
+# Bytes read from the pty per event-loop wakeup. Generous enough that a fast
+# `cat largefile` doesn't trickle, small enough not to hog the loop.
+_READ_CHUNK = 65536
+
+
+@router.get("/terminal")
+def terminal_page(
+    request: Request,
+    session: Session = Depends(require_terminal_unlock),
+):
+    return render(
+        request,
+        "terminal.html",
+        session=session,
+        user=session.user,
+        idle_timeout_minutes=settings.terminal_idle_timeout_minutes,
+    )
+
+
+# --------------------------------------------------------------------------
+# Step-up re-authentication
+# --------------------------------------------------------------------------
+
+
+@router.get("/terminal/unlock")
+def unlock_form(
+    request: Request,
+    return_to: str = "/terminal",
+    session=Depends(require_session),
+):
+    if session.has_terminal_unlock:
+        return RedirectResponse(return_to, status_code=303)
+    return render(
+        request,
+        "terminal_unlock.html",
+        session=session,
+        user=session.user,
+        return_to=return_to,
+        unlock_minutes=settings.terminal_unlock_minutes,
+    )
+
+
+@router.post("/terminal/unlock", dependencies=[Depends(csrf_protect)])
+def unlock_submit(
+    request: Request,
+    password: str = Form(...),
+    return_to: str = Form("/terminal"),
+    session: Session = Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    ip = client_ip(request)
+
+    if security.is_locked_out(db, ip):
+        return render(
+            request,
+            "terminal_unlock.html",
+            session=session,
+            user=session.user,
+            return_to=return_to,
+            unlock_minutes=settings.terminal_unlock_minutes,
+            error="Too many failed attempts. Try again shortly.",
+            status_code=429,
+        )
+
+    if not security.verify_password(password, session.user.password_hash):
+        security.record_failed_login(db, ip)
+        db.add(
+            AuditLog(
+                action="terminal.unlock_failed",
+                user_id=session.user_id,
+                username=session.user.username,
+                ip_address=ip,
+            )
+        )
+        db.commit()
+        return render(
+            request,
+            "terminal_unlock.html",
+            session=session,
+            user=session.user,
+            return_to=return_to,
+            unlock_minutes=settings.terminal_unlock_minutes,
+            error="Incorrect password.",
+        )
+
+    security.clear_failed_logins(db, ip)
+    security.grant_terminal_unlock(db, session)
+    db.add(
+        AuditLog(
+            action="terminal.unlock",
+            user_id=session.user_id,
+            username=session.user.username,
+            ip_address=ip,
+        )
+    )
+    db.commit()
+
+    # Only ever redirect back within the app -- an open redirect via
+    # return_to would otherwise let a crafted /terminal/unlock link send a
+    # freshly-reauthenticated browser somewhere attacker-controlled.
+    target = return_to if return_to.startswith("/") and not return_to.startswith("//") else "/terminal"
+    return RedirectResponse(target, status_code=303)
+
+
+# --------------------------------------------------------------------------
+# The websocket bridge
+# --------------------------------------------------------------------------
+
+
+def _allowed_origin(websocket: WebSocket) -> bool:
+    """Reject cross-origin websocket connections.
+
+    Unlike a form POST, a browser attaches cookies to a cross-origin
+    WebSocket handshake too -- CSRF tokens don't apply here since there's no
+    form body to carry one. Pinning Origin to the Host the request actually
+    arrived on is the control that takes its place.
+    """
+    origin = websocket.headers.get("origin")
+    host = websocket.headers.get("host")
+    if not origin or not host:
+        return False
+    return origin in (f"https://{host}", f"http://{host}")
+
+
+def _session_from_cookie(db: OrmSession, websocket: WebSocket) -> Optional[Session]:
+    token = websocket.cookies.get(security.SESSION_COOKIE)
+    if not token:
+        return None
+    return security.get_session(db, token)
+
+
+@router.websocket("/terminal/ws")
+async def terminal_ws(websocket: WebSocket) -> None:
+    if not _allowed_origin(websocket):
+        logger.warning("terminal ws rejected: origin=%s host=%s",
+                        websocket.headers.get("origin"), websocket.headers.get("host"))
+        await websocket.close(code=4403)
+        return
+
+    db = SessionLocal()
+    try:
+        session = _session_from_cookie(db, websocket)
+        if session is None:
+            await websocket.close(code=4401)
+            return
+        if not session.has_terminal_unlock:
+            await websocket.close(code=4401)
+            return
+
+        username = session.user.username
+        user_id = session.user_id
+        ip = client_ip_from_ws(websocket)
+    finally:
+        db.close()
+
+    await websocket.accept()
+    _log_event("terminal.open", user_id, username, ip)
+
+    loop = asyncio.get_event_loop()
+    # /root is where the daemon actually runs on a real (Linux) install; it
+    # doesn't exist on macOS, so this falls back to the service's own
+    # portable default there rather than failing every terminal in dev/CI.
+    term = TerminalSession(cwd="/root" if os.path.isdir("/root") else None)
+    last_activity = loop.time()
+    idle_seconds = settings.terminal_idle_timeout_minutes * 60
+
+    output_queue: asyncio.Queue = asyncio.Queue()
+
+    def _on_readable() -> None:
+        chunk = term.read(_READ_CHUNK)
+        if chunk:
+            output_queue.put_nowait(chunk)
+        if not term.is_alive():
+            output_queue.put_nowait(None)  # sentinel: shell exited
+
+    loop.add_reader(term.master_fd, _on_readable)
+
+    async def pump_output() -> None:
+        while True:
+            chunk = await output_queue.get()
+            if chunk is None:
+                await websocket.close(code=1000)
+                return
+            await websocket.send_bytes(chunk)
+
+    output_task = asyncio.create_task(pump_output())
+
+    try:
+        while True:
+            remaining = idle_seconds - (loop.time() - last_activity)
+            if remaining <= 0:
+                try:
+                    await websocket.send_text(json.dumps({"type": "timeout"}))
+                except Exception:  # noqa: BLE001 - best-effort notice
+                    pass
+                break
+
+            try:
+                message = await asyncio.wait_for(websocket.receive(), timeout=remaining)
+            except asyncio.TimeoutError:
+                continue
+
+            if message["type"] == "websocket.disconnect":
+                break
+
+            if "bytes" in message and message["bytes"] is not None:
+                term.write(message["bytes"])
+                last_activity = loop.time()
+            elif "text" in message and message["text"] is not None:
+                _handle_control_message(term, message["text"])
+                last_activity = loop.time()
+    except WebSocketDisconnect:
+        pass
+    except Exception:  # noqa: BLE001 - a bug here must still release the pty
+        logger.exception("terminal websocket loop crashed")
+    finally:
+        loop.remove_reader(term.master_fd)
+        output_task.cancel()
+        term.close()
+        try:
+            await websocket.close()
+        except Exception:  # noqa: BLE001 - already closing/closed
+            pass
+        _log_event("terminal.close", user_id, username, ip)
+
+
+def _handle_control_message(term: TerminalSession, raw: str) -> None:
+    try:
+        message = json.loads(raw)
+    except (TypeError, ValueError):
+        return
+    if not isinstance(message, dict):
+        return
+    if message.get("type") == "resize":
+        cols, rows = message.get("cols"), message.get("rows")
+        if isinstance(cols, int) and isinstance(rows, int):
+            term.resize(cols, rows)
+
+
+def client_ip_from_ws(websocket: WebSocket) -> str:
+    forwarded = websocket.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:45]
+    return (websocket.client.host if websocket.client else "unknown")[:45]
+
+
+def _log_event(action: str, user_id: int, username: str, ip: str) -> None:
+    db = SessionLocal()
+    try:
+        db.add(AuditLog(action=action, user_id=user_id, username=username, ip_address=ip))
+        db.commit()
+    finally:
+        db.close()

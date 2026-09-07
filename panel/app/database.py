@@ -55,7 +55,28 @@ def init_db() -> None:
     if not settings.database_url:
         settings.state_dir.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    _ensure_additive_columns()
     logger.info("database ready at %s", settings.sqlalchemy_url)
+
+
+# Columns added to an existing table after its initial release.
+# create_all() only creates missing *tables*, never alters an existing one,
+# so a column added here needs a one-line entry -- still not a real migration
+# tool, just enough for changes that are purely additive (a new nullable
+# column) rather than destructive.
+_ADDITIVE_COLUMNS = {
+    "sessions": [("terminal_unlocked_until", "DATETIME")],
+}
+
+
+def _ensure_additive_columns() -> None:
+    with engine.begin() as conn:
+        for table, columns in _ADDITIVE_COLUMNS.items():
+            existing = {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
+            for name, sql_type in columns:
+                if name not in existing:
+                    conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
+                    logger.info("added column %s.%s", table, name)
 
 
 @contextmanager

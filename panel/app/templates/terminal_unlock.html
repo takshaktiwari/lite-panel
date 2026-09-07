@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Confirm password · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <h1>Confirm your password</h1>
+  <p class="muted">
+    The terminal gives direct root shell access to this server, so it needs your
+    password again even though you're already signed in. This lasts for
+    {{ unlock_minutes }} minutes.
+  </p>
+</header>
+
+<form method="post" action="/terminal/unlock" class="panel" style="max-width:360px;">
+  {{ ui.csrf(session) }}
+  <input type="hidden" name="return_to" value="{{ return_to }}">
+
+  <label for="password">Password</label>
+  <input type="password" id="password" name="password" required autofocus
+         autocomplete="current-password">
+
+  <button type="submit" class="button primary" style="margin-top:6px;">Continue to terminal</button>
+</form>
+{% endblock %}

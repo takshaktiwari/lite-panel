@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     login_max_attempts: int = 5
     login_lockout_minutes: int = 15
 
+    # Step-up re-auth for the web terminal: a plain session is enough for
+    # every other action, but a terminal is an unstructured root shell, so it
+    # additionally requires the password again, granted for a short window.
+    terminal_unlock_minutes: int = 15
+    terminal_idle_timeout_minutes: int = 20
+
     # Set by dev tooling; relaxes the checks that only make sense on a server.
     dev_mode: bool = False
 

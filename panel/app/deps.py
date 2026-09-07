@@ -47,6 +47,20 @@ def require_user(session: Session = Depends(require_session)) -> AdminUser:
     return session.user
 
 
+class TerminalLocked(Exception):
+    """Raised when the terminal is requested without an unexpired step-up
+    grant. Turned into a redirect to /terminal/unlock in main.py, distinct
+    from NotAuthenticated so the redirect target (and the message the
+    operator sees) is specific to re-entering the password, not logging in
+    from scratch."""
+
+
+def require_terminal_unlock(session: Session = Depends(require_session)) -> Session:
+    if not session.has_terminal_unlock:
+        raise TerminalLocked()
+    return session
+
+
 async def csrf_protect(request: Request, session: Session = Depends(require_session)) -> None:
     """Verify the CSRF token on any request that changes state.
 
