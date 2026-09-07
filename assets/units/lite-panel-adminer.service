@@ -1,0 +1,29 @@
+[Unit]
+Description=lite-panel Adminer PHP server
+Documentation=https://github.com/takshaktiwari/server-setup-script
+After=network.target
+# Start after the main panel so nginx's auth_request gate is available.
+After=lite-panel.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+
+# php -S is used (not php-fpm) because Adminer is a single-file tool;
+# we need no FastCGI complexity for it.  Binds ONLY to loopback — nginx
+# proxies in; the port is never exposed to the internet.
+#
+# -t points at assets/vendor/ which contains:
+#   index.php  — the credentials() override that pins the server to localhost
+#   adminer.php — the vendored upstream (untouched)
+ExecStart=/usr/bin/php -S 127.0.0.1:8766 -t /opt/lite-panel/assets/vendor
+
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=append:/var/log/lite-panel/adminer.log
+StandardError=append:/var/log/lite-panel/adminer.log
+
+[Install]
+WantedBy=multi-user.target

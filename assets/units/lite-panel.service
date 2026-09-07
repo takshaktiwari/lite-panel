@@ -1,0 +1,35 @@
+[Unit]
+Description=lite-panel web control panel (uvicorn)
+Documentation=https://github.com/takshaktiwari/server-setup-script
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+WorkingDirectory=/opt/lite-panel/panel
+
+# Settings written by install.sh (secret_key, database path, etc.)
+EnvironmentFile=/etc/lite-panel/panel.env
+
+ExecStart=/opt/lite-panel/venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8765 \
+    --no-access-log
+
+# Give uvicorn time to finish in-flight requests before killing.
+TimeoutStopSec=30
+KillMode=mixed
+
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# Redirect stdout/stderr into the system journal and also into our log dir.
+StandardOutput=append:/var/log/lite-panel/panel.log
+StandardError=append:/var/log/lite-panel/panel.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,130 @@
+# lite-panel — nginx vhost for the panel itself.
+#
+# Rendered once by install.sh (not by the panel's renderer service, because
+# the panel isn't running yet when this is first needed).  The only variables
+# are {{ panel_fqdn }}, {{ cert_path }}, and {{ key_path }}.
+#
+# Re-rendering this file is idempotent: install.sh will not overwrite an
+# existing file unless --force-reinstall is passed, so a manual tweak to this
+# file survives a re-run.
+
+# ---------------------------------------------------------------------------
+# HTTP → HTTPS redirect
+# ---------------------------------------------------------------------------
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ panel_fqdn }} _;
+
+    # Let's Encrypt / certbot ACME challenge
+    location /.well-known/acme-challenge/ {
+        root /var/lib/lite-panel/acme;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Main HTTPS block
+# ---------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+
+    server_name {{ panel_fqdn }} _;
+
+    ssl_certificate     {{ cert_path }};
+    ssl_certificate_key {{ key_path }};
+
+    # Modern TLS only — the panel is an admin tool, not a public site.
+    ssl_protocols             TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache         shared:PANEL_SSL:1m;
+    ssl_session_timeout       1d;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    add_header X-Frame-Options           DENY                                   always;
+    add_header X-Content-Type-Options    nosniff                                always;
+    add_header Referrer-Policy           same-origin                            always;
+
+    access_log /var/log/lite-panel/nginx-access.log;
+    error_log  /var/log/lite-panel/nginx-error.log;
+
+    # -----------------------------------------------------------------------
+    # Auth subrequest target (internal-only; not proxied from the outside)
+    # -----------------------------------------------------------------------
+    # nginx calls this before every request to /adminer/.  It forwards the
+    # browser's Cookie header; the panel returns 204 (pass) or 401 (deny).
+    location = /internal/auth-check {
+        internal;
+        proxy_pass              http://127.0.0.1:8765;
+        proxy_pass_request_body off;
+        proxy_set_header        Content-Length "";
+        proxy_set_header        X-Original-URI $request_uri;
+        proxy_set_header        Cookie         $http_cookie;
+    }
+
+    # -----------------------------------------------------------------------
+    # Adminer — behind the panel session gate
+    # -----------------------------------------------------------------------
+    location /adminer/ {
+        # Every request here is checked against the panel session first.
+        auth_request /internal/auth-check;
+
+        # On a 401 from auth-check, send the browser to the panel login page
+        # (return_to so it comes back after login).
+        error_page 401 = @adminer_login_redirect;
+
+        # Strip the /adminer prefix before proxying: the php -S server
+        # expects requests at /, not at /adminer/.
+        proxy_pass         http://127.0.0.1:8766/;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        # Adminer loads CSS / JS via relative URLs; rewrite them so the browser
+        # resolves them back under /adminer/ rather than at the root.
+        proxy_redirect     / /adminer/;
+    }
+
+    location @adminer_login_redirect {
+        return 302 /login?return_to=/adminer/;
+    }
+
+    # -----------------------------------------------------------------------
+    # SSE job-log stream — must NOT be buffered
+    # -----------------------------------------------------------------------
+    # Without this, nginx buffers the response until the job finishes, making
+    # the live log tail appear blank the whole time and then dump all at once.
+    location ~ ^/jobs/[0-9]+/stream {
+        proxy_pass             http://127.0.0.1:8765;
+        proxy_set_header       Host              $host;
+        proxy_set_header       X-Real-IP         $remote_addr;
+        proxy_set_header       X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header       X-Forwarded-Proto $scheme;
+        proxy_set_header       Cookie            $http_cookie;
+
+        # SSE / chunked — turn buffering off entirely.
+        proxy_buffering        off;
+        proxy_cache            off;
+        proxy_read_timeout     3600s;  # keep the connection alive for long jobs
+        chunked_transfer_encoding on;
+    }
+
+    # -----------------------------------------------------------------------
+    # Everything else → the FastAPI panel app
+    # -----------------------------------------------------------------------
+    location / {
+        proxy_pass         http://127.0.0.1:8765;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   Cookie            $http_cookie;
+        proxy_read_timeout 60s;
+    }
+}

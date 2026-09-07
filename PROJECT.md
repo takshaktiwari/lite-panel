@@ -52,10 +52,10 @@ which formulas/patterns from the old scripts are safe to reuse vs. not.
 | 5 | Setup wizard (`routers/setup.py`) + Stack UI | ✅ Done |
 | 6 | MariaDB + databases, certbot + SSL, vsftpd + FTP | ✅ Done |
 | 7 | File manager | ✅ Done |
-| 8 | Adminer + `auth_request` gate | 🟡 Adminer vendored + wrapper written; nginx gate NOT wired yet |
-| 9 | `install.sh`, `uninstall.sh`, `panel rebuild` CLI | ❌ **Not started — this is the next thing to do** |
+| 8 | Adminer + `auth_request` gate | ✅ Done — vhost template + gate wired |
+| 9 | `install.sh`, `uninstall.sh`, `panel rebuild` CLI | ✅ Done |
 
-**154 tests passing** (`.venv/bin/python -m pytest`), all runnable on a
+**163 tests passing** (`.venv/bin/python -m pytest`), all runnable on a
 workstation, no server needed.
 
 **The whole web app works end-to-end when run manually** (see "Run it
@@ -65,34 +65,30 @@ the very next task.
 
 ## Immediate next step
 
-Build `install.sh` + supporting pieces per the plan (`~/.claude/plans/streamed-dreaming-rocket.md`,
-section "Install flow"):
+**All planned phases are complete.** The panel is ready for a real server deploy.
 
-1. Root check, OS check (`/etc/os-release` must be ubuntu/debian).
-2. `apt update`; install only what the panel itself needs: `python3-venv git curl nginx openssl`.
-3. Clone/copy this repo to `/opt/lite-panel`; create a venv; `pip install -r panel/requirements.txt`.
-4. `python -m app.cli init-db` then `create-admin` (see `panel/app/cli.py` — already built).
-5. Self-signed TLS cert.
-6. Render the **panel's own nginx vhost** — this does NOT exist yet as a
-   template. It needs: `listen 443 ssl`, `proxy_pass http://127.0.0.1:8765`
-   (the FastAPI app), and a `location /adminer/` block using
-   `auth_request /internal/auth-check` (that endpoint already exists —
-   `app/routers/internal.py`) before proxying to the Adminer PHP server on
-   its own port. Nginx buffers SSE by default — the job log stream
-   (`/jobs/{id}/stream`) needs `proxy_buffering off;` in this vhost or it
-   will hang until the job finishes.
-7. Write and enable **two systemd units** — neither exists yet:
-   - `lite-panel.service` — `User=root`, `ExecStart=<venv>/bin/uvicorn app.main:app --host 127.0.0.1 --port 8765`, working directory `/opt/lite-panel/panel`.
-   - `lite-panel-adminer.service` — runs `php -S 127.0.0.1:8766 -t /opt/lite-panel/assets/vendor` (the Adminer wrapper is `assets/vendor/index.php`, already written, forces the DB connection to the local socket only — see its docstring for why).
-8. `systemctl daemon-reload && enable --now` both; `nginx -t && systemctl reload nginx`.
-9. Health check against `/healthz` (already exists, no auth required).
-10. Print the panel URL + admin credentials, mirroring the "🎉 complete" style
-    of the old scripts in `legacy/`.
+To deploy to the test server (448 MB Ubuntu 26.04 at the IP in `server-details.md`):
 
-After that: `uninstall.sh`, and a `dev/sync.sh` rsync helper for the
-EC2 dev loop (see plan). A standalone `panel rebuild` CLI subcommand would
-also be worth adding to `app/cli.py` (the job kind `panel.rebuild` already
-exists and works from inside the running app — see `app/tasks.py`).
+```bash
+# First time: add 1 GB swap (install.sh will do this automatically)
+# Then:
+bash dev/sync.sh          # rsync + restart services
+# OR, for a clean install from GitHub:
+ssh -i test-server-key.pem ubuntu@<ip> \
+  'curl -fsSL https://raw.githubusercontent.com/takshaktiwari/server-setup-script/lite-panel/install.sh | sudo bash'
+```
+
+Recovery path if the service fails mid-operation:
+
+```bash
+ssh -i test-server-key.pem ubuntu@<ip> \
+  'sudo /opt/lite-panel/venv/bin/python -m app.cli rebuild'
+```
+
+Next things worth doing (Phase 2 backlog — not committed yet):
+- Replace self-signed cert with Let's Encrypt (the Certbot provider + wizard step already exists; just wire the renewal cron)
+- Swap provisioning UI in the panel (currently handled by install.sh for tiny instances only)
+- Log rotation config for `/var/log/lite-panel/`
 
 ## The test server (already provisioned, do not lose these details)
 
@@ -141,10 +137,17 @@ panel/app/
     databases.py, ftp.py, files.py — the rest of the service layer
   providers/            — one file per stack component (nginx, php, mariadb, vsftpd, certbot), same interface (base.py)
   routers/               — HTTP layer; thin, calls into services/tasks
-assets/templates/        — Jinja2 templates for nginx vhosts, FPM pools, php.ini/my.cnf drop-ins (NOT the panel's own web UI templates — those are panel/app/templates/)
+    internal.py         — /internal/auth-check (the Adminer session gate endpoint)
+assets/templates/        — Jinja2 templates for nginx vhosts, FPM pools, php.ini/my.cnf drop-ins
+  panel-vhost.conf.j2  — the panel's own nginx vhost (SSL, SSE no-buffer, Adminer auth gate) — rendered by install.sh
+assets/units/            — systemd unit files (lite-panel.service, lite-panel-adminer.service)
 assets/vendor/            — vendored Adminer (adminer.php pinned v4.8.1 + index.php wrapper pinning it to localhost-only)
+install.sh              — idempotent 10-step installer (root check → apt → venv → config → TLS → nginx → systemd → DB → healthz → 🎉)
+uninstall.sh            — safe teardown; leaves /home tenant files unless --remove-sites is passed
+dev/sync.sh             — rsync + restart helper for EC2 dev loop; reads IP/key from server-details.md
 legacy/                   — the original bash scripts, kept ONLY for reference; see legacy/README.md for what's still owed
-tests/                    — 154 tests, all pure-Python/HTTP-client, no server required
+tests/                    — 163 tests, all pure-Python/HTTP-client, no server required
+  test_cli.py           — tests for the CLI, including the panel rebuild subcommand
 ```
 
 ## Things a fresh AI/tool should know before continuing
