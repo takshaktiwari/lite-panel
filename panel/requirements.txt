@@ -1,0 +1,12 @@
+# lite-panel runtime dependencies.
+# Deliberately small: this panel exists because the alternatives are heavy.
+
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+jinja2>=3.1,<4.0
+sqlalchemy>=2.0,<3.0
+pydantic-settings>=2.4,<3.0
+python-multipart>=0.0.9        # form parsing (login, file uploads)
+bcrypt>=4.1,<6.0               # password hashing, used directly (no passlib)
+psutil>=6.0                    # dashboard stats
+PyMySQL>=1.1,<2.0              # MariaDB over unix socket, parameterized queries

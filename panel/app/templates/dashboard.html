@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Dashboard · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1>{{ info.hostname }}</h1>
+    <p class="muted">{{ info.os_name }} · kernel {{ info.kernel }} · up {{ uptime }}</p>
+  </div>
+</header>
+
+{% if not supported_os %}
+<div class="alert alert-notice">
+  This machine isn't Ubuntu or Debian, so stack management is unavailable.
+  Read-only pages still work — useful for local development.
+</div>
+{% endif %}
+
+<section class="metrics">
+  {{ ui.meter("CPU", info.cpu_percent, "%s%% of %d cores" % (info.cpu_percent, info.cpu_count)) }}
+  {{ ui.meter("Memory", info.memory.percent, "%d / %d MB" % (info.memory.used_mb, info.memory.total_mb)) }}
+  {{ ui.meter("Disk", info.disk.percent, "%d / %d GB" % (info.disk.used_mb // 1024, info.disk.total_mb // 1024)) }}
+  {% if info.swap.total_mb %}
+    {{ ui.meter("Swap", info.swap.percent, "%d / %d MB" % (info.swap.used_mb, info.swap.total_mb)) }}
+  {% else %}
+  <div class="metric">
+    <div class="metric-label">Swap</div>
+    <div class="metric-value">None</div>
+    <div class="metric-detail muted">Not configured</div>
+  </div>
+  {% endif %}
+</section>
+
+<div class="columns">
+  <section class="panel">
+    <h2>Services</h2>
+    <ul class="service-list">
+      {% for service in services %}
+      <li>
+        <span class="dot {{ 'ok' if service.active else ('warn' if service.installed else 'off') }}"></span>
+        <span class="service-name">{{ service.name }}</span>
+        <span class="muted">
+          {% if service.active %}running
+          {% elif service.installed %}stopped
+          {% else %}not installed{% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="panel">
+    <h2>Overview</h2>
+    <dl class="stats">
+      <div><dt>Sites</dt><dd>{{ site_count }}</dd></div>
+      <div><dt>Databases</dt><dd>{{ database_count }}</dd></div>
+      <div><dt>Jobs running</dt><dd>{{ running_jobs }}</dd></div>
+      <div><dt>Load average</dt><dd>{{ info.load_average | join(' ') }}</dd></div>
+    </dl>
+  </section>
+</div>
+
+<section class="panel">
+  <h2>Recent activity</h2>
+  {% if recent_jobs %}
+  <table class="table">
+    <thead><tr><th>Job</th><th>Status</th><th>Started</th></tr></thead>
+    <tbody>
+      {% for job in recent_jobs %}
+      <tr>
+        <td><a href="/jobs/{{ job.id }}">{{ job.description }}</a></td>
+        <td><span class="badge {{ job.status.value }}">{{ job.status.value }}</span></td>
+        <td class="muted">{{ job.started_at.strftime('%Y-%m-%d %H:%M') if job.started_at else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted empty">Nothing has run yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

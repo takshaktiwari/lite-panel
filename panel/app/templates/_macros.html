@@ -1,0 +1,20 @@
+{# Shared building blocks. Imported rather than defined inline, because a
+   macro declared in a template that {% extends %} another is not reliably
+   visible inside its blocks. #}
+
+{% macro meter(label, percent, detail) %}
+<div class="metric">
+  <div class="metric-label">{{ label }}</div>
+  <div class="metric-value">{{ percent }}%</div>
+  <div class="bar"><span style="width: {{ [percent, 100] | min }}%"></span></div>
+  <div class="metric-detail muted">{{ detail }}</div>
+</div>
+{% endmacro %}
+
+{% macro badge(text, tone="") %}
+<span class="badge {{ tone }}">{{ text }}</span>
+{% endmacro %}
+
+{% macro csrf(session) %}
+<input type="hidden" name="csrf_token" value="{{ session.csrf_token if session }}">
+{% endmacro %}

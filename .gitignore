@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Local panel state (never committed; generated at runtime)
+*.db
+panel.db
+*.log
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

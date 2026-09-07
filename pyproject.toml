@@ -1,0 +1,20 @@
+[tool.pytest.ini_options]
+# Tests import the panel as `app.*`; keep the package importable without an
+# install step so `pytest` works straight from a clone.
+pythonpath = ["panel"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "S", "B"]
+# S603/S607 flag every subprocess call. app/shell.py is the one place we make
+# them, deliberately and with an argument list; CI greps for shell=True and
+# os.system instead, which is the property that actually matters here.
+ignore = ["S603", "S607"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S"]

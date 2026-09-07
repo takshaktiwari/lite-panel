@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if user %}
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">◆</span>
+      <span class="brand-name">{{ app_name }}</span>
+    </div>
+
+    <nav>
+      <a href="/" class="{{ 'active' if request.url.path == '/' }}">Dashboard</a>
+      <a href="/sites" class="{{ 'active' if request.url.path.startswith('/sites') }}">Sites</a>
+      <a href="/databases" class="{{ 'active' if request.url.path.startswith('/databases') }}">Databases</a>
+      <a href="/ftp" class="{{ 'active' if request.url.path.startswith('/ftp') }}">FTP</a>
+      <a href="/files" class="{{ 'active' if request.url.path.startswith('/files') }}">Files</a>
+      <a href="/stack" class="{{ 'active' if request.url.path.startswith('/stack') }}">Stack</a>
+      <a href="/jobs" class="{{ 'active' if request.url.path.startswith('/jobs') }}">Jobs</a>
+    </nav>
+
+    <form method="post" action="/logout" class="sidebar-foot">
+      <input type="hidden" name="csrf_token" value="{{ session.csrf_token if session }}">
+      <span class="who">{{ user.username }}</span>
+      <button type="submit" class="link-button">Sign out</button>
+    </form>
+  </aside>
+
+  <main class="content">
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    {% if notice %}<div class="alert alert-notice">{{ notice }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% else %}
+  {% block bare %}{% endblock %}
+{% endif %}
+</body>
+</html>

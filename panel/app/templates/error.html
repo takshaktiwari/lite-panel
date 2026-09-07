@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Problem · {{ app_name }}{% endblock %}
+
+{% block bare %}
+<div class="login-page">
+  <div class="login-card">
+    <div class="brand login-brand">
+      <span class="brand-mark">◆</span>
+      <span class="brand-name">{{ app_name }}</span>
+    </div>
+    <div class="alert alert-error">{{ message }}</div>
+    <a class="button" href="/">Back to dashboard</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-error">{{ message }}</div>
+<a class="button" href="/">Back to dashboard</a>
+{% endblock %}

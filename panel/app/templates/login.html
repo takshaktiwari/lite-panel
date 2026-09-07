@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Sign in · {{ app_name }}{% endblock %}
+
+{% block bare %}
+<div class="login-page">
+  <form method="post" action="/login" class="login-card" autocomplete="on">
+    <div class="brand login-brand">
+      <span class="brand-mark">◆</span>
+      <span class="brand-name">{{ app_name }}</span>
+    </div>
+
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" required autofocus
+           autocapitalize="none" autocorrect="off" spellcheck="false">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" required
+           autocomplete="current-password">
+
+    <button type="submit" class="button primary">Sign in</button>
+  </form>
+</div>
+{% endblock %}
