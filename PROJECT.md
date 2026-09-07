@@ -143,8 +143,57 @@ Everything below was completed in this sitting:
    Safari which shows the warning reliably. The panel URL in the banner will be
    improved to use public IP in a future fix.
 
+5. `502 Bad Gateway` after syncing with `dev/sync.sh` —
+   `dev/sync.sh` runs `rsync --delete`. On the server, `install.sh` builds the
+   production Python venv at `/opt/lite-panel/venv`. On the local dev machine,
+   the virtualenv is named `.venv`. Because the rsync exclude list only omitted
+   `.venv/` and not `venv/`, `--delete` wiped the server's virtualenv on every
+   sync, killing the uvicorn process.
+   **Fix:** Rebuilt the venv on the remote server (`python3 -m venv venv && pip install -r panel/requirements.txt`),
+   and permanently added `--exclude='venv/'` to `dev/sync.sh`.
+
+6. Blank job detail page & SSE stream hanging after service restart —
+   When a job ran during a service restart, the in-process `log_buffer` was
+   cleared from memory. The browser connected to `/jobs/<id>/stream`, but because
+   the buffer was empty and no terminal event was emitted, the page remained
+   blank and stuck in the `running` state.
+   **Fix:**
+   - Updated lifespan startup in `panel/app/main.py`: on application boot, any
+     job left in `RUNNING` status from a previous killed process is marked `FAILED`
+     with an explicit recovery explanation. This causes the SSE stream to emit a
+     `done` event, prompting the browser to reload and display the static log.
+   - Fixed `assets/units/lite-panel.service`: `StartLimitIntervalSec=60` and
+     `StartLimitBurst=3` were relocated from `[Service]` to `[Unit]` where
+     systemd expects them, eliminating systemd journal configuration warnings.
+
+7. Ubuntu 26.04 ("Resolute Raccoon") `ondrej/php` PPA incompatibility —
+   The test server is running an Ubuntu 26.04 LTS development build. The
+   third-party `ondrej/php` PPA does not yet provide releases for the `resolute`
+   codename. Trying to add the PPA broke subsequent `apt-get update` calls with
+   HTTP 404s, and attempting to install PPA-only versions (e.g. PHP 8.2 or 7.4)
+   failed with `apt-get exit 100` (`Unable to locate package php8.2-fpm`).
+   **Fix:**
+   - Added `apt.is_php_ppa_supported()` with `@lru_cache` to check if Launchpad
+     carries a Release file for the current suite via `curl --head` before adding
+     the PPA. If unsupported, it logs an explanatory note and cleanly falls back
+     to official Ubuntu repositories.
+   - Removed broken PPA repository entries from `/etc/apt/sources.list.d/`.
+   - Updated `PhpProvider.available_versions()` so unsupported distributions only
+     offer the versions actually present in the host's base OS repositories (preventing
+     users from attempting impossible installations), while preserving full
+     discovery in dev mode.
+   - Installed PHP 8.5 natively from Ubuntu official repos, registered it in
+     `InstalledProvider`, rendered `/etc/php/8.5/fpm/conf.d/99-lite-panel.ini`,
+     and confirmed active FPM socket at `/run/php/php8.5-fpm.sock`.
+
 **Final status:** Panel is live and accessible at `https://13.233.146.180`.
-All three services confirmed active: `lite-panel`, `lite-panel-adminer`, `nginx`.
+All services confirmed active and healthy:
+- `lite-panel.service` (uvicorn FastAPI on 127.0.0.1:8765)
+- `lite-panel-adminer.service` (PHP built-in server on 127.0.0.1:8766)
+- `nginx.service` (reverse proxy on 443 + SSL)
+- `php8.5-fpm.service` (FPM pool running on /run/php/php8.5-fpm.sock)
+- Stack components tracked in DB: Nginx, MariaDB, Certbot, vsftpd, PHP 8.5.
+- All 163 test suite unit/integration tests passing.
 
 ## The test server
 
