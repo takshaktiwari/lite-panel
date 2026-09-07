@@ -71,6 +71,7 @@ do_sync() {
     --rsync-path="sudo rsync" \
     --exclude='.git/' \
     --exclude='.venv/' \
+    --exclude='venv/' \
     --exclude='__pycache__/' \
     --exclude='*.pyc' \
     --exclude='dev.db' \
