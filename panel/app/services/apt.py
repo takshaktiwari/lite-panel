@@ -162,11 +162,35 @@ def ensure_php_repository(ctx, os_id: str) -> None:
     This is what makes multiple PHP versions available at all. Ubuntu gets the
     PPA; Debian gets Sury directly, since ``add-apt-repository`` has no PPA
     support there.
+
+    On Ubuntu releases not yet supported by ondrej/php (e.g. a brand-new LTS
+    that the PPA maintainer hasn't caught up with) we skip the PPA silently:
+    the OS ships at least one PHP version itself, which is still installable.
     """
     if os_id == "ubuntu":
         if _ppa_present("ondrej"):
             ctx.log("ondrej/php repository already configured")
             return
+
+        # Test whether the PPA actually has a Release file for this codename
+        # before adding it.  If it doesn't, add-apt-repository would succeed
+        # but every subsequent apt-get update would throw a 404 error.
+        try:
+            codename = run(["lsb_release", "-sc"], check=False, timeout=10).stdout.strip()
+            test_url = f"https://ppa.launchpadcontent.net/ondrej/php/ubuntu/dists/{codename}/Release"
+            result = run(["curl", "-fsSL", "--head", "--max-time", "10", test_url], check=False, timeout=20)
+            ppa_supported = result.returncode == 0
+        except (CommandError, OSError):
+            ppa_supported = False
+
+        if not ppa_supported:
+            ctx.log(
+                f"ondrej/php PPA does not yet support Ubuntu '{codename}'. "
+                "Installing from the OS repository instead — only the version "
+                "Ubuntu ships is available on this machine."
+            )
+            return
+
         install(ctx, ["software-properties-common", "ca-certificates"])
         ctx.check(["add-apt-repository", "-y", PHP_PPA_UBUNTU], timeout=300)
         update(ctx)
@@ -189,6 +213,7 @@ def ensure_php_repository(ctx, os_id: str) -> None:
         return
 
     raise RuntimeError(f"Unsupported distribution '{os_id}'; expected ubuntu or debian.")
+
 
 
 def _write_sury_source(ctx) -> None:
