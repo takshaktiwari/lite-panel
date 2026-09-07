@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import os
+import threading
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, Request, WebSocket, WebSocketDisconnect
@@ -200,14 +201,40 @@ async def terminal_ws(websocket: WebSocket) -> None:
 
     output_queue: asyncio.Queue = asyncio.Queue()
 
-    def _on_readable() -> None:
-        chunk = term.read(_READ_CHUNK)
-        if chunk:
-            output_queue.put_nowait(chunk)
-        if not term.is_alive():
-            output_queue.put_nowait(None)  # sentinel: shell exited
+    # A dedicated thread doing a blocking select()+read() on the pty, rather
+    # than loop.add_reader() -- deliberately. add_reader() is documented to
+    # work only with genuine sockets on some event loop implementations, and
+    # in practice under uvloop (which uvicorn[standard] installs and prefers
+    # automatically) a reader registered on a pty master fd fired once and
+    # then silently stopped firing: the first echoed keystroke came through
+    # and nothing the shell produced afterward ever did, confirmed against a
+    # real deployment where reading the same fd directly, outside asyncio,
+    # worked instantly. A plain OS thread blocking in select()/read() has no
+    # dependency on which reactor is driving the event loop, which is what
+    # makes this portable across asyncio's default loop and uvloop alike.
+    stop_reading = threading.Event()
 
-    loop.add_reader(term.master_fd, _on_readable)
+    def _reader_thread() -> None:
+        import select as _select
+
+        while not stop_reading.is_set():
+            try:
+                ready, _, _ = _select.select([term.master_fd], [], [], 0.2)
+            except (OSError, ValueError):
+                break
+            if not ready:
+                if not term.is_alive():
+                    break
+                continue
+            chunk = term.read(_READ_CHUNK)
+            if chunk:
+                loop.call_soon_threadsafe(output_queue.put_nowait, chunk)
+            if not term.is_alive():
+                break
+        loop.call_soon_threadsafe(output_queue.put_nowait, None)  # sentinel
+
+    reader_thread = threading.Thread(target=_reader_thread, daemon=True)
+    reader_thread.start()
 
     async def pump_output() -> None:
         while True:
@@ -248,9 +275,10 @@ async def terminal_ws(websocket: WebSocket) -> None:
     except Exception:  # noqa: BLE001 - a bug here must still release the pty
         logger.exception("terminal websocket loop crashed")
     finally:
-        loop.remove_reader(term.master_fd)
+        stop_reading.set()
+        term.close()  # closes master_fd too, which unblocks a pending select()
+        reader_thread.join(timeout=2)
         output_task.cancel()
-        term.close()
         try:
             await websocket.close()
         except Exception:  # noqa: BLE001 - already closing/closed
