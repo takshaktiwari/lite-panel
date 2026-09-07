@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.database import init_db, session_scope
 from app.deps import CsrfError, NotAuthenticated, render
 from app.jobs import worker
+from app.models import Job, JobStatus
 from app.routers import (
     auth,
     dashboard,
@@ -48,6 +49,19 @@ async def lifespan(app: FastAPI):
         removed = purge_expired_sessions(db)
         if removed:
             logger.info("purged %s expired sessions", removed)
+
+        # Any job still marked RUNNING from a previous process is now orphaned
+        # — the worker thread that was executing it is gone.  Mark them FAILED
+        # so the SSE stream emits a `done` event and the browser reloads the
+        # job page to show whatever log was flushed to the DB before the crash.
+        from sqlalchemy import select as _select
+        orphaned = db.scalars(
+            _select(Job).where(Job.status == JobStatus.RUNNING)
+        ).all()
+        for job in orphaned:
+            job.status = JobStatus.FAILED
+            job.error = "Service restarted while this job was running. Check the log above for partial output."
+            logger.warning("marked orphaned job %s (%s) as failed", job.id, job.kind)
 
     worker.start()
     try:

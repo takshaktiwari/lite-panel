@@ -1,7 +1,9 @@
 [Unit]
 Description=lite-panel web control panel (uvicorn)
-Documentation=https://github.com/takshaktiwari/server-setup-script
+Documentation=https://github.com/takshaktiwari/lite-panel
 After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -24,8 +26,6 @@ KillMode=mixed
 
 Restart=on-failure
 RestartSec=5
-StartLimitIntervalSec=60
-StartLimitBurst=3
 
 # Redirect stdout/stderr into the system journal and also into our log dir.
 StandardOutput=append:/var/log/lite-panel/panel.log
