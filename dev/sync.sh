@@ -64,7 +64,11 @@ done
 # ---------------------------------------------------------------------------
 do_sync() {
   echo "[$(date +%T)] syncing → $REMOTE:$REMOTE_DIR"
+  # --rsync-path="sudo rsync": /opt is root-owned; the ubuntu user needs sudo
+  # on the remote side to write there. passwordless sudo is already configured
+  # on the test server.
   rsync -az --delete \
+    --rsync-path="sudo rsync" \
     --exclude='.git/' \
     --exclude='.venv/' \
     --exclude='__pycache__/' \

@@ -75,7 +75,7 @@ To deploy to the test server (448 MB Ubuntu 26.04 at the IP in `server-details.m
 bash dev/sync.sh          # rsync + restart services
 # OR, for a clean install from GitHub:
 ssh -i test-server-key.pem ubuntu@<ip> \
-  'curl -fsSL https://raw.githubusercontent.com/takshaktiwari/server-setup-script/lite-panel/install.sh | sudo bash'
+  'curl -fsSL https://raw.githubusercontent.com/takshaktiwari/lite-panel/main/install.sh | sudo bash'
 ```
 
 Recovery path if the service fails mid-operation:

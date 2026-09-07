@@ -88,8 +88,8 @@ else
   SRC_DIR=""  # will clone
 fi
 
-REPO_URL="https://github.com/takshaktiwari/server-setup-script"
-REPO_BRANCH="lite-panel"
+REPO_URL="https://github.com/takshaktiwari/lite-panel"
+REPO_BRANCH="main"
 
 # ---------------------------------------------------------------------------
 # Step 2 — System dependencies
