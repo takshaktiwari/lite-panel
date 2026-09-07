@@ -18,6 +18,8 @@ from typing import Dict, List, Optional, Sequence
 from app.shell import CommandError, run, which
 from app.validators import validate_package_name
 
+from functools import lru_cache
+
 logger = logging.getLogger(__name__)
 
 # ondrej/php is the de facto source of multiple PHP versions on Ubuntu; Debian
@@ -25,6 +27,24 @@ logger = logging.getLogger(__name__)
 # single PHP version its release shipped with.
 PHP_PPA_UBUNTU = "ppa:ondrej/php"
 SURY_REPO_DEBIAN = "https://packages.sury.org/php/"
+
+
+@lru_cache(maxsize=1)
+def is_php_ppa_supported(os_id: str) -> bool:
+    """Whether ondrej/php PPA has a release for this distribution."""
+    if os_id == "debian":
+        return True
+    if os_id != "ubuntu":
+        return False
+    try:
+        codename = run(["lsb_release", "-sc"], check=False, timeout=10).stdout.strip()
+        if not codename:
+            return False
+        test_url = f"https://ppa.launchpadcontent.net/ondrej/php/ubuntu/dists/{codename}/Release"
+        result = run(["curl", "-fsSL", "--head", "--max-time", "5", test_url], check=False, timeout=10)
+        return result.returncode == 0
+    except (CommandError, OSError):
+        return False
 
 
 def apt_available() -> bool:
@@ -172,18 +192,12 @@ def ensure_php_repository(ctx, os_id: str) -> None:
             ctx.log("ondrej/php repository already configured")
             return
 
-        # Test whether the PPA actually has a Release file for this codename
-        # before adding it.  If it doesn't, add-apt-repository would succeed
-        # but every subsequent apt-get update would throw a 404 error.
-        try:
-            codename = run(["lsb_release", "-sc"], check=False, timeout=10).stdout.strip()
-            test_url = f"https://ppa.launchpadcontent.net/ondrej/php/ubuntu/dists/{codename}/Release"
-            result = run(["curl", "-fsSL", "--head", "--max-time", "10", test_url], check=False, timeout=20)
-            ppa_supported = result.returncode == 0
-        except (CommandError, OSError):
-            ppa_supported = False
-
-        if not ppa_supported:
+        if not is_php_ppa_supported(os_id):
+            codename = ""
+            try:
+                codename = run(["lsb_release", "-sc"], check=False, timeout=10).stdout.strip()
+            except (CommandError, OSError):
+                pass
             ctx.log(
                 f"ondrej/php PPA does not yet support Ubuntu '{codename}'. "
                 "Installing from the OS repository instead — only the version "

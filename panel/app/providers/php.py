@@ -54,22 +54,25 @@ class PhpProvider(Provider):
 
         Strategy: start with what apt-cache currently knows (exact, always
         correct), then fill in the known-PPA list for any version not yet in
-        the cache.  This matters on a fresh server where the ondrej/php PPA
-        hasn't been added yet — apt only knows the OS default (e.g. 8.5 on
-        Ubuntu 26.04) but the PPA will offer 7.4–8.5 once added.  The
-        setup.bootstrap job adds the PPA before calling install(), so any
-        version shown here will genuinely be installable.
+        the cache if the distribution supports the PPA.
         """
         from_apt: List[str] = apt.parse_php_versions("\n".join(apt.package_names("php")))
-        apt_set = set(from_apt)
 
-        # Only supplement with the fallback list when the PPA isn't present.
-        # Once it's been added, apt-cache is the authoritative source.
+        # If PPA is already present, apt-cache is the authoritative source.
         if apt._ppa_present("ondrej") or apt._sury_present():
             return from_apt
 
-        # PPA not yet added: merge apt results (may be empty or partial) with
-        # the known list, keeping stable ordering.
+        # In dev mode, return fallback list if apt returns nothing so UI is testable.
+        from app.config import get_settings
+        if get_settings().dev_mode and not from_apt:
+            return apt.sort_versions(list(_KNOWN_PPA_VERSIONS))
+
+        # Check if PPA is supported on this OS release (e.g. Ubuntu 26.04 is not yet supported).
+        # If unsupported, only OS-provided PHP packages are installable.
+        if not apt.is_php_ppa_supported(system.os_release_id()):
+            return from_apt
+
+        # PPA not yet added: merge apt results with the known list.
         combined = {v: True for v in _KNOWN_PPA_VERSIONS}
         for v in from_apt:
             combined[v] = True
