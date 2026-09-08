@@ -10,28 +10,62 @@
   </p>
 </header>
 
-<section class="panel" style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end;">
-  <form method="post" action="/files/mkdir" style="display:flex;gap:8px;align-items:flex-end;">
-    {{ ui.csrf(session) }}
-    <input type="hidden" name="path" value="{{ current }}">
-    <div><label for="dirname">New folder</label><input type="text" id="dirname" name="name" required style="margin:0;"></div>
-    <button class="button" type="submit" style="margin-bottom:14px;">Create</button>
-  </form>
+{# The bulk-selection form is deliberately empty here -- the checkboxes that
+   belong to it live scattered through the table below, each pointing back
+   at it via form="bulk-form" (valid HTML, and the only way to let a table
+   full of per-row single-item forms coexist with one shared multi-select
+   form without illegally nesting forms inside each other). #}
+<form id="bulk-form" method="post" action="/files/bulk-delete">
+  {{ ui.csrf(session) }}
+  <input type="hidden" name="path" value="{{ current }}">
+  <input type="hidden" name="destination" value="">
+  <input type="hidden" name="archive_name" value="">
+</form>
 
-  <form method="post" action="/files/new-file" style="display:flex;gap:8px;align-items:flex-end;">
-    {{ ui.csrf(session) }}
-    <input type="hidden" name="path" value="{{ current }}">
-    <div><label for="filename">New file</label><input type="text" id="filename" name="name" required style="margin:0;"></div>
-    <button class="button" type="submit" style="margin-bottom:14px;">Create</button>
-  </form>
+<div class="bulk-toolbar">
+  <details class="dropdown">
+    <summary class="button primary">+ New</summary>
+    <div class="dropdown-menu align-left" style="min-width:250px;padding:12px;">
+      <form method="post" action="/files/mkdir" style="margin-bottom:10px;">
+        {{ ui.csrf(session) }}
+        <input type="hidden" name="path" value="{{ current }}">
+        <label for="dirname">New folder</label>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="dirname" name="name" required style="margin:0;">
+          <button class="button" type="submit">Create</button>
+        </div>
+      </form>
+      <form method="post" action="/files/new-file" style="margin-bottom:10px;">
+        {{ ui.csrf(session) }}
+        <input type="hidden" name="path" value="{{ current }}">
+        <label for="filename">New file</label>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="filename" name="name" required style="margin:0;">
+          <button class="button" type="submit">Create</button>
+        </div>
+      </form>
+      <form method="post" action="/files/upload" enctype="multipart/form-data" style="margin-bottom:0;">
+        {{ ui.csrf(session) }}
+        <input type="hidden" name="path" value="{{ current }}">
+        <label for="upload">Upload file</label>
+        <div style="display:flex;gap:6px;">
+          <input type="file" id="upload" name="upload" required style="margin:0;">
+          <button class="button" type="submit">Upload</button>
+        </div>
+      </form>
+    </div>
+  </details>
 
-  <form method="post" action="/files/upload" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:flex-end;">
-    {{ ui.csrf(session) }}
-    <input type="hidden" name="path" value="{{ current }}">
-    <div><label for="upload">Upload</label><input type="file" id="upload" name="upload" required style="margin:0;"></div>
-    <button class="button" type="submit" style="margin-bottom:14px;">Upload</button>
-  </form>
-</section>
+  <span style="flex:1 1 auto;"></span>
+
+  <button class="icon-button" type="submit" form="bulk-form" formaction="/files/bulk-copy" title="Copy selected to…"
+          data-prompt-field="destination" data-prompt-message="Copy selected item(s) to which folder? (path relative to Home)"
+          data-prompt-default=".">📋</button>
+  <button class="icon-button" type="submit" form="bulk-form" formaction="/files/bulk-archive" title="Archive selected as .zip"
+          data-prompt-field="archive_name" data-prompt-message="Archive name" data-prompt-default="archive">🗜</button>
+  <button class="icon-button danger" type="submit" form="bulk-form" formaction="/files/bulk-delete" title="Delete selected"
+          data-confirm="Delete the selected item(s)?">🗑</button>
+</div>
 
 <section class="panel">
   {% if current != '.' %}
@@ -40,10 +74,19 @@
 
   {% if entries %}
   <table class="table">
-    <thead><tr><th>Name</th><th>Size</th><th>Modified</th><th>Owner</th><th></th></tr></thead>
+    <thead>
+      <tr>
+        <th class="checkbox-cell"><input type="checkbox" id="select-all" style="width:auto;margin:0;"></th>
+        <th>Name</th><th>Size</th><th>Modified</th><th>Owner</th><th></th>
+      </tr>
+    </thead>
     <tbody>
       {% for entry in entries %}
       <tr>
+        <td class="checkbox-cell">
+          <input type="checkbox" class="bulk-checkbox" name="target" value="{{ entry.relative }}"
+                 form="bulk-form" style="width:auto;margin:0;">
+        </td>
         <td>
           {% if entry.is_dir %}
           <a href="/files?path={{ entry.relative }}">📁 {{ entry.name }}</a>
@@ -57,27 +100,56 @@
         <td class="muted">{{ entry.size_display }}</td>
         <td class="muted">{{ entry.modified.strftime('%Y-%m-%d %H:%M') if entry.modified else '—' }}</td>
         <td class="muted">{{ entry.owner }}</td>
-        <td style="text-align:right;white-space:nowrap;">
-          {% if not entry.is_dir %}
-          <a class="button" href="/files/download?path={{ entry.relative }}">Download</a>
-          {% endif %}
-          <form method="post" action="/files/rename" style="display:inline;" id="rename-{{ loop.index }}">
-            {{ ui.csrf(session) }}
-            <input type="hidden" name="path" value="{{ current }}">
-            <input type="hidden" name="target" value="{{ entry.relative }}">
-            <input type="hidden" name="new_name" value="">
-            <button class="button" type="button"
-                    onclick="const n=prompt('New name', '{{ entry.name }}'); if(n){this.form.new_name.value=n; this.form.submit();}">
-              Rename
-            </button>
-          </form>
-          <form method="post" action="/files/delete" style="display:inline;">
-            {{ ui.csrf(session) }}
-            <input type="hidden" name="path" value="{{ current }}">
-            <input type="hidden" name="target" value="{{ entry.relative }}">
-            <button class="button" type="submit" style="color:var(--danger);"
-                    onclick="return confirm('Delete {{ entry.name }}?')">Delete</button>
-          </form>
+        <td style="text-align:right;">
+          <details class="dropdown">
+            <summary class="icon-button" title="Actions">⋮</summary>
+            <div class="dropdown-menu">
+              {% if entry.editable %}
+              <a class="dropdown-item" href="/files/edit?path={{ entry.relative }}"><span class="icon">✎</span> Edit</a>
+              {% endif %}
+              {% if not entry.is_dir %}
+              <a class="dropdown-item" href="/files/download?path={{ entry.relative }}"><span class="icon">⬇</span> Download</a>
+              {% endif %}
+              {% if entry.is_archive %}
+              <form method="post" action="/files/extract">
+                {{ ui.csrf(session) }}
+                <input type="hidden" name="path" value="{{ current }}">
+                <input type="hidden" name="target" value="{{ entry.relative }}">
+                <button class="dropdown-item" type="submit"><span class="icon">📦</span> Extract</button>
+              </form>
+              {% endif %}
+              <form method="post" action="/files/duplicate">
+                {{ ui.csrf(session) }}
+                <input type="hidden" name="path" value="{{ current }}">
+                <input type="hidden" name="target" value="{{ entry.relative }}">
+                <button class="dropdown-item" type="submit"><span class="icon">⧉</span> Duplicate</button>
+              </form>
+              <form method="post" action="/files/archive">
+                {{ ui.csrf(session) }}
+                <input type="hidden" name="path" value="{{ current }}">
+                <input type="hidden" name="target" value="{{ entry.relative }}">
+                <button class="dropdown-item" type="submit"><span class="icon">🗜</span> Archive</button>
+              </form>
+              <form method="post" action="/files/rename">
+                {{ ui.csrf(session) }}
+                <input type="hidden" name="path" value="{{ current }}">
+                <input type="hidden" name="target" value="{{ entry.relative }}">
+                <input type="hidden" name="new_name" value="">
+                <button class="dropdown-item" type="submit"
+                        data-prompt-field="new_name" data-prompt-message="New name" data-prompt-default="{{ entry.name }}">
+                  <span class="icon">✏️</span> Rename
+                </button>
+              </form>
+              <form method="post" action="/files/delete">
+                {{ ui.csrf(session) }}
+                <input type="hidden" name="path" value="{{ current }}">
+                <input type="hidden" name="target" value="{{ entry.relative }}">
+                <button class="dropdown-item danger" type="submit" data-confirm="Delete {{ entry.name }}?">
+                  <span class="icon">🗑</span> Delete
+                </button>
+              </form>
+            </div>
+          </details>
         </td>
       </tr>
       {% endfor %}
@@ -87,4 +159,6 @@
   <p class="muted empty">This directory is empty.</p>
   {% endif %}
 </section>
+
+<script src="/static/file-manager.js"></script>
 {% endblock %}

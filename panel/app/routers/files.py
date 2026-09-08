@@ -8,7 +8,7 @@ touches the filesystem without that check.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import List, Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
@@ -207,7 +207,143 @@ def delete(
     return _back(path, notice=f"Deleted {name}")
 
 
+@router.post("/duplicate", dependencies=[Depends(csrf_protect)])
+def duplicate(
+    path: str = Form(...),
+    target: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """Copy one item in place -- the "back this up before I touch it" button
+    next to Edit."""
+    try:
+        copied = files_service.copy_item(target)
+    except (ValidationError, OSError) as exc:
+        return _back(path, error=str(exc))
+
+    _audit(db, session, "files.duplicate", f"{target} -> {copied.name}")
+    return _back(path, notice=f"Created {copied.name}")
+
+
+@router.post("/archive", dependencies=[Depends(csrf_protect)])
+def archive_one(
+    path: str = Form(...),
+    target: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """Zip a single file or folder -- the row-level Archive action."""
+    from pathlib import Path as _Path
+
+    try:
+        name = _Path(target).name or "archive"
+        archive = files_service.create_archive([target], path, name)
+    except (ValidationError, OSError) as exc:
+        return _back(path, error=str(exc))
+
+    _audit(db, session, "files.archive", f"{target} -> {archive.name}")
+    return _back(path, notice=f"Created {archive.name}")
+
+
+@router.post("/extract", dependencies=[Depends(csrf_protect)])
+def extract(
+    path: str = Form(...),
+    target: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    try:
+        destination = files_service.extract_archive(target)
+    except (ValidationError, OSError) as exc:
+        return _back(path, error=str(exc))
+
+    _audit(db, session, "files.extract", f"{target} -> {destination.name}")
+    return _back(path, notice=f"Extracted to {destination.name}")
+
+
 # --------------------------------------------------------------------------
+# Bulk actions -- one shared selection of checkboxes, several possible
+# destinations via each button's own formaction (see files/browse.html).
+# --------------------------------------------------------------------------
+
+
+@router.post("/bulk-delete", dependencies=[Depends(csrf_protect)])
+def bulk_delete(
+    path: str = Form(...),
+    target: List[str] = Form(default=[]),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    if not target:
+        return _back(path, error="Nothing was selected.")
+
+    succeeded, failed = files_service.bulk_delete(target)
+    for name in succeeded:
+        _audit(db, session, "files.delete", name)
+
+    return _back(path, **_bulk_result(succeeded, failed, verb="Deleted"))
+
+
+@router.post("/bulk-copy", dependencies=[Depends(csrf_protect)])
+def bulk_copy(
+    path: str = Form(...),
+    target: List[str] = Form(default=[]),
+    destination: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    if not target:
+        return _back(path, error="Nothing was selected.")
+
+    try:
+        dest_resolved = files_service.resolve(destination)
+        if not dest_resolved.is_dir():
+            return _back(path, error="Destination is not a directory.")
+    except ValidationError as exc:
+        return _back(path, error=str(exc))
+
+    succeeded, failed = files_service.bulk_copy(target, destination)
+    for name in succeeded:
+        _audit(db, session, "files.copy", f"{name} -> {destination}")
+
+    return _back(path, **_bulk_result(succeeded, failed, verb="Copied"))
+
+
+@router.post("/bulk-archive", dependencies=[Depends(csrf_protect)])
+def bulk_archive(
+    path: str = Form(...),
+    target: List[str] = Form(default=[]),
+    archive_name: str = Form("archive"),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    if not target:
+        return _back(path, error="Nothing was selected.")
+
+    try:
+        archive = files_service.create_archive(target, path, archive_name or "archive")
+    except (ValidationError, OSError) as exc:
+        return _back(path, error=str(exc))
+
+    _audit(db, session, "files.archive", f"{len(target)} item(s) -> {archive.name}")
+    return _back(path, notice=f"Created {archive.name} with {len(target)} item(s)")
+
+
+# --------------------------------------------------------------------------
+
+
+def _bulk_result(succeeded: List[str], failed: List, *, verb: str) -> dict:
+    """Turn a (succeeded, failed) pair from a bulk operation into the
+    notice/error kwargs _back() expects -- reporting a partial success
+    honestly rather than picking one message and hiding the other."""
+    result: dict = {}
+    if succeeded:
+        result["notice"] = f"{verb} {len(succeeded)} item(s)."
+    if failed:
+        names = ", ".join(name for name, _ in failed[:3])
+        more = f" and {len(failed) - 3} more" if len(failed) > 3 else ""
+        result["error"] = f"Could not process: {names}{more}."
+    return result
 
 
 def _back(path: str, *, notice: Optional[str] = None, error: Optional[str] = None):

@@ -52,7 +52,7 @@
           </form>
           <form method="post" action="/ftp/{{ account.id }}/disable" style="display:inline;">
             {{ ui.csrf(session) }}
-            <button class="button" type="submit" onclick="return confirm('Disable FTP for {{ account.username }}?')">Disable</button>
+            <button class="button" type="submit" data-confirm="Disable FTP for {{ account.username }}?">Disable</button>
           </form>
         </td>
       </tr>

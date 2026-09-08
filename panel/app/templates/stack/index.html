@@ -26,7 +26,7 @@
           <form method="post" action="/stack/uninstall" style="display:inline;">
             {{ ui.csrf(session) }}
             <input type="hidden" name="key" value="{{ p.key }}">
-            <button class="button" type="submit" onclick="return confirm('Remove {{ p.name }}?')">Remove</button>
+            <button class="button" type="submit" data-confirm="Remove {{ p.name }}?">Remove</button>
           </form>
           {% else %}
           <form method="post" action="/stack/install" style="display:inline;">
@@ -80,7 +80,7 @@
             {{ ui.csrf(session) }}
             <input type="hidden" name="key" value="php">
             <input type="hidden" name="version" value="{{ version }}">
-            <button class="button" type="submit" onclick="return confirm('Remove PHP {{ version }}? Sites using it must be moved first.')">Remove</button>
+            <button class="button" type="submit" data-confirm="Remove PHP {{ version }}? Sites using it must be moved first.">Remove</button>
           </form>
         </td>
       </tr>

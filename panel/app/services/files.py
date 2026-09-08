@@ -17,10 +17,11 @@ import os
 import pwd
 import shutil
 import stat
+import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from app.config import get_settings
 from app.validators import ValidationError, resolve_within, validate_filename
@@ -33,6 +34,15 @@ settings = get_settings()
 # generated or binary, and loading it into a textarea helps nobody.
 MAX_EDIT_BYTES = 1024 * 1024
 MAX_UPLOAD_BYTES = 256 * 1024 * 1024
+
+# Guardrails for archive creation/extraction. These bound how much work one
+# panel click can trigger -- not a security control by themselves, but the
+# zip-slip check below is, and it is not optional.
+MAX_ARCHIVE_INPUT_BYTES = 1024 * 1024 * 1024  # 1 GB of source data per archive
+MAX_EXTRACT_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB uncompressed
+MAX_EXTRACT_ENTRIES = 50_000
+
+ARCHIVE_EXTENSIONS = frozenset({".zip"})
 
 TEXT_EXTENSIONS = frozenset(
     {
@@ -69,6 +79,10 @@ class Entry:
         if self.is_dir or self.size > MAX_EDIT_BYTES:
             return False
         return Path(self.name).suffix.lower() in TEXT_EXTENSIONS or "." not in self.name
+
+    @property
+    def is_archive(self) -> bool:
+        return not self.is_dir and Path(self.name).suffix.lower() in ARCHIVE_EXTENSIONS
 
 
 def resolve(candidate) -> Path:
@@ -237,6 +251,194 @@ def delete(candidate) -> str:
     return name
 
 
+def _unique_name(parent: Path, original_name: str, *, tag: str = "copy") -> str:
+    """A name like "config-copy.php" that doesn't collide in ``parent``,
+    trying "-copy-2", "-copy-3", ... if it does."""
+    stem, suffix = Path(original_name).stem, Path(original_name).suffix
+    candidate = f"{stem}-{tag}{suffix}"
+    counter = 2
+    while (parent / candidate).exists():
+        candidate = f"{stem}-{tag}-{counter}{suffix}"
+        counter += 1
+    return candidate
+
+
+def _is_within(path: Path, ancestor: Path) -> bool:
+    try:
+        path.relative_to(ancestor)
+        return True
+    except ValueError:
+        return False
+
+
+def copy_item(
+    candidate, *, destination_dir: Optional[str] = None, new_name: Optional[str] = None
+) -> Path:
+    """Copy a file or directory.
+
+    With no destination, duplicates in place next to the original under an
+    auto-generated name -- the "back this up before I touch it" case, which
+    is exactly what an emergency edit calls for. With a destination, copies
+    into that directory instead, keeping the original name unless
+    ``new_name`` is given.
+    """
+    source = resolve(candidate)
+    if source == root():
+        raise ValidationError("The root directory cannot be copied.")
+    if not source.exists():
+        raise ValidationError("That path does not exist.")
+
+    if destination_dir is not None:
+        dest_parent = resolve(destination_dir)
+        if not dest_parent.is_dir():
+            raise ValidationError("Destination is not a directory.")
+        name = validate_filename(new_name) if new_name else source.name
+    else:
+        dest_parent = source.parent
+        name = validate_filename(new_name) if new_name else _unique_name(dest_parent, source.name)
+
+    destination = resolve(dest_parent / name)
+    if destination == source:
+        raise ValidationError("Source and destination are the same.")
+    if destination.exists():
+        raise ValidationError(f"'{name}' already exists there.")
+    if source.is_dir() and _is_within(destination, source):
+        raise ValidationError("Cannot copy a folder into itself.")
+
+    owner = _owner_of(dest_parent)
+    if source.is_dir():
+        shutil.copytree(source, destination, symlinks=False)
+    else:
+        shutil.copy2(source, destination)
+    _restore_owner_recursive(destination, owner)
+    return destination
+
+
+def bulk_delete(candidates: List[str]) -> Tuple[List[str], List[Tuple[str, str]]]:
+    """Delete several paths, continuing past individual failures.
+
+    Returns (names deleted, [(candidate, error), ...]) so the caller can
+    report a partial success honestly rather than all-or-nothing.
+    """
+    succeeded: List[str] = []
+    failed: List[Tuple[str, str]] = []
+    for candidate in candidates:
+        try:
+            succeeded.append(delete(candidate))
+        except (ValidationError, OSError) as exc:
+            failed.append((candidate, str(exc)))
+    return succeeded, failed
+
+
+def bulk_copy(candidates: List[str], destination_dir: str) -> Tuple[List[str], List[Tuple[str, str]]]:
+    succeeded: List[str] = []
+    failed: List[Tuple[str, str]] = []
+    for candidate in candidates:
+        try:
+            copy_item(candidate, destination_dir=destination_dir)
+            succeeded.append(candidate)
+        except (ValidationError, OSError) as exc:
+            failed.append((candidate, str(exc)))
+    return succeeded, failed
+
+
+def create_archive(candidates: List[str], parent_candidate, archive_name: str) -> Path:
+    """Zip one or more files/folders, all from the same directory, together."""
+    parent = resolve(parent_candidate)
+    if not parent.is_dir():
+        raise ValidationError("That is not a directory.")
+    if not candidates:
+        raise ValidationError("Nothing selected to archive.")
+
+    archive_name = validate_filename(archive_name)
+    if not archive_name.lower().endswith(".zip"):
+        archive_name += ".zip"
+    destination = resolve(parent / archive_name)
+    if destination.exists():
+        raise ValidationError(f"'{archive_name}' already exists.")
+
+    sources = [resolve(c) for c in candidates]
+
+    total = 0
+    members: List[Tuple[Path, Path]] = []
+    for source in sources:
+        if not source.exists():
+            continue
+        if source.is_dir():
+            for path in source.rglob("*"):
+                if path.is_file():
+                    total += path.stat().st_size
+                    members.append((path, path.relative_to(parent)))
+        else:
+            total += source.stat().st_size
+            members.append((source, source.relative_to(parent)))
+        if total > MAX_ARCHIVE_INPUT_BYTES:
+            raise ValidationError(
+                f"Selection is larger than {format_size(MAX_ARCHIVE_INPUT_BYTES)}; "
+                "archive something smaller."
+            )
+
+    owner = _owner_of(parent)
+    with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as zf:
+        for absolute, arcname in members:
+            zf.write(absolute, arcname=str(arcname))
+    _restore_owner(destination, owner)
+    return destination
+
+
+def extract_archive(candidate) -> Path:
+    """Extract a .zip into a new sibling folder named after it.
+
+    Every member's destination is resolved through the same containment
+    check the rest of this module relies on, with the extraction folder as
+    the root instead of the sites root -- that is what stands between this
+    and zip-slip: a crafted member path like "../../etc/cron.d/x" inside the
+    archive must never be allowed to land outside the folder being extracted
+    into, and a naive ``ZipFile.extractall()`` does not check for that at all.
+    """
+    source = resolve(candidate)
+    if not source.is_file() or not is_archive_name(source.name):
+        raise ValidationError("That is not a .zip archive.")
+
+    parent = source.parent
+    dest_name = source.stem or "archive"
+    destination = parent / dest_name
+    counter = 2
+    while destination.exists():
+        destination = parent / f"{dest_name}-{counter}"
+        counter += 1
+    destination = resolve(destination)
+
+    try:
+        with zipfile.ZipFile(source) as zf:
+            infos = zf.infolist()
+            if len(infos) > MAX_EXTRACT_ENTRIES:
+                raise ValidationError("Archive has too many entries to extract here.")
+            if sum(info.file_size for info in infos) > MAX_EXTRACT_BYTES:
+                raise ValidationError(
+                    f"Archive would extract to more than {format_size(MAX_EXTRACT_BYTES)}."
+                )
+
+            destination.mkdir(parents=True, exist_ok=False)
+            for info in infos:
+                member_path = resolve_within(destination, info.filename)
+                if info.is_dir():
+                    member_path.mkdir(parents=True, exist_ok=True)
+                else:
+                    member_path.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open(info) as src, open(member_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+    except zipfile.BadZipFile:
+        raise ValidationError("That file is not a valid zip archive.") from None
+
+    _restore_owner_recursive(destination, _owner_of(parent))
+    return destination
+
+
+def is_archive_name(name: str) -> bool:
+    return Path(name).suffix.lower() in ARCHIVE_EXTENSIONS
+
+
 def save_upload(parent_candidate, filename: str, data: bytes) -> Path:
     filename = validate_filename(filename)
     if len(data) > MAX_UPLOAD_BYTES:
@@ -274,6 +476,21 @@ def _restore_owner(path: Path, owner) -> None:
         os.chown(path, owner[0], owner[1])
     except (OSError, AttributeError) as exc:
         logger.debug("could not set ownership on %s: %s", path, exc)
+
+
+def _restore_owner_recursive(path: Path, owner) -> None:
+    """Like ``_restore_owner``, but for a whole tree.
+
+    ``copytree``/zip extraction create files as root (the daemon's own
+    user); without walking the result, a site's own user would be unable to
+    touch anything the panel just copied or extracted for it.
+    """
+    if not owner:
+        return
+    _restore_owner(path, owner)
+    if path.is_dir() and not path.is_symlink():
+        for child in path.rglob("*"):
+            _restore_owner(child, owner)
 
 
 # --------------------------------------------------------------------------

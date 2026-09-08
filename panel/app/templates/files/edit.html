@@ -8,8 +8,15 @@
 <form method="post" action="/files/edit" class="panel">
   {{ ui.csrf(session) }}
   <input type="hidden" name="path" value="{{ path }}">
-  <textarea name="content" rows="28" spellcheck="false"
-    style="width:100%;font-family:var(--mono);font-size:13px;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">{{ content }}</textarea>
-  <button type="submit" class="button primary" style="margin-top:14px;">Save</button>
+  <textarea id="editor" name="content" rows="28" spellcheck="false"
+    style="width:100%;font-family:var(--mono);font-size:13px;line-height:1.5;padding:12px;
+           border:1px solid var(--border);border-radius:6px;background:var(--bg);
+           color:var(--text);tab-size:4;">{{ content }}</textarea>
+  <div style="display:flex;gap:8px;margin-top:14px;">
+    <button type="submit" class="button primary">Save</button>
+    <a class="button" href="/files?path={{ parent }}">Cancel</a>
+  </div>
 </form>
+
+<script src="/static/editor.js"></script>
 {% endblock %}
