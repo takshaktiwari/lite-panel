@@ -210,9 +210,10 @@ class CertbotProvider(Provider):
         ctx.log(f"{domain} resolves to {', '.join(sorted(ips))}")
 
         server_ip = system.public_ip()
-        if server_ip and server_ip not in ips:
-            # Not an error: a proxied domain (Cloudflare's orange cloud) is a
-            # perfectly normal setup that resolves to the proxy, not to us.
+        # Not an error: a proxied domain (Cloudflare's orange cloud) is a
+        # perfectly normal setup that resolves to the proxy, not to us.
+        proxied = bool(server_ip) and server_ip not in ips
+        if proxied:
             ctx.log(
                 f"note: {domain} does not resolve to this server ({server_ip}) -- "
                 "fine if it is proxied (e.g. Cloudflare), a problem if it is not"
@@ -221,6 +222,17 @@ class CertbotProvider(Provider):
         ok, detail = self._challenge_reachable(domain)
         if ok:
             ctx.log(f"HTTP-01 challenge path is reachable at http://{domain}")
+        elif proxied:
+            # Behind a proxy this check is not evidence of anything. A proxy
+            # commonly answers a request coming from the origin's own address
+            # differently than one arriving from the CA (Cloudflare returns
+            # 403 to exactly this probe on a domain whose certificate issues
+            # perfectly well), so reporting it as a warning would put a scary
+            # line in the log of every working proxied site.
+            ctx.log(
+                f"note: the test challenge fetch returned '{detail}', which is normal "
+                "for a proxied domain and says nothing about what the CA will see"
+            )
         else:
             ctx.log(f"warning: could not fetch a test challenge file over http://{domain} -- {detail}")
             ctx.log("continuing anyway; Let's Encrypt reaches this server from outside, which this check cannot do")

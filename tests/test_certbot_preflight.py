@@ -114,6 +114,28 @@ def test_an_unreachable_challenge_warns_but_still_tries(provider, monkeypatch):
     assert "timed out" in ctx.text
 
 
+def test_a_failed_challenge_fetch_behind_a_proxy_is_not_reported_as_a_warning(
+    provider, monkeypatch
+):
+    """Observed on a real Cloudflare-proxied domain: the probe comes back 403
+    while that domain's certificate issues perfectly well. Behind a proxy the
+    check proves nothing, so it must not put a warning in the log of a site
+    that is working -- that is just the next "why is this broken" report."""
+    _no_network(
+        monkeypatch,
+        provider,
+        ips={"104.21.73.154"},  # a proxy address, not this server
+        reachable=(False, "HTTP 403 from the server that answered"),
+    )
+    ctx = _FakeCtx()
+
+    provider.issue(ctx, "proxied.example.com")
+
+    assert len(ctx.commands) == 1
+    assert "warning" not in ctx.text, ctx.text
+    assert "normal for a proxied domain" in ctx.text
+
+
 def test_certbot_failure_no_longer_blames_dns(provider, monkeypatch):
     """DNS was already verified, so sending the operator to check DNS would
     point them at the one thing known to be fine."""
