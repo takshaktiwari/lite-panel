@@ -28,7 +28,10 @@
 
 {% if fpm_socket %}
     location ~ \.php$ {
-        try_files $uri =404;
+        # snippets/fastcgi-php.conf (stock on Debian/Ubuntu) already sets its
+        # own try_files against $fastcgi_script_name after splitting PATH_INFO
+        # -- nginx rejects a second try_files in the same location outright,
+        # so one must never be added here too.
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:{{ fpm_socket }};
         fastcgi_read_timeout 300;
