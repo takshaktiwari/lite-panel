@@ -14,8 +14,9 @@ from sqlalchemy import select
 
 from app.database import session_scope
 from app.jobs import JobFailed, register
-from app.models import FtpAccount, InstalledProvider, Site
+from app.models import CronJob, FtpAccount, InstalledProvider, Site
 from app.providers import get_provider
+from app.services import cron as cron_service
 from app.services import databases as db_service
 from app.services import ftp as ftp_service
 from app.services import renderer
@@ -305,6 +306,30 @@ def change_ftp_password(ctx) -> None:
             raise JobFailed("That FTP account no longer exists.")
         try:
             ftp_service.set_ftp_password(ctx, account, ctx.payload["password"])
+        except ValidationError as exc:
+            raise _fail(exc) from exc
+
+
+# --------------------------------------------------------------------------
+# Cron
+# --------------------------------------------------------------------------
+
+
+@register("cron.sync")
+def sync_cron(ctx) -> None:
+    """Install a site's crontab from what is currently in the database.
+
+    Runs after every create/edit/toggle/delete in the cron router -- the
+    database row is already committed by then, so this only ever has to
+    reflect it onto disk, never decide what belongs there.
+    """
+    with session_scope() as db:
+        site = db.get(Site, ctx.payload["site_id"])
+        if site is None:
+            raise JobFailed("That site no longer exists.")
+        jobs = db.scalars(select(CronJob).where(CronJob.site_id == site.id)).all()
+        try:
+            cron_service.apply_crontab(ctx, site.system_user, jobs)
         except ValidationError as exc:
             raise _fail(exc) from exc
 

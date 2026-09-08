@@ -212,6 +212,47 @@ def validate_package_name(value: str) -> str:
 
 
 # --------------------------------------------------------------------------
+# Cron
+# --------------------------------------------------------------------------
+
+# Deliberately just the character set a crontab field can ever mean something
+# in (digits, "*", and the range/step/list punctuation), not a full grammar
+# check -- that is enough to guarantee a schedule field can never inject an
+# extra whitespace-separated field (i.e. a different command) into the line
+# we render, without trying to reject every semantically invalid schedule.
+_CRON_FIELD = re.compile(r"^[0-9*/,-]+$")
+_MAX_CRON_COMMAND_LEN = 1000
+
+
+def validate_cron_field(value: str, *, field: str) -> str:
+    value = _clean(value, field)
+    if not value:
+        raise ValidationError(f"{field.capitalize()} is required.")
+    if not _CRON_FIELD.match(value):
+        raise ValidationError(
+            f"{field.capitalize()} may only contain digits, '*', ',', '-' and '/'."
+        )
+    return value
+
+
+def validate_cron_command(value: str) -> str:
+    """A cron command line.
+
+    Unlike everything else in this module, this is meant to run an arbitrary
+    command -- that is what a cron job is. The site's own system user is
+    already the isolation boundary (the same one FTP and PHP-FPM run under),
+    so there is nothing to allowlist here beyond what :func:`_clean` already
+    refuses (newlines, null bytes) and a sane length cap.
+    """
+    value = _clean(value, "command")
+    if not value:
+        raise ValidationError("Command is required.")
+    if len(value) > _MAX_CRON_COMMAND_LEN:
+        raise ValidationError(f"Command must be at most {_MAX_CRON_COMMAND_LEN} characters.")
+    return value
+
+
+# --------------------------------------------------------------------------
 # Filesystem containment
 # --------------------------------------------------------------------------
 

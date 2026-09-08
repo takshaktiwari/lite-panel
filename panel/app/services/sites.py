@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session as OrmSession
 from app.config import get_settings
 from app.models import Site
 from app.providers import get_provider
+from app.services import cron as cron_service
 from app.services import renderer, tuning
 from app.shell import run
 from app.validators import (
@@ -361,6 +362,11 @@ def delete_site(db: OrmSession, ctx, site: Site, *, remove_files: bool = False) 
     except Exception as exc:  # noqa: BLE001 - vsftpd may not be installed
         ctx.log(f"note: {exc}")
     _remove_from_ftp_userlist(username)
+
+    try:
+        cron_service.remove_crontab(username)
+    except Exception as exc:  # noqa: BLE001 - cron may not be installed
+        ctx.log(f"note: {exc}")
 
     db.delete(site)
     db.commit()

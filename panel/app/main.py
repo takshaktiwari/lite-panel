@@ -17,6 +17,7 @@ from app.jobs import worker
 from app.models import Job, JobStatus
 from app.routers import (
     auth,
+    cron,
     dashboard,
     databases,
     files,
@@ -94,6 +95,7 @@ def create_app() -> FastAPI:
     app.include_router(ftp.router)
     app.include_router(files.router)
     app.include_router(stack.router)
+    app.include_router(cron.router)
     app.include_router(jobs_router.router)
     app.include_router(internal.router)
     app.include_router(terminal.router)

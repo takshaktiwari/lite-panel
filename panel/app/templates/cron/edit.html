@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Edit cron job · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <h1>Edit cron job</h1>
+  <p class="muted">{{ job.site.domain }} ({{ job.site.system_user }})</p>
+</header>
+
+<section class="panel">
+  <form method="post" action="/cron/{{ job.id }}/edit">
+    {{ ui.csrf(session) }}
+
+    <label for="description">Description <span class="muted">(optional)</span></label>
+    <input type="text" id="description" name="description" value="{{ job.description }}">
+
+    <label>Schedule</label>
+    <div class="cron-fields">
+      <div><input type="text" name="minute" value="{{ job.minute }}" required title="Minute"><span class="muted">minute</span></div>
+      <div><input type="text" name="hour" value="{{ job.hour }}" required title="Hour"><span class="muted">hour</span></div>
+      <div><input type="text" name="day_of_month" value="{{ job.day_of_month }}" required title="Day of month"><span class="muted">day</span></div>
+      <div><input type="text" name="month" value="{{ job.month }}" required title="Month"><span class="muted">month</span></div>
+      <div><input type="text" name="day_of_week" value="{{ job.day_of_week }}" required title="Day of week"><span class="muted">weekday</span></div>
+    </div>
+    <p class="muted" style="margin-top:2px;">
+      Digits, <code>*</code>, <code>,</code>, <code>-</code> and <code>/</code> only. Examples:
+      <code>*/5 * * * *</code> every 5 minutes, <code>0 3 * * *</code> daily at 03:00.
+    </p>
+
+    <label for="command">Command</label>
+    <input type="text" id="command" name="command" value="{{ job.command }}" required style="font-family:monospace;">
+
+    <div style="display:flex;gap:10px;margin-top:10px;">
+      <button class="button primary" type="submit">Save</button>
+      <a class="button" href="/cron">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

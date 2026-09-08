@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Cron · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <h1>Cron</h1>
+  <p class="muted">Scheduled commands, one per site. Each job runs as that site's own system user -- never root.</p>
+</header>
+
+{% if not cron_available %}
+<div class="alert alert-error">cron does not appear to be installed on this server. Jobs can be saved here but won't run until it is.</div>
+{% endif %}
+
+{% if sites %}
+<section class="panel">
+  <h2>New cron job</h2>
+  <form method="post" action="/cron/new">
+    {{ ui.csrf(session) }}
+    <label for="site_id">Site</label>
+    <select id="site_id" name="site_id" required>
+      {% for site in sites %}
+      <option value="{{ site.id }}">{{ site.domain }} ({{ site.system_user }})</option>
+      {% endfor %}
+    </select>
+
+    <label for="description">Description <span class="muted">(optional)</span></label>
+    <input type="text" id="description" name="description" placeholder="e.g. Nightly backup">
+
+    <label>Schedule</label>
+    <div class="cron-fields">
+      <div><input type="text" name="minute" value="*" required title="Minute"><span class="muted">minute</span></div>
+      <div><input type="text" name="hour" value="*" required title="Hour"><span class="muted">hour</span></div>
+      <div><input type="text" name="day_of_month" value="*" required title="Day of month"><span class="muted">day</span></div>
+      <div><input type="text" name="month" value="*" required title="Month"><span class="muted">month</span></div>
+      <div><input type="text" name="day_of_week" value="*" required title="Day of week"><span class="muted">weekday</span></div>
+    </div>
+    <p class="muted" style="margin-top:2px;">
+      Digits, <code>*</code>, <code>,</code>, <code>-</code> and <code>/</code> only. Examples:
+      <code>*/5 * * * *</code> every 5 minutes, <code>0 3 * * *</code> daily at 03:00.
+    </p>
+
+    <label for="command">Command</label>
+    <input type="text" id="command" name="command" required placeholder="/usr/bin/php /var/www/mysite/artisan schedule:run" style="font-family:monospace;">
+
+    <button class="button primary" type="submit" style="margin-top:10px;">Add cron job</button>
+  </form>
+</section>
+{% else %}
+<div class="alert alert-notice">No sites yet. <a href="/sites">Create a site</a> first -- every cron job belongs to one.</div>
+{% endif %}
+
+<section class="panel">
+  <h2>Jobs</h2>
+  {% if jobs %}
+  <table class="table">
+    <thead><tr><th>Site</th><th>Schedule</th><th>Command</th><th>Description</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr>
+        <td>{{ job.site.domain }}</td>
+        <td><code>{{ job.schedule_display }}</code></td>
+        <td class="muted" style="max-width:320px;overflow-wrap:anywhere;">{{ job.command }}</td>
+        <td class="muted">{{ job.description or '—' }}</td>
+        <td><span class="dot {{ 'ok' if job.is_enabled else 'off' }}"></span>{{ 'enabled' if job.is_enabled else 'disabled' }}</td>
+        <td style="text-align:right;">
+          <details class="dropdown">
+            <summary class="icon-button" title="Actions">⋮</summary>
+            <div class="dropdown-menu">
+              <a class="dropdown-item" href="/cron/{{ job.id }}/edit"><span class="icon">✎</span> Edit</a>
+              <form method="post" action="/cron/{{ job.id }}/toggle">
+                {{ ui.csrf(session) }}
+                <button class="dropdown-item" type="submit">
+                  <span class="icon">{{ '⏸' if job.is_enabled else '▶' }}</span> {{ 'Disable' if job.is_enabled else 'Enable' }}
+                </button>
+              </form>
+              <form method="post" action="/cron/{{ job.id }}/delete">
+                {{ ui.csrf(session) }}
+                <button class="dropdown-item danger" type="submit" data-confirm="Delete this cron job for {{ job.site.domain }}?">
+                  <span class="icon">🗑</span> Delete
+                </button>
+              </form>
+            </div>
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted empty">No cron jobs yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

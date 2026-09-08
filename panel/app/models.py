@@ -221,6 +221,9 @@ class Site(TimestampMixin, Base):
     ftp_accounts: Mapped[List["FtpAccount"]] = relationship(
         back_populates="site", cascade="all, delete-orphan"
     )
+    cron_jobs: Mapped[List["CronJob"]] = relationship(
+        back_populates="site", cascade="all, delete-orphan"
+    )
 
 
 class SiteAlias(Base):
@@ -264,6 +267,37 @@ class FtpAccount(TimestampMixin, Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     site: Mapped[Site] = relationship(back_populates="ftp_accounts")
+
+
+class CronJob(TimestampMixin, Base):
+    """A scheduled command for one site, run as that site's own system user.
+
+    This table is the source of truth; the actual crontab installed for the
+    user (via ``crontab -u <user> -``) is a full regeneration from every
+    enabled row belonging to that site, the same "database is truth, files
+    are a projection" approach the rest of the panel uses for nginx/PHP-FPM
+    config. There is deliberately no root-scoped/server-wide job here -- a
+    job only ever runs with the privilege its own site already has.
+    """
+
+    __tablename__ = "cron_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    description: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    minute: Mapped[str] = mapped_column(String(64), nullable=False)
+    hour: Mapped[str] = mapped_column(String(64), nullable=False)
+    day_of_month: Mapped[str] = mapped_column(String(64), nullable=False)
+    month: Mapped[str] = mapped_column(String(64), nullable=False)
+    day_of_week: Mapped[str] = mapped_column(String(64), nullable=False)
+    command: Mapped[str] = mapped_column(Text, nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    site: Mapped[Site] = relationship(back_populates="cron_jobs")
+
+    @property
+    def schedule_display(self) -> str:
+        return f"{self.minute} {self.hour} {self.day_of_month} {self.month} {self.day_of_week}"
 
 
 # --------------------------------------------------------------------------
