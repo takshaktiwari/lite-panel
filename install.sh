@@ -105,7 +105,11 @@ PKGS=(python3-venv python3-pip git curl nginx openssl php-cli ca-certificates)
 
 MISSING=()
 for pkg in "${PKGS[@]}"; do
-  dpkg -l "$pkg" &>/dev/null || MISSING+=("$pkg")
+  # dpkg -l exits 0 even for uninstalled/residual packages; check actual install status
+  STATUS=$(dpkg-query -W -f='${db:Status-Abbrev}' "$pkg" 2>/dev/null || echo "")
+  if [[ "$STATUS" != "ii "* ]]; then
+    MISSING+=("$pkg")
+  fi
 done
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
@@ -176,9 +180,10 @@ if [[ "$FORCE" == true && -d "$VENV_DIR" ]]; then
   rm -rf "$VENV_DIR"
 fi
 
-if [[ -d "$VENV_DIR" ]]; then
+if [[ -f "$VENV_DIR/bin/pip" ]]; then
   ok "venv already exists at $VENV_DIR"
 else
+  rm -rf "$VENV_DIR"
   python3 -m venv "$VENV_DIR"
   ok "venv created"
 fi
@@ -371,7 +376,7 @@ INTERVAL=2
 ELAPSED=0
 info "Waiting for panel to respond on port $PANEL_PORT ..."
 while true; do
-  if curl -sfk "https://127.0.0.1:${PANEL_PORT}/healthz" >/dev/null 2>&1; then
+  if curl -sf "http://127.0.0.1:${PANEL_PORT}/healthz" >/dev/null 2>&1; then
     ok "Panel is up"
     break
   fi

@@ -30,9 +30,8 @@ server {
 # Main HTTPS block (Port 8443 — keeps 80 & 443 clean for customer sites)
 # ---------------------------------------------------------------------------
 server {
-    listen 8443 ssl;
-    listen [::]:8443 ssl;
-    http2 on;
+    listen 8443 ssl http2;
+    listen [::]:8443 ssl http2;
 
     server_name {{ panel_fqdn }} _;
 
