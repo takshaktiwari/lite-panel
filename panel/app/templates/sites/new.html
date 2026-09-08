@@ -17,12 +17,9 @@
          value="{{ form.domain if form else '' }}" autofocus>
 
   <label for="name">Site folder <span class="muted">(optional — derived from the domain)</span></label>
-  <div style="display:flex;align-items:stretch;margin-bottom:14px;">
-    <span style="display:flex;align-items:center;padding:0 10px;border:1px solid var(--border);
-                 border-right:0;border-radius:6px 0 0 6px;background:var(--bg);color:var(--muted);
-                 font-family:var(--mono);font-size:13px;white-space:nowrap;">{{ sites_root }}/</span>
-    <input type="text" id="name" name="name" placeholder="example" value="{{ form.name if form else '' }}"
-           style="border-radius:0 6px 6px 0;margin-bottom:0;font-family:var(--mono);">
+  <div class="input-group">
+    <span class="input-group-text">{{ sites_root }}/</span>
+    <input type="text" id="name" name="name" placeholder="example" value="{{ form.name if form else '' }}">
   </div>
 
   <label for="php_version">PHP version</label>
