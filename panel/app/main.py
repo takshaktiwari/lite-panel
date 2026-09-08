@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.config import get_settings
 from app.database import init_db, session_scope
-from app.deps import CsrfError, NotAuthenticated, TerminalLocked, render
+from app.deps import CsrfError, NotAuthenticated, render
 from app.jobs import worker
 from app.models import Job, JobStatus
 from app.routers import (
@@ -103,10 +103,6 @@ def create_app() -> FastAPI:
         if request.headers.get("accept", "").startswith("application/json"):
             return JSONResponse({"detail": "Authentication required"}, status_code=401)
         return RedirectResponse("/login", status_code=303)
-
-    @app.exception_handler(TerminalLocked)
-    async def _needs_terminal_unlock(request: Request, _exc: TerminalLocked):
-        return RedirectResponse(f"/terminal/unlock?return_to={request.url.path}", status_code=303)
 
     @app.exception_handler(CsrfError)
     async def _bad_csrf(request: Request, _exc: CsrfError):

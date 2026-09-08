@@ -81,25 +81,7 @@ class Session(TimestampMixin, Base):
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
     user_agent: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
-    # Step-up grant for the web terminal: a plain valid session is enough for
-    # every other action in the app, but a terminal is an unstructured root
-    # shell, so it additionally requires re-entering the password. Kept on
-    # Session rather than a separate table because the grant is 1:1 with the
-    # browser session that earned it and is already loaded on every request.
-    terminal_unlocked_until: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, nullable=True
-    )
-
     user: Mapped[AdminUser] = relationship(back_populates="sessions")
-
-    @property
-    def has_terminal_unlock(self) -> bool:
-        until = self.terminal_unlocked_until
-        if until is None:
-            return False
-        if until.tzinfo is None:  # SQLite hands back naive datetimes
-            until = until.replace(tzinfo=timezone.utc)
-        return until > utcnow()
 
     @property
     def is_expired(self) -> bool:

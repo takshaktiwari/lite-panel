@@ -64,9 +64,7 @@ def init_db() -> None:
 # so a column added here needs a one-line entry -- still not a real migration
 # tool, just enough for changes that are purely additive (a new nullable
 # column) rather than destructive.
-_ADDITIVE_COLUMNS = {
-    "sessions": [("terminal_unlocked_until", "DATETIME")],
-}
+_ADDITIVE_COLUMNS: dict = {}
 
 
 def _ensure_additive_columns() -> None:

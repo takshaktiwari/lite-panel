@@ -168,30 +168,6 @@ def purge_expired_sessions(db: OrmSession) -> int:
 
 
 # --------------------------------------------------------------------------
-# Terminal step-up authentication
-# --------------------------------------------------------------------------
-
-
-def grant_terminal_unlock(db: OrmSession, session: Session) -> None:
-    """Re-authenticate the caller for the web terminal.
-
-    Called only after the panel password has been verified again -- see
-    routers/terminal.py. The grant rides on the existing session row rather
-    than a new token, and expires on its own; there is deliberately no way to
-    extend it other than entering the password again.
-    """
-    settings = get_settings()
-    session.terminal_unlocked_until = utcnow() + timedelta(minutes=settings.terminal_unlock_minutes)
-    db.commit()
-
-
-def revoke_terminal_unlock(db: OrmSession, session: Session) -> None:
-    """End the step-up grant early, e.g. when a terminal is explicitly closed."""
-    session.terminal_unlocked_until = None
-    db.commit()
-
-
-# --------------------------------------------------------------------------
 # Login throttling
 # --------------------------------------------------------------------------
 

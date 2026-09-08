@@ -1,12 +1,11 @@
-"""The web terminal: step-up re-auth, the page, and the websocket bridge.
+"""The web terminal: the page and the websocket bridge.
 
 A terminal is the one place in this app where "unstructured root shell" is
 the point rather than the thing being guarded against -- see
 app/services/terminal.py for why that module is allowed to spawn a real
-shell when nothing else in the codebase is. Everything in this file exists
-to keep that power gated: a valid panel session alone is not enough, the
-websocket only accepts same-origin connections, and every open/close is
-logged.
+shell when nothing else in the codebase is. A valid panel session is enough
+to open one (the same bar as every other page); the websocket additionally
+only accepts same-origin connections, and every open/close is logged.
 """
 
 from __future__ import annotations
@@ -18,14 +17,13 @@ import os
 import threading
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Form, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session as OrmSession
 
 from app import security
 from app.config import get_settings
-from app.database import SessionLocal, get_session
-from app.deps import client_ip, csrf_protect, render, require_session, require_terminal_unlock
+from app.database import SessionLocal
+from app.deps import render, require_session
 from app.models import AuditLog, Session
 from app.services.terminal import TerminalSession
 
@@ -41,7 +39,7 @@ _READ_CHUNK = 65536
 @router.get("/terminal")
 def terminal_page(
     request: Request,
-    session: Session = Depends(require_terminal_unlock),
+    session: Session = Depends(require_session),
 ):
     return render(
         request,
@@ -50,91 +48,6 @@ def terminal_page(
         user=session.user,
         idle_timeout_minutes=settings.terminal_idle_timeout_minutes,
     )
-
-
-# --------------------------------------------------------------------------
-# Step-up re-authentication
-# --------------------------------------------------------------------------
-
-
-@router.get("/terminal/unlock")
-def unlock_form(
-    request: Request,
-    return_to: str = "/terminal",
-    session=Depends(require_session),
-):
-    if session.has_terminal_unlock:
-        return RedirectResponse(return_to, status_code=303)
-    return render(
-        request,
-        "terminal_unlock.html",
-        session=session,
-        user=session.user,
-        return_to=return_to,
-        unlock_minutes=settings.terminal_unlock_minutes,
-    )
-
-
-@router.post("/terminal/unlock", dependencies=[Depends(csrf_protect)])
-def unlock_submit(
-    request: Request,
-    password: str = Form(...),
-    return_to: str = Form("/terminal"),
-    session: Session = Depends(require_session),
-    db: OrmSession = Depends(get_session),
-):
-    ip = client_ip(request)
-
-    if security.is_locked_out(db, ip):
-        return render(
-            request,
-            "terminal_unlock.html",
-            session=session,
-            user=session.user,
-            return_to=return_to,
-            unlock_minutes=settings.terminal_unlock_minutes,
-            error="Too many failed attempts. Try again shortly.",
-            status_code=429,
-        )
-
-    if not security.verify_password(password, session.user.password_hash):
-        security.record_failed_login(db, ip)
-        db.add(
-            AuditLog(
-                action="terminal.unlock_failed",
-                user_id=session.user_id,
-                username=session.user.username,
-                ip_address=ip,
-            )
-        )
-        db.commit()
-        return render(
-            request,
-            "terminal_unlock.html",
-            session=session,
-            user=session.user,
-            return_to=return_to,
-            unlock_minutes=settings.terminal_unlock_minutes,
-            error="Incorrect password.",
-        )
-
-    security.clear_failed_logins(db, ip)
-    security.grant_terminal_unlock(db, session)
-    db.add(
-        AuditLog(
-            action="terminal.unlock",
-            user_id=session.user_id,
-            username=session.user.username,
-            ip_address=ip,
-        )
-    )
-    db.commit()
-
-    # Only ever redirect back within the app -- an open redirect via
-    # return_to would otherwise let a crafted /terminal/unlock link send a
-    # freshly-reauthenticated browser somewhere attacker-controlled.
-    target = return_to if return_to.startswith("/") and not return_to.startswith("//") else "/terminal"
-    return RedirectResponse(target, status_code=303)
 
 
 # --------------------------------------------------------------------------
@@ -176,9 +89,6 @@ async def terminal_ws(websocket: WebSocket) -> None:
     try:
         session = _session_from_cookie(db, websocket)
         if session is None:
-            await websocket.close(code=4401)
-            return
-        if not session.has_terminal_unlock:
             await websocket.close(code=4401)
             return
 

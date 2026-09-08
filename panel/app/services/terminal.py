@@ -6,9 +6,9 @@ shell, specifically to keep untrusted input from becoming a command. A web
 terminal is, by definition, the opposite of that -- an unstructured,
 unvalidated shell an operator drives directly. Do not use this module as
 precedent for adding a shell anywhere else; it exists because a terminal was
-explicitly requested, is gated behind step-up re-authentication
-(:func:`app.security.grant_terminal_unlock`), and is the one place in the app
-where "unstructured" is the whole point.
+explicitly requested, is gated behind a valid panel session the same as
+every other page, and is the one place in the app where "unstructured" is
+the whole point.
 
 This module is intentionally just an OS-resource wrapper -- no networking,
 no auth, no asyncio. That keeps it testable on its own (including on macOS,
