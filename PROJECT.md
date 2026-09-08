@@ -62,9 +62,10 @@ renders. All privileged actions work. The test server is running it live.
 This session picked up where the previous quota-limited session left off.
 Everything below was completed in this sitting:
 
-### Step 8 — Adminer nginx auth gate (previously missing)
+### Step 8 — Adminer nginx auth gate & Dedicated Port 8443
 - Created `assets/templates/panel-vhost.conf.j2` — the panel's own nginx vhost
-  with SSL on 443, HTTP→HTTPS redirect, `auth_request /internal/auth-check`
+  with SSL on dedicated port 8443 (keeping ports 80 & 443 100% free for hosted
+  customer websites and avoiding domain host collisions), `auth_request /internal/auth-check`
   gate on `/adminer/` (redirects to login on 401), `proxy_buffering off` on
   `/jobs/<id>/stream` so the SSE job log streams live instead of buffering
   until the job ends, and an `internal;` subrequest location so the auth
@@ -186,11 +187,11 @@ Everything below was completed in this sitting:
      `InstalledProvider`, rendered `/etc/php/8.5/fpm/conf.d/99-lite-panel.ini`,
      and confirmed active FPM socket at `/run/php/php8.5-fpm.sock`.
 
-**Final status:** Panel is live and accessible at `https://13.233.146.180`.
+**Final status:** Panel is live and accessible at `https://13.233.146.180:8443`.
 All services confirmed active and healthy:
 - `lite-panel.service` (uvicorn FastAPI on 127.0.0.1:8765)
 - `lite-panel-adminer.service` (PHP built-in server on 127.0.0.1:8766)
-- `nginx.service` (reverse proxy on 443 + SSL)
+- `nginx.service` (reverse proxy on dedicated port 8443 + SSL; ports 80/443 dedicated to customer sites)
 - `php8.5-fpm.service` (FPM pool running on /run/php/php8.5-fpm.sock)
 - Stack components tracked in DB: Nginx, MariaDB, Certbot, vsftpd, PHP 8.5.
 - All 163 test suite unit/integration tests passing.
