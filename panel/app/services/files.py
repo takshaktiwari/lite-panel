@@ -45,8 +45,13 @@ MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 # panel click can trigger -- not a security control by themselves, but the
 # zip-slip check below is, and it is not optional.
 MAX_ARCHIVE_INPUT_BYTES = 1024 * 1024 * 1024  # 1 GB of source data per archive
-MAX_EXTRACT_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB uncompressed
 MAX_EXTRACT_ENTRIES = 50_000
+# A fixed uncompressed-size cap has no good value -- one server has 20GB
+# free, another has 2TB. Instead extraction is only refused when it would
+# leave less than this much space on the actual destination filesystem, so
+# the limit is always the box's own disk rather than a number that goes
+# stale the moment someone provisions a bigger one.
+EXTRACT_FREE_SPACE_MARGIN_BYTES = 512 * 1024 * 1024  # 512 MB
 
 ARCHIVE_EXTENSIONS = frozenset({".zip"})
 
@@ -537,9 +542,14 @@ def extract_archive(candidate) -> Path:
             infos = zf.infolist()
             if len(infos) > MAX_EXTRACT_ENTRIES:
                 raise ValidationError("Archive has too many entries to extract here.")
-            if sum(info.file_size for info in infos) > MAX_EXTRACT_BYTES:
+
+            extracted_size = sum(info.file_size for info in infos)
+            free_bytes = shutil.disk_usage(parent).free
+            if extracted_size > free_bytes - EXTRACT_FREE_SPACE_MARGIN_BYTES:
+                headroom = max(free_bytes - EXTRACT_FREE_SPACE_MARGIN_BYTES, 0)
                 raise ValidationError(
-                    f"Archive would extract to more than {format_size(MAX_EXTRACT_BYTES)}."
+                    f"Archive would extract to {format_size(extracted_size)}, "
+                    f"but only {format_size(headroom)} is free on disk."
                 )
 
             destination.mkdir(parents=True, exist_ok=False)

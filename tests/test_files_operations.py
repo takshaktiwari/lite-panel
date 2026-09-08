@@ -8,6 +8,7 @@ extract_archive() must refuse that, the same way every other path in this
 module refuses to leave the sites root.
 """
 
+import shutil
 import zipfile
 
 import pytest
@@ -441,10 +442,12 @@ def test_extract_archive_enforces_an_entry_count_cap(sites_root, monkeypatch):
         files_service.extract_archive("bundle.zip")
 
 
-def test_extract_archive_enforces_a_total_size_cap(sites_root, monkeypatch):
-    monkeypatch.setattr(files_service, "MAX_EXTRACT_BYTES", 5)
+def test_extract_archive_refuses_when_disk_does_not_have_room(sites_root, monkeypatch):
     with zipfile.ZipFile(sites_root / "bundle.zip", "w") as zf:
         zf.writestr("a.txt", "this is definitely more than five bytes")
+
+    fake_usage = shutil.disk_usage("/").__class__(total=0, used=0, free=5)
+    monkeypatch.setattr(files_service.shutil, "disk_usage", lambda path: fake_usage)
 
     with pytest.raises(ValidationError):
         files_service.extract_archive("bundle.zip")
