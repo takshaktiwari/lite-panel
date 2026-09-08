@@ -1,11 +1,13 @@
-"""Per-site cron jobs.
+"""Cron jobs -- per-site, or server-wide (root) when a job isn't any one
+site's business, or there's no site yet.
 
-Every job belongs to a site and is installed into that site's own system
-user's crontab -- see app.services.cron for why there is no root-scoped job
-here. The database row is the source of truth and is written immediately;
-actually installing it (running ``crontab``) goes through the same job queue
-as every other privileged operation in this panel (see app.jobs), because it
-touches the system outside the request/response cycle.
+Every job is installed into a real crontab: a site's own system user's, or
+root's for a server-wide job -- see app.services.cron for why a site-scoped
+job never touches root. The database row is the source of truth and is
+written immediately; actually installing it (running ``crontab``) goes
+through the same job queue as every other privileged operation in this
+panel (see app.jobs), because it touches the system outside the
+request/response cycle.
 """
 
 from __future__ import annotations
@@ -30,6 +32,11 @@ from app.validators import ValidationError, validate_cron_command, validate_cron
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/cron")
 
+# The site dropdown's sentinel value for "no site -- runs as root". Never a
+# valid Site.id (those are positive integers from an autoincrement PK), so
+# it can't collide with a real site.
+SERVER_SCOPE = "server"
+
 
 def _php_cli_paths() -> list:
     """The real, invocable path for every PHP version installed on this
@@ -39,6 +46,21 @@ def _php_cli_paths() -> list:
     return [php.cli_path_for(v) for v in php.installed_versions()]
 
 
+def _resolve_site(db: OrmSession, site_id: str) -> tuple:
+    """Turn the submitted site_id (a real id, or SERVER_SCOPE) into a Site
+    or None. Returns (site, error) -- exactly one is set."""
+    if site_id == SERVER_SCOPE:
+        return None, None
+    try:
+        site_pk = int(site_id)
+    except (TypeError, ValueError):
+        return None, "Choose a site or Server (root)."
+    site = db.get(Site, site_pk)
+    if site is None:
+        return None, "That site no longer exists."
+    return site, None
+
+
 @router.get("")
 def cron_list(
     request: Request,
@@ -46,7 +68,9 @@ def cron_list(
     db: OrmSession = Depends(get_session),
 ):
     jobs = db.scalars(
-        select(CronJob).join(Site).order_by(Site.domain, CronJob.id)
+        select(CronJob)
+        .outerjoin(Site)
+        .order_by(CronJob.site_id.is_(None).desc(), Site.domain, CronJob.id)
     ).all()
     sites = db.scalars(select(Site).where(Site.is_active).order_by(Site.domain)).all()
 
@@ -57,6 +81,7 @@ def cron_list(
         user=session.user,
         jobs=jobs,
         sites=sites,
+        server_scope=SERVER_SCOPE,
         cron_available=cron_service.is_available(),
         presets=cron_service.PRESETS,
         php_cli_paths=_php_cli_paths(),
@@ -65,7 +90,7 @@ def cron_list(
 
 @router.post("/new", dependencies=[Depends(csrf_protect)])
 def create(
-    site_id: int = Form(...),
+    site_id: str = Form(...),
     description: str = Form(""),
     minute: str = Form(...),
     hour: str = Form(...),
@@ -76,13 +101,13 @@ def create(
     session=Depends(require_session),
     db: OrmSession = Depends(get_session),
 ):
-    site = db.get(Site, site_id)
-    if site is None:
-        return _back(error="That site no longer exists.")
+    site, error = _resolve_site(db, site_id)
+    if error:
+        return _back(error=error)
 
     try:
         job = CronJob(
-            site_id=site.id,
+            site_id=site.id if site else None,
             description=description.strip()[:255],
             minute=validate_cron_field(minute, field="minute"),
             hour=validate_cron_field(hour, field="hour"),
@@ -96,7 +121,7 @@ def create(
 
     db.add(job)
     db.commit()
-    _audit(db, session, "cron.create", f"{site.domain}: {job.command[:100]}")
+    _audit(db, session, "cron.create", f"{job.target_label}: {job.command[:100]}")
 
     sync_job = _sync(db, session, site)
     return RedirectResponse(f"/jobs/{sync_job.id}", status_code=303)
@@ -157,7 +182,7 @@ def edit(
         )
 
     db.commit()
-    _audit(db, session, "cron.edit", f"{job.site.domain}: {job.command[:100]}")
+    _audit(db, session, "cron.edit", f"{job.target_label}: {job.command[:100]}")
 
     sync_job = _sync(db, session, job.site)
     return RedirectResponse(f"/jobs/{sync_job.id}", status_code=303)
@@ -175,7 +200,7 @@ def toggle(
 
     job.is_enabled = not job.is_enabled
     db.commit()
-    _audit(db, session, "cron.toggle", f"{job.site.domain}: {'enabled' if job.is_enabled else 'disabled'}")
+    _audit(db, session, "cron.toggle", f"{job.target_label}: {'enabled' if job.is_enabled else 'disabled'}")
 
     sync_job = _sync(db, session, job.site)
     return RedirectResponse(f"/jobs/{sync_job.id}", status_code=303)
@@ -192,11 +217,11 @@ def delete(
         return _back(error="That cron job no longer exists.")
 
     site = job.site
-    domain = site.domain
+    target_label = job.target_label
     command = job.command
     db.delete(job)
     db.commit()
-    _audit(db, session, "cron.delete", f"{domain}: {command[:100]}")
+    _audit(db, session, "cron.delete", f"{target_label}: {command[:100]}")
 
     sync_job = _sync(db, session, site)
     return RedirectResponse(f"/jobs/{sync_job.id}", status_code=303)
@@ -205,15 +230,16 @@ def delete(
 # --------------------------------------------------------------------------
 
 
-def _sync(db: OrmSession, session, site: Site):
-    """Enqueue the job that actually installs the site's crontab from what
-    is now in the database -- the same async pattern every other privileged,
+def _sync(db: OrmSession, session, site: Optional[Site]):
+    """Enqueue the job that actually installs the crontab from what is now
+    in the database -- the same async pattern every other privileged,
     system-touching action in this panel uses (see app.jobs)."""
+    label = site.domain if site else "the server"
     return enqueue(
         db,
         "cron.sync",
-        f"Update cron jobs for {site.domain}",
-        payload={"site_id": site.id},
+        f"Update cron jobs for {label}",
+        payload={"site_id": site.id if site else None},
         user_id=session.user_id,
     )
 

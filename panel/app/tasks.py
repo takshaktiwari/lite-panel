@@ -317,19 +317,27 @@ def change_ftp_password(ctx) -> None:
 
 @register("cron.sync")
 def sync_cron(ctx) -> None:
-    """Install a site's crontab from what is currently in the database.
+    """Install a crontab from what is currently in the database, for either
+    one site's own system user or (``site_id`` null) root's own.
 
     Runs after every create/edit/toggle/delete in the cron router -- the
     database row is already committed by then, so this only ever has to
     reflect it onto disk, never decide what belongs there.
     """
+    site_id = ctx.payload.get("site_id")
     with session_scope() as db:
-        site = db.get(Site, ctx.payload["site_id"])
-        if site is None:
-            raise JobFailed("That site no longer exists.")
-        jobs = db.scalars(select(CronJob).where(CronJob.site_id == site.id)).all()
+        if site_id is None:
+            username = "root"
+            jobs = db.scalars(select(CronJob).where(CronJob.site_id.is_(None))).all()
+        else:
+            site = db.get(Site, site_id)
+            if site is None:
+                raise JobFailed("That site no longer exists.")
+            username = site.system_user
+            jobs = db.scalars(select(CronJob).where(CronJob.site_id == site.id)).all()
+
         try:
-            cron_service.apply_crontab(ctx, site.system_user, jobs)
+            cron_service.apply_crontab(ctx, username, jobs)
         except ValidationError as exc:
             raise _fail(exc) from exc
 

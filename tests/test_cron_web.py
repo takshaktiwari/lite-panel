@@ -175,6 +175,120 @@ def test_create_against_a_missing_site_fails_cleanly(signed_in, db):
     assert "error=" in response.headers["location"]
 
 
+def test_create_rejects_a_garbage_site_id(signed_in, db):
+    token = _csrf(signed_in)
+    response = signed_in.post(
+        "/cron/new",
+        data={
+            "site_id": "not-a-number-or-server",
+            "minute": "*",
+            "hour": "*",
+            "day_of_month": "*",
+            "month": "*",
+            "day_of_week": "*",
+            "command": "true",
+            "csrf_token": token,
+        },
+    )
+    assert response.status_code == 303
+    assert "error=" in response.headers["location"]
+    assert db.scalars(select(CronJob)).all() == []
+
+
+# --------------------------------------------------------------------------
+# Server-wide (root) scope
+# --------------------------------------------------------------------------
+
+
+def test_cron_page_offers_the_form_with_no_sites_at_all(signed_in):
+    """The whole point: a box with no sites yet still has somewhere to
+    schedule a cron job, instead of being told to go create a site first."""
+    response = signed_in.get("/cron")
+    assert response.status_code == 200
+    assert "Server (root)" in response.text
+    assert 'name="site_id"' in response.text
+
+
+def test_create_with_server_scope_creates_a_site_less_job(signed_in, db):
+    token = _csrf(signed_in)
+
+    response = signed_in.post(
+        "/cron/new",
+        data={
+            "site_id": "server",
+            "description": "Full server backup",
+            "minute": "0",
+            "hour": "4",
+            "day_of_month": "*",
+            "month": "*",
+            "day_of_week": "*",
+            "command": "/usr/local/bin/backup-everything.sh",
+            "csrf_token": token,
+        },
+    )
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/jobs/")
+
+    job = db.scalars(select(CronJob)).one()
+    assert job.site_id is None
+    assert job.target_label == "Server (root)"
+    assert job.target_user == "root"
+
+    sync_job = _last_job(db)
+    assert sync_job.kind == "cron.sync"
+    assert json.loads(sync_job.payload) == {"site_id": None}
+
+
+def test_cron_page_lists_a_server_job_with_a_root_badge(signed_in, db):
+    server_job = CronJob(
+        site_id=None,
+        minute="*",
+        hour="*",
+        day_of_month="*",
+        month="*",
+        day_of_week="*",
+        command="echo server",
+    )
+    db.add(server_job)
+    db.commit()
+
+    response = signed_in.get("/cron")
+    assert "Server (root)" in response.text
+    assert "echo server" in response.text
+
+
+def test_toggle_and_delete_a_server_job(signed_in, db):
+    server_job = CronJob(
+        site_id=None,
+        minute="*",
+        hour="*",
+        day_of_month="*",
+        month="*",
+        day_of_week="*",
+        command="echo server",
+    )
+    db.add(server_job)
+    db.commit()
+    db.refresh(server_job)
+    token = _csrf(signed_in)
+
+    toggle_response = signed_in.post(
+        f"/cron/{server_job.id}/toggle", data={"csrf_token": token}
+    )
+    assert toggle_response.status_code == 303
+    db.refresh(server_job)
+    assert server_job.is_enabled is False
+    assert json.loads(_last_job(db).payload) == {"site_id": None}
+
+    delete_response = signed_in.post(
+        f"/cron/{server_job.id}/delete", data={"csrf_token": token}
+    )
+    assert delete_response.status_code == 303
+    db.expire_all()
+    assert db.scalars(select(CronJob)).all() == []
+    assert json.loads(_last_job(db).payload) == {"site_id": None}
+
+
 # --------------------------------------------------------------------------
 # Edit / toggle / delete
 # --------------------------------------------------------------------------
@@ -292,9 +406,6 @@ def test_edit_with_bad_input_redirects_back_to_the_edit_form(signed_in, db, job)
     location = response.headers["location"]
     assert location.startswith(f"/cron/{job.id}/edit?error=")
     assert "Month" in location
-
-    db.refresh(job)
-    assert job.command == original_command
 
     db.refresh(job)
     assert job.command == original_command

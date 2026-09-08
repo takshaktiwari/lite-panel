@@ -270,20 +270,25 @@ class FtpAccount(TimestampMixin, Base):
 
 
 class CronJob(TimestampMixin, Base):
-    """A scheduled command for one site, run as that site's own system user.
+    """A scheduled command, either for one site (run as its system user) or,
+    with ``site_id`` left null, for the server itself (run as root).
 
     This table is the source of truth; the actual crontab installed for the
-    user (via ``crontab -u <user> -``) is a full regeneration from every
-    enabled row belonging to that site, the same "database is truth, files
-    are a projection" approach the rest of the panel uses for nginx/PHP-FPM
-    config. There is deliberately no root-scoped/server-wide job here -- a
-    job only ever runs with the privilege its own site already has.
+    target user (via ``crontab -u <user> -``) is a full regeneration from
+    every enabled row belonging to that target, the same "database is truth,
+    files are a projection" approach the rest of the panel uses for
+    nginx/PHP-FPM config. The root-scoped case is deliberately not the
+    default: it exists so a box with no sites yet (or a maintenance job that
+    isn't any one site's business, like a full-server backup) still has
+    somewhere to schedule things, not as a way around a site's own
+    isolation. It grants nothing a session couldn't already do through the
+    Terminal page -- same session-only authentication, same root.
     """
 
     __tablename__ = "cron_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    site_id: Mapped[Optional[int]] = mapped_column(ForeignKey("sites.id"), nullable=True)
     description: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     minute: Mapped[str] = mapped_column(String(64), nullable=False)
     hour: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -293,11 +298,19 @@ class CronJob(TimestampMixin, Base):
     command: Mapped[str] = mapped_column(Text, nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    site: Mapped[Site] = relationship(back_populates="cron_jobs")
+    site: Mapped[Optional[Site]] = relationship(back_populates="cron_jobs")
 
     @property
     def schedule_display(self) -> str:
         return f"{self.minute} {self.hour} {self.day_of_month} {self.month} {self.day_of_week}"
+
+    @property
+    def target_label(self) -> str:
+        return self.site.domain if self.site else "Server (root)"
+
+    @property
+    def target_user(self) -> str:
+        return self.site.system_user if self.site else "root"
 
 
 # --------------------------------------------------------------------------

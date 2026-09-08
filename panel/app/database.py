@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import sessionmaker
 
 from app.config import get_settings
-from app.models import Base
+from app.models import Base, CronJob
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,7 @@ def init_db() -> None:
         settings.state_dir.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     _ensure_additive_columns()
+    _ensure_cron_site_nullable()
     logger.info("database ready at %s", settings.sqlalchemy_url)
 
 
@@ -75,6 +76,35 @@ def _ensure_additive_columns() -> None:
                 if name not in existing:
                     conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
                     logger.info("added column %s.%s", table, name)
+
+
+def _ensure_cron_site_nullable() -> None:
+    """``cron_jobs.site_id`` started out NOT NULL -- every job belonged to a
+    site. Server-wide jobs need it nullable, and SQLite has no ALTER COLUMN,
+    so an existing table still carrying the old constraint is rebuilt in
+    place: renamed aside, recreated from today's model (already nullable),
+    data copied across, old one dropped. This is the "first destructive
+    change" the purely-additive mechanism above was never meant to cover.
+    A fresh install never reaches the rebuild branch -- create_all() already
+    made the table with today's schema.
+    """
+    with engine.begin() as conn:
+        info = list(conn.exec_driver_sql("PRAGMA table_info(cron_jobs)"))
+        if not info:
+            return  # table doesn't exist yet; create_all() will have made it nullable
+
+        site_col = next((row for row in info if row[1] == "site_id"), None)
+        if site_col is None or not site_col[3]:
+            return  # already nullable
+
+        logger.info("rebuilding cron_jobs so site_id can be null (server-wide jobs)")
+        columns = ", ".join(row[1] for row in info)
+        conn.exec_driver_sql("ALTER TABLE cron_jobs RENAME TO cron_jobs_old")
+        CronJob.__table__.create(bind=conn)
+        conn.exec_driver_sql(
+            f"INSERT INTO cron_jobs ({columns}) SELECT {columns} FROM cron_jobs_old"
+        )
+        conn.exec_driver_sql("DROP TABLE cron_jobs_old")
 
 
 @contextmanager

@@ -5,24 +5,29 @@
 {% block content %}
 <header class="page-head">
   <h1>Cron</h1>
-  <p class="muted">Scheduled commands, one per site. Each job runs as that site's own system user -- never root.</p>
+  <p class="muted">Scheduled commands. Per-site jobs run as that site's own system user; a server job (no site) runs as root.</p>
 </header>
 
 {% if not cron_available %}
 <div class="alert alert-error">cron does not appear to be installed on this server. Jobs can be saved here but won't run until it is.</div>
 {% endif %}
 
-{% if sites %}
 <section class="panel">
   <h2>New cron job</h2>
   <form method="post" action="/cron/new">
     {{ ui.csrf(session) }}
-    <label for="site_id">Site</label>
+    <label for="site_id">Runs as</label>
     <select id="site_id" name="site_id" required>
+      <option value="{{ server_scope }}">Server (root)</option>
       {% for site in sites %}
       <option value="{{ site.id }}">{{ site.domain }} ({{ site.system_user }})</option>
       {% endfor %}
     </select>
+    <p class="muted" style="margin-top:-8px;">
+      "Server (root)" isn't tied to a site -- for a box with no sites yet, or a job that's the
+      whole server's business (backups, package updates). It runs with full access to everything
+      on the machine, the same as the Terminal page.
+    </p>
 
     <label for="description">Description <span class="muted">(optional)</span></label>
     <input type="text" id="description" name="description" placeholder="e.g. Nightly backup">
@@ -59,19 +64,19 @@
     <button class="button primary" type="submit" style="margin-top:10px;">Add cron job</button>
   </form>
 </section>
-{% else %}
-<div class="alert alert-notice">No sites yet. <a href="/sites">Create a site</a> first -- every cron job belongs to one.</div>
-{% endif %}
 
 <section class="panel">
   <h2>Jobs</h2>
   {% if jobs %}
   <table class="table">
-    <thead><tr><th>Site</th><th>Schedule</th><th>Command</th><th>Description</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Runs as</th><th>Schedule</th><th>Command</th><th>Description</th><th>Status</th><th></th></tr></thead>
     <tbody>
       {% for job in jobs %}
       <tr>
-        <td>{{ job.site.domain }}</td>
+        <td>
+          {{ job.target_label }}
+          {% if not job.site_id %}{{ ui.badge('root', 'failed') }}{% endif %}
+        </td>
         <td><code>{{ job.schedule_display }}</code></td>
         <td class="muted" style="max-width:320px;overflow-wrap:anywhere;">{{ job.command }}</td>
         <td class="muted">{{ job.description or '—' }}</td>
@@ -89,7 +94,7 @@
               </form>
               <form method="post" action="/cron/{{ job.id }}/delete">
                 {{ ui.csrf(session) }}
-                <button class="dropdown-item danger" type="submit" data-confirm="Delete this cron job for {{ job.site.domain }}?">
+                <button class="dropdown-item danger" type="submit" data-confirm="Delete this cron job for {{ job.target_label }}?">
                   <span class="icon">🗑</span> Delete
                 </button>
               </form>
