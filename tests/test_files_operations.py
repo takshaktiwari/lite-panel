@@ -455,3 +455,40 @@ def test_is_archive_name():
     assert files_service.is_archive_name("Bundle.ZIP")
     assert not files_service.is_archive_name("bundle.tar.gz")
     assert not files_service.is_archive_name("notes.txt")
+
+
+# --------------------------------------------------------------------------
+# Entry.editable
+# --------------------------------------------------------------------------
+
+
+def _entry(name, size=10):
+    return files_service.Entry(
+        name=name,
+        path=name,
+        relative=name,
+        is_dir=False,
+        size=size,
+        modified=None,
+        owner="root",
+        mode="644",
+        permissions="rw-r--r--",
+        is_symlink=False,
+    )
+
+
+def test_bare_dotfiles_in_text_extensions_are_editable():
+    # Path(".env").suffix is "" (pathlib treats the whole name as the stem),
+    # so this regressed silently despite ".env" being in TEXT_EXTENSIONS.
+    assert _entry(".env").editable
+    assert _entry(".gitignore").editable
+    assert _entry(".htaccess").editable
+
+
+def test_named_file_with_text_extension_is_still_editable():
+    assert _entry("config.env").editable
+    assert _entry("notes.txt").editable
+
+
+def test_unknown_extension_is_not_editable():
+    assert not _entry("photo.png").editable

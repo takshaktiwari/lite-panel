@@ -64,6 +64,16 @@ def root() -> Path:
     return Path(os.path.realpath(str(settings.sites_root)))
 
 
+def _suffix(name: str) -> str:
+    """Like Path(name).suffix, but treats a bare dotfile's own dot as the
+    extension too -- Path(".env").suffix is "" (pathlib reads the whole name
+    as the stem), which would otherwise leave .env/.gitignore/.htaccess
+    unmatched despite being listed in TEXT_EXTENSIONS."""
+    if "." not in name:
+        return ""
+    return "." + name.rsplit(".", 1)[1]
+
+
 @dataclass
 class Entry:
     name: str
@@ -85,7 +95,7 @@ class Entry:
     def editable(self) -> bool:
         if self.is_dir or self.size > MAX_EDIT_BYTES:
             return False
-        return Path(self.name).suffix.lower() in TEXT_EXTENSIONS or "." not in self.name
+        return _suffix(self.name).lower() in TEXT_EXTENSIONS or "." not in self.name
 
     @property
     def is_archive(self) -> bool:
