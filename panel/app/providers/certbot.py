@@ -93,7 +93,10 @@ class CertbotProvider(Provider):
         args = ["certbot", "certonly", "--webroot", "-w", str(ACME_ROOT), "-d", domain]
         if include_www:
             args += ["-d", f"www.{domain}"]
-        args += ["--non-interactive", "--agree-tos", "--keep-until-expiring"]
+        # --expand lets a re-issue (e.g. www added after the cert already exists
+        # for the bare domain) replace the existing cert instead of certbot
+        # halting to ask an interactive question it can never get answered.
+        args += ["--non-interactive", "--agree-tos", "--keep-until-expiring", "--expand"]
 
         if email:
             args += ["-m", email]
