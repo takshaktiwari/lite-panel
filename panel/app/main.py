@@ -25,12 +25,14 @@ from app.routers import (
     internal,
     jobs as jobs_router,
     logs,
+    monitor,
     setup,
     sites,
     stack,
     terminal,
 )
 from app.security import purge_expired_sessions
+from app.services.monitor import start_metrics_sampler, stop_metrics_sampler
 
 # Importing this registers every job handler with the worker.
 from app import tasks  # noqa: F401  isort:skip
@@ -67,9 +69,11 @@ async def lifespan(app: FastAPI):
             logger.warning("marked orphaned job %s (%s) as failed", job.id, job.kind)
 
     worker.start()
+    start_metrics_sampler()
     try:
         yield
     finally:
+        stop_metrics_sampler()
         worker.stop()
         logger.info("stopped")
 
@@ -98,6 +102,7 @@ def create_app() -> FastAPI:
     app.include_router(stack.router)
     app.include_router(cron.router)
     app.include_router(logs.router)
+    app.include_router(monitor.router)
     app.include_router(jobs_router.router)
     app.include_router(internal.router)
     app.include_router(terminal.router)

@@ -20,6 +20,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -347,3 +348,32 @@ class AuditLog(Base):
     target: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+
+
+# --------------------------------------------------------------------------
+# Server Metrics (Monitoring & Statistics)
+# --------------------------------------------------------------------------
+
+
+class ServerMetric(Base):
+    """Historical snapshots of server performance metrics.
+
+    Captured periodically (every 1-2 minutes). Rows older than 7 days are
+    automatically pruned to prevent growth.
+    """
+
+    __tablename__ = "server_metrics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False, index=True)
+    cpu_percent: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    memory_percent: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    memory_used_mb: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    swap_percent: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    disk_percent: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    load_1m: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    load_5m: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    load_15m: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    net_rx_kb: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    net_tx_kb: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
