@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Logs · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <h1>Logs</h1>
+  <p class="muted">Live logs for system services and hosted websites.</p>
+</header>
+
+<section class="panel" style="padding:14px 18px 16px;">
+  <form method="get" action="/logs" id="logs-control-form" style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin:0;">
+    <div>
+      <label for="log-source" style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);">Scope</label>
+      <select id="log-source" name="source" style="width:auto;min-width:130px;margin-bottom:0;">
+        <option value="service" {{ 'selected' if source == 'service' }}>System Services</option>
+        {% if sites %}
+        <option value="site" {{ 'selected' if source == 'site' }}>Websites</option>
+        {% endif %}
+      </select>
+    </div>
+
+    {% if sites %}
+    <div id="site-selector-wrap" style="{{ 'display:none;' if source != 'site' else '' }}">
+      <label for="site-name" style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);">Site</label>
+      <select id="site-name" name="name" style="width:auto;min-width:160px;margin-bottom:0;">
+        {% for site in sites %}
+        <option value="{{ site.name }}" {{ 'selected' if site.name == selected_site }}>{{ site.domain }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div>
+      <label for="log-target" style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);">Log</label>
+      <select id="log-target" name="log_id" style="width:auto;min-width:200px;margin-bottom:0;">
+        {% for t in target_options %}
+        <option value="{{ t.id }}" {{ 'selected' if active_target and t.id == active_target.id }}>{{ t.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label for="lines-count" style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);">Lines</label>
+      <select id="lines-count" name="lines" style="width:auto;min-width:90px;margin-bottom:0;">
+        <option value="50" {{ 'selected' if lines == 50 }}>50</option>
+        <option value="100" {{ 'selected' if lines == 100 }}>100</option>
+        <option value="250" {{ 'selected' if lines == 250 }}>250</option>
+        <option value="500" {{ 'selected' if lines == 500 }}>500</option>
+      </select>
+    </div>
+
+    <div style="flex:1 1 200px;">
+      <label for="log-filter" style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);">Filter</label>
+      <input type="text" id="log-filter" placeholder="Filter text, e.g. error, 404…" style="margin-bottom:0;">
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button type="button" id="btn-refresh" class="button" title="Refresh log">↻ Refresh</button>
+      <label style="font-weight:normal;font-size:13px;display:inline-flex;align-items:center;gap:6px;margin:0;cursor:pointer;">
+        <input type="checkbox" id="auto-refresh" style="margin:0;"> Auto (5s)
+      </label>
+    </div>
+  </form>
+</section>
+
+<section class="panel" style="padding:0;overflow:hidden;background:#0d0f12;border-color:#23272e;">
+  <div style="padding:10px 14px;background:#16191f;border-bottom:1px solid #23272e;display:flex;justify-content:space-between;align-items:center;">
+    <span style="font-family:var(--mono);font-size:12px;color:#9da5b4;">
+      {% if active_target %}
+        {{ active_target.label }}
+        {% if active_target.file_path %}<span style="opacity:0.6;margin-left:6px;">({{ active_target.file_path }})</span>{% endif %}
+      {% else %}
+        No log selected
+      {% endif %}
+    </span>
+    <span id="log-status" style="font-size:11px;color:#9da5b4;">Updated just now</span>
+  </div>
+
+  <pre id="log-display" class="job-log" style="border-radius:0;margin:0;max-height:70vh;min-height:300px;">{{ content }}</pre>
+</section>
+
+<script src="/static/logs.js"></script>
+{% endblock %}

@@ -15,8 +15,9 @@
       <div><dt>FPM socket</dt><dd>{{ socket or '—' }}</dd></div>
       <div><dt>SSL</dt><dd>{{ 'Enabled' if site.ssl_enabled else 'Disabled' }}</dd></div>
     </dl>
-    <p style="margin-top:12px;">
+    <p style="margin-top:12px;display:flex;gap:8px;">
       <a class="button" href="/files?path={{ site.name }}">Browse files</a>
+      <a class="button" href="/logs?source=site&name={{ site.name }}">View logs</a>
     </p>
   </section>
 

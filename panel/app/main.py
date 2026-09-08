@@ -24,6 +24,7 @@ from app.routers import (
     ftp,
     internal,
     jobs as jobs_router,
+    logs,
     setup,
     sites,
     stack,
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(files.router)
     app.include_router(stack.router)
     app.include_router(cron.router)
+    app.include_router(logs.router)
     app.include_router(jobs_router.router)
     app.include_router(internal.router)
     app.include_router(terminal.router)
