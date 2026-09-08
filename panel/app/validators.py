@@ -66,7 +66,7 @@ def validate_domain(value: str) -> str:
 # Sites and system users
 # --------------------------------------------------------------------------
 
-_SITE_NAME = re.compile(r"^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")
+_SITE_NAME = re.compile(r"^[a-z0-9]([a-z0-9_-]{0,30}[a-z0-9])?$")
 _USERNAME = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 _ADMIN_USERNAME = re.compile(r"^[a-z0-9]([a-z0-9._-]{0,30}[a-z0-9])?$")
 
@@ -92,8 +92,8 @@ def validate_site_name(value: str) -> str:
         raise ValidationError("Site name is required.")
     if not _SITE_NAME.match(value):
         raise ValidationError(
-            "Site name must be 1-32 characters: lowercase letters, digits and "
-            "hyphens, not starting or ending with a hyphen."
+            "Site name must be 1-32 characters: lowercase letters, digits, "
+            "underscores and hyphens, not starting or ending with a hyphen or underscore."
         )
     return value
 

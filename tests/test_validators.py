@@ -73,7 +73,12 @@ def test_site_name_normalises_case():
     assert v.validate_site_name("MySite") == "mysite"
 
 
-@pytest.mark.parametrize("value", ["", "-site", "site-", "si te", "a" * 33, "site/../x"])
+def test_site_name_allows_underscores():
+    assert v.validate_site_name("shopify_bee1_online") == "shopify_bee1_online"
+    assert v.validate_site_name("my_site-1") == "my_site-1"
+
+
+@pytest.mark.parametrize("value", ["", "-site", "site-", "_site", "site_", "si te", "a" * 33, "site/../x"])
 def test_rejected_site_names(value):
     with pytest.raises(ValidationError):
         v.validate_site_name(value)
@@ -84,6 +89,7 @@ def test_site_username_is_namespaced():
     system account, whatever the site is called."""
     assert v.site_username("blog") == "site_blog"
     assert v.site_username("my-blog") == "site_my_blog"
+    assert v.site_username("shopify_bee1_online") == "site_shopify_bee1_online"
 
 
 @pytest.mark.parametrize("value", ["root", "www-data", "mysql", "nobody", "ubuntu"])
