@@ -217,20 +217,35 @@ async def terminal_ws(websocket: WebSocket) -> None:
     def _reader_thread() -> None:
         import select as _select
 
+        # The loop's only exit signal is a real EOF: select() reports the fd
+        # readable, and the read that follows comes back empty. That is the
+        # actual POSIX end-of-file condition for a pty (every process holding
+        # the slave side has exited) and it is the one thing this loop trusts.
+        #
+        # It deliberately does NOT exit on Popen.poll() alone. That was tried
+        # first and caused a real, reproducible bug: this box's shell prints
+        # its own "start of command" / "end of command" tracking markers
+        # (OSC sequences with a machine id / boot id / pid), and immediately
+        # after reading one of those, poll() briefly reported the shell as
+        # exited even though it demonstrably was not -- a parallel real
+        # session hit the identical marker over and over and kept working
+        # for hundreds of read cycles. Whatever produces that momentary
+        # poll() result, treating it as final ended a terminal session out
+        # from under a still-live shell. EOF has no such race: it only ever
+        # happens once every process on the slave side is actually gone.
         while not stop_reading.is_set():
             try:
                 ready, _, _ = _select.select([term.master_fd], [], [], 0.2)
             except (OSError, ValueError):
                 break
             if not ready:
-                if not term.is_alive():
-                    break
                 continue
             chunk = term.read(_READ_CHUNK)
             if chunk:
                 loop.call_soon_threadsafe(output_queue.put_nowait, chunk)
-            if not term.is_alive():
-                break
+                continue
+            # select() said readable, read() came back with nothing: real EOF.
+            break
         loop.call_soon_threadsafe(output_queue.put_nowait, None)  # sentinel
 
     reader_thread = threading.Thread(target=_reader_thread, daemon=True)
