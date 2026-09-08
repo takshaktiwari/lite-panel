@@ -57,6 +57,12 @@ class NginxProvider(Provider):
     def config_path(self, name: str) -> Path:
         return SITES_AVAILABLE / f"{PANEL_PREFIX}{name}.conf"
 
+    def custom_config_path(self, name: str) -> Path:
+        """Path to the user-editable custom override file for a site."""
+        custom_dir = Path("/etc/nginx/custom")
+        custom_dir.mkdir(parents=True, exist_ok=True)
+        return custom_dir / f"{PANEL_PREFIX}{name}-custom.conf"
+
     def enabled_path(self, name: str) -> Path:
         return SITES_ENABLED / f"{PANEL_PREFIX}{name}.conf"
 

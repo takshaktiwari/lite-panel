@@ -47,6 +47,14 @@ a:hover { text-decoration: underline; }
 h1 { font-size: 20px; margin: 0 0 4px; }
 h2 { font-size: 14px; margin: 0 0 12px; font-weight: 600; }
 .muted { color: var(--muted); }
+code, .mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
 
 /* --- layout ------------------------------------------------------------ */
 

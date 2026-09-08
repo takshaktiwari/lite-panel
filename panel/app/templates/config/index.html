@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Config Editor — {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Config Editor</h1>
+  <p class="muted">Edit server configuration files with automatic backup and validation.</p>
+</div>
+
+{% if not nginx_installed and not php_versions %}
+<div class="panel">
+  <p class="muted">No editable configurations found. Install Nginx or PHP first via the <a href="/stack">Stack</a> page.</p>
+</div>
+{% endif %}
+
+{% if nginx_installed %}
+<div class="panel">
+  <h2>Nginx</h2>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Config file</th>
+        <th>Description</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code class="mono">/etc/nginx/nginx.conf</code></td>
+        <td class="muted">Global nginx configuration</td>
+        <td style="text-align:right">
+          <a href="/config/nginx" class="button" style="font-size:13px;padding:5px 12px;">Edit</a>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+{% if sites %}
+<div class="panel">
+  <h2>Per-site nginx overrides</h2>
+  <p class="muted" style="font-size:13px;margin-top:-6px;margin-bottom:12px;">
+    These files are included inside each site's nginx <code>server</code> block. They are never overwritten by the panel.
+  </p>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Site</th>
+        <th>Override file</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for site in sites %}
+      <tr>
+        <td><strong>{{ site.domain }}</strong></td>
+        <td><code class="mono">/etc/nginx/custom/lite-panel-{{ site.name }}-custom.conf</code></td>
+        <td style="text-align:right">
+          <a href="/config/nginx/site/{{ site.id }}" class="button" style="font-size:13px;padding:5px 12px;">Edit</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endif %}
+
+{% if php_versions %}
+<div class="panel">
+  <h2>PHP — php.ini (FPM)</h2>
+  <p class="muted" style="font-size:13px;margin-top:-6px;margin-bottom:12px;">
+    One php.ini per installed PHP version. Changes apply to all sites using that version.
+  </p>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Version</th>
+        <th>Config file</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ver in php_versions %}
+      <tr>
+        <td><strong>PHP {{ ver }}</strong></td>
+        <td><code class="mono">/etc/php/{{ ver }}/fpm/php.ini</code></td>
+        <td style="text-align:right">
+          <a href="/config/php/{{ ver }}" class="button" style="font-size:13px;padding:5px 12px;">Edit</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

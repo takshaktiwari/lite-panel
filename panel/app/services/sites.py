@@ -236,6 +236,18 @@ def render_site(site: Site) -> None:
     )
     nginx.enable_site(site.name)
 
+    # Ensure the per-site nginx override file exists so the `include` directive
+    # added by the vhost template resolves even before the user has edited it.
+    # We create it empty and *never* overwrite it -- user edits live here.
+    custom = nginx.custom_config_path(site.name)
+    if not custom.exists():
+        custom.write_text(
+            "# Custom nginx directives for this site.\n"
+            "# Changes here are never overwritten by the panel.\n"
+            "# Example: add_header X-My-Header \"value\" always;\n",
+            encoding="utf-8",
+        )
+
     if site.php_version:
         renderer.render_to_file(
             "fpm-pool.conf.j2",

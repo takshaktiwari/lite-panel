@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — {{ app_name }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/vendor/codemirror/codemirror.min.css">
+<link rel="stylesheet" href="/static/vendor/codemirror/theme-dracula.min.css">
+<style>
+  .editor-wrap { display: flex; flex-direction: column; height: calc(100vh - 200px); }
+  .editor-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+  .editor-toolbar-left { display: flex; align-items: center; gap: 10px; }
+  .CodeMirror { flex: 1; height: 100%; border-radius: 0 0 var(--radius) var(--radius); border: 1px solid var(--border); font-size: 13px; }
+  .editor-file-path { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .editor-container { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .editor-container form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .editor-container .CodeMirror { flex: 1; height: 100%; }
+  .backup-list { font-size: 12px; color: var(--muted); }
+  .backup-list summary { cursor: pointer; display: inline; }
+  .backup-list ul { margin: 4px 0 0 0; padding: 0 0 0 16px; }
+  .backup-list li { font-family: var(--mono); font-size: 11px; }
+  .save-info { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+</style>
+
+<div class="editor-wrap">
+  <div class="editor-toolbar">
+    <div class="editor-toolbar-left">
+      <a href="{{ back_url }}" class="button" style="padding:5px 10px;font-size:13px;">← Back</a>
+      <div>
+        <h1 style="margin:0;font-size:16px;">{{ title }}</h1>
+        <div class="editor-file-path">{{ file_path }}</div>
+      </div>
+    </div>
+    <div class="save-info">
+      {% if backups %}
+      <details class="backup-list">
+        <summary>{{ backups|length }} backup(s)</summary>
+        <ul>
+          {% for b in backups %}
+          <li>{{ b }}</li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% else %}
+        <span class="muted" style="font-size:12px;">No backups yet</span>
+      {% endif %}
+      <button type="button" id="btn-save-config" class="button primary" style="padding:7px 18px;">Save &amp; Apply</button>
+    </div>
+  </div>
+
+  {% if subtitle %}
+  <p class="muted" style="margin:0 0 10px;font-size:13px;">{{ subtitle }}</p>
+  {% endif %}
+
+  <div class="panel" style="padding:0;flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;margin-bottom:0;">
+    <div class="editor-container" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+      <form id="config-editor-form" method="post" action="{{ save_url }}" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+        <input type="hidden" name="csrf_token" value="{{ session.csrf_token if session }}">
+        <textarea id="config-content" name="content" style="display:none;">{{ content }}</textarea>
+        <div id="editor-mount" style="flex:1;min-height:0;"></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="/static/vendor/codemirror/codemirror.min.js"></script>
+<script src="/static/vendor/codemirror/mode-nginx.min.js"></script>
+<script src="/static/vendor/codemirror/mode-properties.min.js"></script>
+<script src="/static/config-editor.js" data-mode="{{ mode }}"></script>
+{% endblock %}
