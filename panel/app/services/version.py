@@ -67,15 +67,20 @@ def is_newer_version(latest: str, current: str) -> bool:
     return t_latest > t_current
 
 
+def _install_dir_cwd() -> str:
+    settings = get_settings()
+    cwd = str(settings.install_dir)
+    if not os.path.isdir(cwd) or not os.path.isdir(os.path.join(cwd, ".git")):
+        # Fall back to repo root during development
+        from app.config import REPO_ROOT
+        cwd = str(REPO_ROOT)
+    return cwd
+
+
 def get_git_commit(cwd: Optional[str] = None) -> str:
     """Get the current commit or tag from git, or empty if not a git repo."""
     if cwd is None:
-        settings = get_settings()
-        cwd = str(settings.install_dir)
-        if not os.path.isdir(cwd) or not os.path.isdir(os.path.join(cwd, ".git")):
-            # Fall back to repo root during development
-            from app.config import REPO_ROOT
-            cwd = str(REPO_ROOT)
+        cwd = _install_dir_cwd()
 
     try:
         result = run(["git", "describe", "--tags", "--always"], cwd=cwd, check=False, timeout=5)
@@ -84,6 +89,27 @@ def get_git_commit(cwd: Optional[str] = None) -> str:
     except Exception as exc:  # noqa: BLE001
         logger.debug("could not get git describe: %s", exc)
     return ""
+
+
+def get_current_version(cwd: Optional[str] = None) -> str:
+    """Determine the running version from the checked-out git tag, falling back to
+    the __version__ literal when git is unavailable (e.g. not a git checkout).
+
+    Deriving from the tag avoids the version string drifting out of sync with what
+    was actually released, which happens if __version__ isn't bumped for a tag.
+    """
+    if cwd is None:
+        cwd = _install_dir_cwd()
+
+    try:
+        result = run(["git", "describe", "--tags", "--abbrev=0"], cwd=cwd, check=False, timeout=5)
+        if result.ok:
+            tag = result.stdout.strip()
+            if tag and _parse_version_tuple(tag) != (0,):
+                return tag
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("could not get nearest git tag: %s", exc)
+    return __version__
 
 
 def fetch_github_releases() -> list:
@@ -107,7 +133,7 @@ def check_for_updates(force: bool = False) -> VersionInfo:
     if not force and _cached_info is not None and (now - _last_check_time) < CACHE_TTL_SECONDS:
         return _cached_info
 
-    current = __version__
+    current = get_current_version()
     commit = get_git_commit()
     latest_tag = current
     release_name = ""
