@@ -26,13 +26,16 @@ def test_root_dir_uses_the_plain_site_name_not_the_prefixed_username():
     assert sites_service.root_dir_for("blog") == Path("/var/www/blog")
 
 
-def test_webroot_appends_the_subfolder():
-    assert sites_service.webroot_for("blog") == Path("/var/www/blog/public")
+def test_webroot_defaults_to_the_root_dir_itself():
+    """No subfolder is the default -- a "public" wrapper is opt-in (typed
+    explicitly as part of the folder field), not forced on every site."""
+    assert sites_service.webroot_for("blog") == sites_service.root_dir_for("blog")
+    assert sites_service.webroot_for("blog") == Path("/var/www/blog")
+
+
+def test_webroot_appends_a_subfolder_when_given():
+    assert sites_service.webroot_for("blog", "public") == Path("/var/www/blog/public")
     assert sites_service.webroot_for("blog", "web") == Path("/var/www/blog/web")
-
-
-def test_webroot_with_no_subfolder_is_the_root_dir_itself():
-    assert sites_service.webroot_for("blog", "") == sites_service.root_dir_for("blog")
 
 
 def test_socket_path_is_namespaced_by_site_name():

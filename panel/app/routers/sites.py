@@ -62,9 +62,8 @@ def new_site_form(
 def create_site(
     request: Request,
     domain: str = Form(...),
-    name: str = Form(""),
+    folder: str = Form(""),
     php_version: str = Form(""),
-    subfolder: str = Form("public"),
     redirect_www: str = Form(""),
     enable_ssl: str = Form(""),
     session=Depends(require_session),
@@ -74,14 +73,13 @@ def create_site(
 
     try:
         domain = validate_domain(domain)
-        # Default the short name from the domain so the form has one field
-        # fewer to fill in.
-        name = validate_site_name(name.strip() or _name_from_domain(domain))
-        subfolder = subfolder.strip().strip("/")
-        if subfolder:
-            from app.validators import validate_filename
-
-            validate_filename(subfolder)
+        # One field, typed right after the /var/www/ prefix shown in the
+        # form: the first segment is the site's own folder (and where its
+        # system user's account lives); anything past the first "/" is an
+        # optional extra nesting for the webroot (e.g. "blog/public") --
+        # most sites don't need it, so it's opt-in rather than a forced
+        # default.
+        name, subfolder = _split_folder(folder, domain)
     except ValidationError as exc:
         return render(
             request,
@@ -93,7 +91,7 @@ def create_site(
             certbot_ready=get_provider("certbot").is_installed(),
             sites_root=str(sites_service.sites_root()),
             error=str(exc),
-            form={"domain": domain, "name": name, "subfolder": subfolder},
+            form={"domain": domain, "folder": folder},
             status_code=400,
         )
 
@@ -252,6 +250,35 @@ def _name_from_domain(domain: str) -> str:
     stem = "-".join(parts[:-1]) if len(parts) > 1 else domain
     cleaned = "".join(ch if ch.isalnum() or ch == "-" else "-" for ch in stem.lower())
     return cleaned.strip("-")[:32] or "site"
+
+
+def _split_folder(folder: str, domain: str) -> tuple:
+    """Split what was typed after the /var/www/ prefix into (name, subfolder).
+
+    The first path segment becomes the site's own folder (and the name its
+    system user is derived from); anything after the first "/" is an
+    optional extra nesting for the webroot, e.g. typing "blog/public" serves
+    from /var/www/blog/public while the site itself still lives at
+    /var/www/blog. Left blank entirely, the name falls back to one derived
+    from the domain and there is no subfolder -- most sites don't need one.
+    """
+    from app.validators import validate_filename
+
+    cleaned = folder.strip().strip("/")
+    if not cleaned:
+        return validate_site_name(_name_from_domain(domain)), ""
+
+    first, _, rest = cleaned.partition("/")
+    name = validate_site_name(first)
+
+    subfolder = ""
+    if rest:
+        segments = [s for s in rest.split("/") if s]
+        for segment in segments:
+            validate_filename(segment)
+        subfolder = "/".join(segments)
+
+    return name, subfolder
 
 
 def _back(*, error: Optional[str] = None):

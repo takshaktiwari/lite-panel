@@ -16,11 +16,15 @@
   <input type="text" id="domain" name="domain" placeholder="example.com" required
          value="{{ form.domain if form else '' }}" autofocus>
 
-  <label for="name">Site folder <span class="muted">(optional — derived from the domain)</span></label>
+  <label for="folder">Website folder <span class="muted">(optional — derived from the domain)</span></label>
   <div class="input-group">
     <span class="input-group-text">{{ sites_root }}/</span>
-    <input type="text" id="name" name="name" placeholder="example" value="{{ form.name if form else '' }}">
+    <input type="text" id="folder" name="folder" placeholder="example" value="{{ form.folder if form else '' }}">
   </div>
+  <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">
+    This is where your site's files live. Add a subfolder if your app needs one — e.g.
+    type <code>example/public</code> to serve from a "public" folder — most sites don't need this.
+  </p>
 
   <label for="php_version">PHP version</label>
   {% if php_versions %}
@@ -33,9 +37,6 @@
   {% else %}
   <p class="muted">No PHP versions installed. <a href="/stack">Install one</a>, or continue without PHP.</p>
   {% endif %}
-
-  <label for="subfolder">Webroot subfolder <span class="muted">(e.g. {{ sites_root }}/name/public)</span></label>
-  <input type="text" id="subfolder" name="subfolder" value="public">
 
   <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:8px;">
     <input type="checkbox" name="redirect_www" value="1" checked style="width:auto;margin:0;">

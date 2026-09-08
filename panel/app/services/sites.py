@@ -66,7 +66,7 @@ def root_dir_for(name: str) -> Path:
     return sites_root() / validate_site_name(name)
 
 
-def webroot_for(name: str, subfolder: str = "public") -> Path:
+def webroot_for(name: str, subfolder: str = "") -> Path:
     base = root_dir_for(name)
     return base / subfolder if subfolder else base
 
@@ -87,7 +87,7 @@ def create_site(
     name: str,
     domain: str,
     php_version: Optional[str] = None,
-    subfolder: str = "public",
+    subfolder: str = "",
     redirect_www: bool = True,
 ) -> Site:
     """Create a site and everything it owns."""

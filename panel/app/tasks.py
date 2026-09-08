@@ -123,7 +123,7 @@ def create_site(ctx) -> None:
                 name=payload["name"],
                 domain=payload["domain"],
                 php_version=payload.get("php_version") or None,
-                subfolder=payload.get("subfolder", "public"),
+                subfolder=payload.get("subfolder", ""),
                 redirect_www=bool(payload.get("redirect_www", True)),
             )
         except (ValidationError, RuntimeError) as exc:
