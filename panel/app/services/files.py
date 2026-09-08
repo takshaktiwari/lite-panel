@@ -39,7 +39,7 @@ settings = get_settings()
 # Editing is for configuration and source files. Anything larger is either
 # generated or binary, and loading it into a textarea helps nobody.
 MAX_EDIT_BYTES = 1024 * 1024
-MAX_UPLOAD_BYTES = 256 * 1024 * 1024
+MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 
 # Guardrails for archive creation/extraction. These bound how much work one
 # panel click can trigger -- not a security control by themselves, but the

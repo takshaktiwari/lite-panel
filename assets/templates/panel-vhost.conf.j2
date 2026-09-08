@@ -53,6 +53,11 @@ server {
     access_log /var/log/lite-panel/nginx-access.log;
     error_log  /var/log/lite-panel/nginx-error.log;
 
+    # Matches MAX_UPLOAD_BYTES in app/services/files.py — without this nginx's
+    # own 1M default rejects panel file-manager uploads with a 413 before the
+    # app ever sees them.
+    client_max_body_size 1024M;
+
     # -----------------------------------------------------------------------
     # Auth subrequest target (internal-only; not proxied from the outside)
     # -----------------------------------------------------------------------
