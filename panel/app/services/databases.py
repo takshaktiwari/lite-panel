@@ -108,21 +108,40 @@ def user_exists(username: str) -> bool:
         return cur.fetchone() is not None
 
 
+SYSTEM_USERS = frozenset({"root", "mysql", "debian-sys-maint", ADMINER_OS_USER})
+
+
+def list_database_users() -> List[str]:
+    """Every non-system database username in MariaDB."""
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT DISTINCT user FROM mysql.user ORDER BY user")
+        return [
+            row[0]
+            for row in cur.fetchall()
+            if row[0]
+            and row[0] not in SYSTEM_USERS
+            and not row[0].startswith("mysql.")
+            and not row[0].startswith("mariadb.")
+        ]
+
+
 # --------------------------------------------------------------------------
 # Writes
 # --------------------------------------------------------------------------
 
 
-def create_database(db_name: str, db_user: str, password: str, *,
+def create_database(db_name: str, db_user: str, password: Optional[str] = None, *,
                     host: str = DEFAULT_HOST) -> None:
-    """Create a database, its user, and the grant between them."""
+    """Create a database, its user (if not existing), and the grant between them."""
     db_name = validate_db_identifier(db_name)
     db_user = validate_db_identifier(db_user, kind="user")
-    if not password:
-        raise ValidationError("A database password is required.")
 
     if database_exists(db_name):
         raise ValidationError(f"Database '{db_name}' already exists.")
+
+    exists = user_exists(db_user)
+    if not exists and not password:
+        raise ValidationError("A database password is required for new users.")
 
     quoted_db = quote_identifier(db_name)
 
@@ -133,12 +152,71 @@ def create_database(db_name: str, db_user: str, password: str, *,
             f"CREATE DATABASE {quoted_db} "
             "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
         )
-        cur.execute("CREATE USER IF NOT EXISTS %s@%s IDENTIFIED BY %s",
-                    (db_user, host, password))
+        if not exists:
+            cur.execute("CREATE USER %s@%s IDENTIFIED BY %s",
+                        (db_user, host, password))
+
         cur.execute(f"GRANT ALL PRIVILEGES ON {quoted_db}.* TO %s@%s", (db_user, host))
         cur.execute("FLUSH PRIVILEGES")
 
     logger.info("created database %s for user %s", db_name, db_user)
+
+
+def grant_database_user(db_name: str, db_user: str, password: Optional[str] = None, *,
+                        host: str = DEFAULT_HOST) -> None:
+    """Grant an existing or new user access to a database."""
+    db_name = validate_db_identifier(db_name)
+    db_user = validate_db_identifier(db_user, kind="user")
+
+    exists = user_exists(db_user)
+    if not exists and not password:
+        raise ValidationError(f"Database user '{db_user}' does not exist. A password is required to create it.")
+
+    quoted_db = quote_identifier(db_name)
+
+    with _connect() as conn, conn.cursor() as cur:
+        if not exists:
+            cur.execute("CREATE USER %s@%s IDENTIFIED BY %s", (db_user, host, password))
+
+        cur.execute(f"GRANT ALL PRIVILEGES ON {quoted_db}.* TO %s@%s", (db_user, host))
+        cur.execute("FLUSH PRIVILEGES")
+
+    logger.info("granted database %s to user %s", db_name, db_user)
+
+
+def reassign_database_user(db_name: str, new_user: str, old_user: Optional[str] = None,
+                           new_password: Optional[str] = None, *,
+                           host: str = DEFAULT_HOST) -> None:
+    """Grant new_user on db_name, and revoke old_user if different (cleaning up orphaned user)."""
+    db_name = validate_db_identifier(db_name)
+    new_user = validate_db_identifier(new_user, kind="user")
+    quoted_db = quote_identifier(db_name)
+
+    # 1. Grant new user
+    grant_database_user(db_name, new_user, new_password, host=host)
+
+    # 2. If old_user differs, revoke its privilege on this database
+    if old_user and old_user != new_user and user_exists(old_user):
+        old_user = validate_db_identifier(old_user, kind="user")
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(f"REVOKE ALL PRIVILEGES, GRANT OPTION FROM %s@%s", (old_user, host))
+            # Re-grant privileges for remaining databases of old_user if any
+            cur.execute(
+                """
+                SELECT db FROM mysql.db
+                WHERE user = %s AND db NOT IN (%s, '')
+                """,
+                (old_user, db_name),
+            )
+            other_dbs = [row[0] for row in cur.fetchall()]
+            # Delete db entry for this database in mysql.db
+            cur.execute("DELETE FROM mysql.db WHERE user = %s AND db = %s", (old_user, db_name))
+
+            if not other_dbs:
+                # No other databases left for this user; drop user
+                cur.execute("DROP USER IF EXISTS %s@%s", (old_user, host))
+            cur.execute("FLUSH PRIVILEGES")
+        logger.info("reassigned database %s from user %s to %s", db_name, old_user, new_user)
 
 
 def drop_database(db_name: str, db_user: Optional[str] = None, *,

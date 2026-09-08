@@ -39,6 +39,12 @@ def database_list(
     records = db.scalars(select(SiteDatabase).order_by(SiteDatabase.db_name)).all()
     sizes = {}
     unmanaged = []
+    existing_users = set()
+
+    # Collect known users from panel DB
+    for record in records:
+        if record.db_user:
+            existing_users.add(record.db_user)
 
     if mariadb_ready and db_service.is_available():
         known = {record.db_name for record in records}
@@ -47,6 +53,9 @@ def database_list(
             if entry["name"] not in known:
                 unmanaged.append(entry)
 
+        for u in db_service.list_database_users():
+            existing_users.add(u)
+
     return render(
         request,
         "databases/list.html",
@@ -54,10 +63,8 @@ def database_list(
         user=session.user,
         databases=records,
         sizes=sizes,
-        # Databases that exist in MariaDB but not in the panel: restored
-        # dumps, or ones created before the panel was installed. Shown so the
-        # page is honest about what is on the server, not just what it made.
         unmanaged=unmanaged,
+        existing_users=sorted(existing_users),
         mariadb_ready=mariadb_ready,
         sites=db.scalars(select(Site).order_by(Site.name)).all(),
         suggested_password=generate_password(),
@@ -68,8 +75,10 @@ def database_list(
 def create_database(
     request: Request,
     db_name: str = Form(...),
+    user_mode: str = Form("new"),
+    existing_user: str = Form(""),
     db_user: str = Form(""),
-    password: str = Form(...),
+    password: str = Form(""),
     site_id: str = Form(""),
     session=Depends(require_session),
     db: OrmSession = Depends(get_session),
@@ -79,12 +88,21 @@ def create_database(
 
     try:
         db_name = validate_db_identifier(db_name)
-        db_user = validate_db_identifier(db_user.strip() or db_name, kind="user")
+        if user_mode == "existing" and existing_user.strip():
+            chosen_user = validate_db_identifier(existing_user.strip(), kind="user")
+        else:
+            chosen_user = validate_db_identifier(db_user.strip() or db_name, kind="user")
     except ValidationError as exc:
         return _back(error=str(exc))
 
-    if not password:
-        return _back(error="A password is required.")
+    # If it's a new user, password is required.
+    # If it's an existing user, password is not accepted or changed (user keeps existing password).
+    if user_mode == "existing":
+        password = None
+    else:
+        password = password.strip()
+        if not password:
+            return _back(error="A password is required for a new user.")
 
     if db.scalar(select(SiteDatabase).where(SiteDatabase.db_name == db_name)):
         return _back(error=f"Database '{db_name}' is already managed by the panel.")
@@ -95,7 +113,7 @@ def create_database(
         f"Create database {db_name}",
         payload={
             "db_name": db_name,
-            "db_user": db_user,
+            "db_user": chosen_user,
             "password": password,
             "site_id": int(site_id) if site_id.strip().isdigit() else None,
         },
@@ -103,9 +121,42 @@ def create_database(
     )
     _audit(db, session, "database.create", db_name)
 
-    # The password is shown once, here, and never stored.
+    notice_msg = f"Database created with existing user '{chosen_user}'."
+    if password:
+        notice_msg = f"Save this password now — it is not stored: {password}"
+
     return RedirectResponse(
-        f"/jobs/{job.id}?notice={quote(f'Save this password now — it is not stored: {password}')}",
+        f"/jobs/{job.id}?notice={quote(notice_msg)}",
+        status_code=303,
+    )
+
+
+@router.post("/user/password", dependencies=[Depends(csrf_protect)])
+def reset_user_password(
+    db_user: str = Form(...),
+    password: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    try:
+        db_user = validate_db_identifier(db_user.strip(), kind="user")
+    except ValidationError as exc:
+        return _back(error=str(exc))
+
+    password = password.strip()
+    if not password:
+        return _back(error="A password is required.")
+
+    job = enqueue(
+        db,
+        "database.password",
+        f"Reset password for {db_user}",
+        payload={"db_user": db_user, "password": password},
+        user_id=session.user_id,
+    )
+    _audit(db, session, "database.password", db_user)
+    return RedirectResponse(
+        f"/jobs/{job.id}?notice={quote(f'New password for {db_user} (not stored): {password}')}",
         status_code=303,
     )
 
@@ -135,6 +186,57 @@ def delete_database(
     return RedirectResponse(f"/jobs/{job.id}", status_code=303)
 
 
+@router.post("/{database_id}/user", dependencies=[Depends(csrf_protect)])
+def reassign_user(
+    database_id: int,
+    user_mode: str = Form("existing"),
+    existing_user: str = Form(""),
+    db_user: str = Form(""),
+    password: str = Form(""),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    record = db.get(SiteDatabase, database_id)
+    if record is None:
+        return _back(error="That database is no longer managed by the panel.")
+
+    try:
+        if user_mode == "existing" and existing_user.strip():
+            chosen_user = validate_db_identifier(existing_user.strip(), kind="user")
+        else:
+            chosen_user = validate_db_identifier(db_user.strip(), kind="user")
+    except ValidationError as exc:
+        return _back(error=str(exc))
+
+    if user_mode == "existing":
+        password = None
+    else:
+        password = password.strip()
+        if not password:
+            return _back(error="A password is required for a new user.")
+
+    job = enqueue(
+        db,
+        "database.update_user",
+        f"Reassign user for {record.db_name} to {chosen_user}",
+        payload={
+            "database_id": record.id,
+            "db_user": chosen_user,
+            "password": password,
+        },
+        user_id=session.user_id,
+    )
+    _audit(db, session, "database.update_user", f"{record.db_name} -> {chosen_user}")
+    notice = f"User reassigned to '{chosen_user}'"
+    if password:
+        notice += f" with new password (not stored): {password}"
+
+    return RedirectResponse(
+        f"/jobs/{job.id}?notice={quote(notice)}",
+        status_code=303,
+    )
+
+
 @router.post("/{database_id}/password", dependencies=[Depends(csrf_protect)])
 def reset_password(
     database_id: int,
@@ -145,6 +247,7 @@ def reset_password(
     record = db.get(SiteDatabase, database_id)
     if record is None:
         return _back(error="That database is no longer managed by the panel.")
+    password = password.strip()
     if not password:
         return _back(error="A password is required.")
 
@@ -157,7 +260,7 @@ def reset_password(
     )
     _audit(db, session, "database.password", record.db_user)
     return RedirectResponse(
-        f"/jobs/{job.id}?notice={quote(f'New password (not stored): {password}')}",
+        f"/jobs/{job.id}?notice={quote(f'New password for {record.db_user} (not stored): {password}')}",
         status_code=303,
     )
 

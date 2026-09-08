@@ -56,3 +56,62 @@ def test_no_databases_yet_still_renders_cleanly(signed_in):
     response = signed_in.get("/databases")
     assert response.status_code == 200
     assert "No databases yet." in response.text
+
+
+def _csrf(client) -> str:
+    page = client.get("/databases")
+    marker = 'name="csrf_token" value="'
+    start = page.text.index(marker) + len(marker)
+    return page.text[start : page.text.index('"', start)]
+
+
+def test_reset_database_password_enqueues_job(signed_in, db):
+    db_record = SiteDatabase(db_name="test_db", db_user="test_user")
+    db.add(db_record)
+    db.commit()
+
+    response = signed_in.post(
+        f"/databases/{db_record.id}/password",
+        data={"password": "new-secret-password", "csrf_token": _csrf(signed_in)},
+    )
+    assert response.status_code == 303
+    assert "/jobs/" in response.headers["location"]
+
+
+def test_reset_user_password_enqueues_job(signed_in, db):
+    response = signed_in.post(
+        "/databases/user/password",
+        data={"db_user": "some_user", "password": "new-secret-password", "csrf_token": _csrf(signed_in)},
+    )
+    assert response.status_code == 303
+    assert "/jobs/" in response.headers["location"]
+
+
+def test_reassign_database_user_enqueues_job(signed_in, db):
+    db_record = SiteDatabase(db_name="test_db", db_user="old_user")
+    db.add(db_record)
+    db.commit()
+
+    response = signed_in.post(
+        f"/databases/{db_record.id}/user",
+        data={"user_mode": "existing", "existing_user": "new_user", "password": "", "csrf_token": _csrf(signed_in)},
+    )
+    assert response.status_code == 303
+    assert "/jobs/" in response.headers["location"]
+
+
+def test_create_database_with_existing_user_enqueues_job(signed_in, db):
+    response = signed_in.post(
+        "/databases/new",
+        data={
+            "db_name": "client_portal",
+            "user_mode": "existing",
+            "existing_user": "shared_user",
+            "password": "",
+            "site_id": "",
+            "csrf_token": _csrf(signed_in),
+        },
+    )
+    assert response.status_code == 303
+    assert "/jobs/" in response.headers["location"]
+

@@ -59,3 +59,55 @@ def test_adminer_os_user_is_www_data():
     authentication approves a login by checking who is actually connected,
     so this account name and that OS user have to agree exactly."""
     assert db_service.ADMINER_OS_USER == "www-data"
+
+
+class _FakeCursorWithFetch(_FakeCursor):
+    def __init__(self, calls, fetchall_data=None, fetchone_data=None):
+        super().__init__(calls)
+        self._fetchall_data = fetchall_data or []
+        self._fetchone_data = fetchone_data
+
+    def fetchall(self):
+        return self._fetchall_data
+
+    def fetchone(self):
+        return self._fetchone_data
+
+
+class _FakeConnWithData(_FakeConn):
+    def __init__(self, calls, fetchall_data=None, fetchone_data=None):
+        super().__init__(calls)
+        self._fetchall_data = fetchall_data
+        self._fetchone_data = fetchone_data
+
+    def cursor(self):
+        return _FakeCursorWithFetch(self._calls, self._fetchall_data, self._fetchone_data)
+
+
+def test_list_database_users_filters_system_users():
+    calls = []
+    fake_users = [
+        ("root",),
+        ("debian-sys-maint",),
+        ("www-data",),
+        ("mysql.sys",),
+        ("app_user",),
+        ("blog_user",),
+    ]
+    with patch.object(db_service, "_connect", return_value=_FakeConnWithData(calls, fetchall_data=fake_users)):
+        users = db_service.list_database_users()
+
+    assert users == ["app_user", "blog_user"]
+
+
+def test_reassign_database_user_grants_new_and_revokes_old():
+    calls = []
+    # user_exists returns True (1,)
+    with patch.object(db_service, "_connect", return_value=_FakeConnWithData(calls, fetchall_data=[], fetchone_data=(1,))):
+        db_service.reassign_database_user("app_db", "new_user", old_user="old_user")
+
+    statements = [sql for sql, _params in calls]
+    assert any("GRANT ALL PRIVILEGES ON `app_db`.* TO %s@%s" in sql for sql in statements)
+    assert any("REVOKE ALL PRIVILEGES" in sql for sql in statements)
+    assert any("DELETE FROM mysql.db WHERE user = %s AND db = %s" in sql for sql in statements)
+

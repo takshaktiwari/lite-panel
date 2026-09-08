@@ -225,7 +225,7 @@ def create_database(ctx) -> None:
 
     name = ctx.payload["db_name"]
     user = ctx.payload["db_user"]
-    password = ctx.payload["password"]
+    password = ctx.payload.get("password") or None
     site_id = ctx.payload.get("site_id")
 
     ctx.log(f"Creating database {name}")
@@ -238,6 +238,33 @@ def create_database(ctx) -> None:
         db.add(SiteDatabase(db_name=name, db_user=user, site_id=site_id))
 
     ctx.log(f"Database {name} created and granted to {user}")
+
+
+@register("database.update_user")
+def update_database_user(ctx) -> None:
+    from app.models import SiteDatabase
+
+    database_id = ctx.payload["database_id"]
+    new_user = ctx.payload["db_user"]
+    password = ctx.payload.get("password") or None
+
+    with session_scope() as db:
+        record = db.get(SiteDatabase, database_id)
+        if record is None:
+            raise JobFailed("That database record no longer exists.")
+        db_name = record.db_name
+        old_user = record.db_user
+
+        ctx.log(f"Reassigning database {db_name} from user '{old_user}' to '{new_user}'")
+        try:
+            db_service.reassign_database_user(db_name, new_user, old_user=old_user, new_password=password)
+        except (ValidationError, RuntimeError) as exc:
+            raise _fail(exc) from exc
+
+        record.db_user = new_user
+        db.add(record)
+
+    ctx.log(f"Database {db_name} user updated to {new_user}")
 
 
 @register("database.delete")
