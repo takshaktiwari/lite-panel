@@ -181,7 +181,90 @@ def test_logout_with_the_right_csrf_token_ends_the_session(signed_in):
     assert signed_in.get("/setup").status_code == 303
 
 
+def test_change_password_wrong_current_password(signed_in):
+    page = signed_in.get("/setup")
+    token = _extract_csrf(page.text)
+    response = signed_in.post(
+        "/change-password",
+        data={
+            "csrf_token": token,
+            "current_password": "wrong-password",
+            "new_password": "a-new-secure-passphrase-here",
+            "confirm_password": "a-new-secure-passphrase-here",
+            "return_to": "/",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "error=Current+password+is+incorrect" in response.headers["location"]
+
+
+def test_change_password_mismatch(signed_in):
+    page = signed_in.get("/setup")
+    token = _extract_csrf(page.text)
+    response = signed_in.post(
+        "/change-password",
+        data={
+            "csrf_token": token,
+            "current_password": "correct-horse-battery",
+            "new_password": "a-new-secure-passphrase-1",
+            "confirm_password": "a-new-secure-passphrase-2",
+            "return_to": "/",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "error=New+passwords+do+not+match" in response.headers["location"]
+
+
+def test_change_password_too_short(signed_in):
+    page = signed_in.get("/setup")
+    token = _extract_csrf(page.text)
+    response = signed_in.post(
+        "/change-password",
+        data={
+            "csrf_token": token,
+            "current_password": "correct-horse-battery",
+            "new_password": "short",
+            "confirm_password": "short",
+            "return_to": "/",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "error=" in response.headers["location"]
+
+
+def test_change_password_success(signed_in):
+    page = signed_in.get("/setup")
+    token = _extract_csrf(page.text)
+    new_pass = "brand-new-secure-passphrase-2026"
+    response = signed_in.post(
+        "/change-password",
+        data={
+            "csrf_token": token,
+            "current_password": "correct-horse-battery",
+            "new_password": new_pass,
+            "confirm_password": new_pass,
+            "return_to": "/",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "notice=Password+updated+successfully" in response.headers["location"]
+
+    # Now verify login works with the new password
+    login_resp = signed_in.post(
+        "/login",
+        data={"username": "admin", "password": new_pass},
+        follow_redirects=False,
+    )
+    assert login_resp.status_code == 303
+    assert login_resp.headers["location"] == "/"
+
+
 def _extract_csrf(html: str) -> str:
     marker = 'name="csrf_token" value="'
     start = html.index(marker) + len(marker)
     return html[start : html.index('"', start)]
+

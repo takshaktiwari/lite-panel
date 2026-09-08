@@ -103,3 +103,49 @@ def logout(
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie(security.SESSION_COOKIE, path="/")
     return response
+
+
+@router.post("/change-password", dependencies=[Depends(csrf_protect)])
+def change_password(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+    return_to: str = Form("/"),
+    session=Depends(optional_session),
+    db: OrmSession = Depends(get_session),
+):
+    if session is None:
+        return RedirectResponse("/login", status_code=303)
+
+    user = session.user
+    # Ensure safe return path (must be relative to origin)
+    dest = return_to if (return_to.startswith("/") and not return_to.startswith("//")) else "/"
+    sep = "&" if "?" in dest else "?"
+
+    if not security.verify_password(current_password, user.password_hash):
+        return RedirectResponse(f"{dest}{sep}error=Current+password+is+incorrect", status_code=303)
+
+    if new_password != confirm_password:
+        return RedirectResponse(f"{dest}{sep}error=New+passwords+do+not+match", status_code=303)
+
+    try:
+        security.validate_new_password(new_password)
+    except Exception as e:
+        msg = str(e).replace(" ", "+")
+        return RedirectResponse(f"{dest}{sep}error={msg}", status_code=303)
+
+    user.password_hash = security.hash_password(new_password)
+    db.add(
+        AuditLog(
+            action="user.password_change",
+            user_id=user.id,
+            username=user.username,
+            ip_address=client_ip(request),
+            detail="User updated their account password",
+        )
+    )
+    db.commit()
+
+    return RedirectResponse(f"{dest}{sep}notice=Password+updated+successfully", status_code=303)
+

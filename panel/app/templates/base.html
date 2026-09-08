@@ -31,11 +31,27 @@
       <a href="/setup" class="{{ 'active' if request.url.path.startswith('/setup') }}">Setup</a>
     </nav>
 
-    <form method="post" action="/logout" class="sidebar-foot">
-      <input type="hidden" name="csrf_token" value="{{ session.csrf_token if session }}">
-      <span class="who">{{ user.username }}</span>
-      <button type="submit" class="link-button">Sign out</button>
-    </form>
+    <div class="sidebar-foot">
+      <span class="who" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ user.username }}</span>
+      <details class="dropdown">
+        <summary class="icon-button" title="User settings" aria-label="User settings" style="width:28px;height:28px;font-size:14px;border-radius:6px;">
+          ⚙
+        </summary>
+        <div class="dropdown-menu dropup" style="min-width:190px;right:0;">
+          <button type="button" id="btn-change-password-modal" class="dropdown-item">
+            <span class="icon">🔑</span>
+            <span>Change password</span>
+          </button>
+          <form method="post" action="/logout" style="margin:0;">
+            <input type="hidden" name="csrf_token" value="{{ session.csrf_token if session }}">
+            <button type="submit" class="dropdown-item danger">
+              <span class="icon">🚪</span>
+              <span>Sign out</span>
+            </button>
+          </form>
+        </div>
+      </details>
+    </div>
   </aside>
 
   <main class="content">
@@ -44,6 +60,30 @@
     {% block content %}{% endblock %}
   </main>
 </div>
+
+<!-- Modal: Change Password for logged in user -->
+<dialog id="dlg-change-user-password" class="dialog">
+  <form method="post" action="/change-password">
+    <input type="hidden" name="csrf_token" value="{{ session.csrf_token if session }}">
+    <input type="hidden" name="return_to" value="{{ request.url.path }}">
+    <h2>Change Password</h2>
+    <p class="muted" style="margin-top:-6px;font-size:13px;margin-bottom:14px;">Update password for <strong>{{ user.username }}</strong>.</p>
+
+    <label for="current_password">Current password</label>
+    <input type="password" id="current_password" name="current_password" required autocomplete="current-password">
+
+    <label for="new_password">New password <span class="muted">(min 12 characters)</span></label>
+    <input type="password" id="new_password" name="new_password" minlength="12" required autocomplete="new-password">
+
+    <label for="confirm_password">Confirm new password</label>
+    <input type="password" id="confirm_password" name="confirm_password" minlength="12" required autocomplete="new-password">
+
+    <div class="dialog-actions">
+      <button type="button" class="button" data-close>Cancel</button>
+      <button type="submit" class="button primary">Update password</button>
+    </div>
+  </form>
+</dialog>
 {% else %}
   {% block bare %}{% endblock %}
 {% endif %}
