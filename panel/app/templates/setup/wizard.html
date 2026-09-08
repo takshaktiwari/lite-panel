@@ -8,89 +8,6 @@
   <p class="muted">{{ os_name }} · {{ tuning.total_ram_mb }} MB RAM detected</p>
 </header>
 
-<section class="panel" id="update-section" style="border-left: 4px solid var(--primary, #2563eb); margin-bottom: 24px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
-    <div>
-      <h2 style="margin:0;display:flex;align-items:center;gap:8px;">
-        <span>Lite-Panel Updates</span>
-        {% if update_info and update_info.update_available %}
-        <span class="badge running" style="font-size:11px;">Update available</span>
-        {% else %}
-        <span class="badge success" style="font-size:11px;">Up to date</span>
-        {% endif %}
-      </h2>
-      <p class="muted" style="margin:4px 0 0;">Keep Lite-Panel up to date with releases from GitHub or pull latest fixes directly.</p>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      <form method="post" action="/setup/update-check" style="margin:0;">
-        {{ ui.csrf(session) }}
-        <button type="submit" class="button" title="Bypass cache and check GitHub for new releases">
-          🔄 Check for updates
-        </button>
-      </form>
-      <form method="post" action="/setup/update" style="margin:0;">
-        {{ ui.csrf(session) }}
-        <button type="submit" class="button" data-confirm="Pull latest code from origin/main and restart the panel?">
-          ⬇ Re-pull origin/main
-        </button>
-      </form>
-    </div>
-  </div>
-
-  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;margin-bottom:14px;">
-    <div style="background:var(--bg);padding:12px 14px;border-radius:var(--radius);border:1px solid var(--border);">
-      <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">Installed Version</div>
-      <div style="font-size:18px;font-weight:600;margin-top:4px;">
-        v{{ update_info.current_version if update_info else '0.1.0' }}
-        {% if update_info and update_info.git_commit %}
-        <span class="muted" style="font-size:13px;font-weight:normal;">({{ update_info.git_commit }})</span>
-        {% endif %}
-      </div>
-    </div>
-
-    <div style="background:var(--bg);padding:12px 14px;border-radius:var(--radius);border:1px solid var(--border);">
-      <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">Latest Release</div>
-      <div style="font-size:18px;font-weight:600;margin-top:4px;">
-        {% if update_info and update_info.latest_version %}
-          {{ update_info.latest_version }}
-          {% if update_info.update_available %}
-            <span class="badge running" style="margin-left:6px;font-size:11px;">Update available</span>
-          {% else %}
-            <span class="badge success" style="margin-left:6px;font-size:11px;">Up to date</span>
-          {% endif %}
-        {% else %}
-          <span class="muted">Unknown</span>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  {% if update_info and update_info.update_available %}
-  <div class="alert alert-notice" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin:0;">
-    <div>
-      <strong>New release {{ update_info.latest_version }} is available!</strong>
-      {% if update_info.release_name and update_info.release_name != update_info.latest_version %}
-      <div class="muted" style="font-size:13px;margin-top:2px;">{{ update_info.release_name }}</div>
-      {% endif %}
-      {% if update_info.release_notes %}
-      <div style="font-size:13px;margin-top:6px;white-space:pre-wrap;max-height:120px;overflow-y:auto;background:var(--surface);padding:8px 10px;border-radius:6px;border:1px solid var(--border);">{{ update_info.release_notes }}</div>
-      {% endif %}
-    </div>
-    <form method="post" action="/setup/update" style="margin:0;">
-      {{ ui.csrf(session) }}
-      <input type="hidden" name="tag" value="{{ update_info.latest_version }}">
-      <button type="submit" class="button primary" data-confirm="Update Lite-Panel to {{ update_info.latest_version }}? The panel will pull code, update packages, and restart automatically.">
-        🚀 Update to {{ update_info.latest_version }}
-      </button>
-    </form>
-  </div>
-  {% else %}
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-    <p class="muted" style="margin:0;">You are running the latest version of Lite-Panel.</p>
-  </div>
-  {% endif %}
-</section>
-
 {% if not supported_os %}
 <div class="alert alert-error">
   This machine isn't Ubuntu or Debian. lite-panel cannot manage the stack here.
@@ -159,4 +76,81 @@
   </p>
 </section>
 {% endif %}
+
+<section class="panel" id="update-section" style="border-left: 4px solid var(--primary, #2563eb); margin-top: 24px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+    <div>
+      <h2 style="margin:0;display:flex;align-items:center;gap:8px;">
+        <span>Lite-Panel Updates</span>
+        {% if update_info and update_info.update_available %}
+        <span class="badge running" style="font-size:11px;">Update available</span>
+        {% else %}
+        <span class="badge success" style="font-size:11px;">Up to date</span>
+        {% endif %}
+      </h2>
+      <p class="muted" style="margin:4px 0 0;">Keep Lite-Panel up to date with releases from GitHub.</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <form method="post" action="/setup/update-check" style="margin:0;">
+        {{ ui.csrf(session) }}
+        <button type="submit" class="button" title="Bypass cache and check GitHub for new releases">
+          🔄 Check for updates
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;margin-bottom:14px;">
+    <div style="background:var(--bg);padding:12px 14px;border-radius:var(--radius);border:1px solid var(--border);">
+      <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">Installed Version</div>
+      <div style="font-size:18px;font-weight:600;margin-top:4px;">
+        v{{ update_info.current_version if update_info else '0.1.0' }}
+        {% if update_info and update_info.git_commit %}
+        <span class="muted" style="font-size:13px;font-weight:normal;">({{ update_info.git_commit }})</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="background:var(--bg);padding:12px 14px;border-radius:var(--radius);border:1px solid var(--border);">
+      <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">Latest Release</div>
+      <div style="font-size:18px;font-weight:600;margin-top:4px;">
+        {% if update_info and update_info.latest_version %}
+          {{ update_info.latest_version }}
+          {% if update_info.update_available %}
+            <span class="badge running" style="margin-left:6px;font-size:11px;">Update available</span>
+          {% else %}
+            <span class="badge success" style="margin-left:6px;font-size:11px;">Up to date</span>
+          {% endif %}
+        {% else %}
+          <span class="muted">Unknown</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if update_info and update_info.update_available %}
+  <div class="alert alert-notice" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin:0;">
+    <div>
+      <strong>New release {{ update_info.latest_version }} is available!</strong>
+      {% if update_info.release_name and update_info.release_name != update_info.latest_version %}
+      <div class="muted" style="font-size:13px;margin-top:2px;">{{ update_info.release_name }}</div>
+      {% endif %}
+      {% if update_info.release_notes %}
+      <div style="font-size:13px;margin-top:6px;white-space:pre-wrap;max-height:120px;overflow-y:auto;background:var(--surface);padding:8px 10px;border-radius:6px;border:1px solid var(--border);">{{ update_info.release_notes }}</div>
+      {% endif %}
+    </div>
+    <form method="post" action="/setup/update" style="margin:0;">
+      {{ ui.csrf(session) }}
+      <input type="hidden" name="tag" value="{{ update_info.latest_version }}">
+      <button type="submit" class="button primary" data-confirm="Update Lite-Panel to {{ update_info.latest_version }}? The panel will pull code, update packages, and restart automatically.">
+        🚀 Update to {{ update_info.latest_version }}
+      </button>
+    </form>
+  </div>
+  {% else %}
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+    <p class="muted" style="margin:0;">You are running the latest version of Lite-Panel.</p>
+  </div>
+  {% endif %}
+</section>
 {% endblock %}
