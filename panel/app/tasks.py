@@ -465,26 +465,42 @@ def update_panel(ctx) -> None:
 
     ctx.log(f"Starting Lite-Panel update (target: {target_tag or 'latest'})")
 
-    if not install_dir.is_dir() or not (install_dir / ".git").is_dir():
-        # Fall back to repo root in development mode if applicable
-        from app.config import REPO_ROOT
-        if (REPO_ROOT / ".git").is_dir():
-            install_dir = REPO_ROOT
-        else:
-            raise _fail(RuntimeError(f"Install directory {install_dir} is not a git repository."))
+    if not install_dir.is_dir():
+        raise _fail(RuntimeError(f"Install directory {install_dir} does not exist."))
 
-    ctx.log(f"Updating repository at {install_dir}")
+    # Configure git safe directory so permissions from rsync/custom users don't trigger fatal error
+    ctx.run(["git", "config", "--global", "--add", "safe.directory", str(install_dir)])
+
+    git_dir = install_dir / ".git"
+    if not git_dir.is_dir():
+        ctx.log("Git repository metadata not found in install directory. Initializing...")
+        ctx.check(["git", "init"], cwd=install_dir)
+
+    # Ensure remote 'origin' is configured
+    remotes_check = ctx.run(["git", "remote", "get-url", "origin"], cwd=install_dir)
+    if remotes_check != 0:
+        ctx.log("Setting remote origin to https://github.com/takshaktiwari/lite-panel.git")
+        ctx.check(["git", "remote", "add", "origin", "https://github.com/takshaktiwari/lite-panel.git"], cwd=install_dir)
+    else:
+        ctx.run(["git", "remote", "set-url", "origin", "https://github.com/takshaktiwari/lite-panel.git"], cwd=install_dir)
+
+    ctx.log(f"Fetching updates at {install_dir}...")
 
     # 1. Fetch tags and branches
     ctx.check(["git", "fetch", "--tags", "origin"], cwd=install_dir)
 
-    # 2. Checkout target tag or pull main
+
+
+    # Checkout and align working tree with target tag or origin/main
     if target_tag:
-        ctx.log(f"Checking out tag: {target_tag}")
-        ctx.check(["git", "checkout", target_tag], cwd=install_dir)
+        ctx.log(f"Checking out release tag: {target_tag}")
+        ctx.check(["git", "checkout", "-f", target_tag], cwd=install_dir)
+        ctx.check(["git", "reset", "--hard", target_tag], cwd=install_dir)
     else:
-        ctx.log("Pulling latest from origin/main")
-        ctx.check(["git", "pull", "--ff-only", "origin", "main"], cwd=install_dir)
+        ctx.log("Updating to latest origin/main")
+        ctx.check(["git", "checkout", "-B", "main", "origin/main"], cwd=install_dir)
+        ctx.check(["git", "reset", "--hard", "origin/main"], cwd=install_dir)
+
 
     # 3. Update dependencies
     venv_pip = install_dir / "venv" / "bin" / "pip"

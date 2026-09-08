@@ -47,23 +47,36 @@ def cmd_create_admin(args) -> int:
 
 
 def cmd_reset_password(args) -> int:
+    import select as io_select
+
     from sqlalchemy import select
 
     from app.models import AdminUser
 
+
     generated = False
     if args.password:
         password = args.password
-    elif not sys.stdin.isatty():
-        data = sys.stdin.read().strip()
-        if data:
-            password = data
+    else:
+        # Check if piped data is immediately available on stdin without blocking
+        has_input = False
+        try:
+            has_input = bool(io_select.select([sys.stdin], [], [], 0.0)[0])
+        except Exception:  # noqa: BLE001
+            has_input = False
+
+        if has_input:
+            data = sys.stdin.read().strip()
+            if data:
+                password = data
+            else:
+                password = generate_password(24)
+                generated = True
         else:
             password = generate_password(24)
             generated = True
-    else:
-        password = generate_password(24)
-        generated = True
+
+
 
     try:
         validate_new_password(password)

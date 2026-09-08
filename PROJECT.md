@@ -231,14 +231,21 @@ bash dev/sync.sh
 # Watch mode: re-sync on every file change (requires fswatch: brew install fswatch)
 bash dev/sync.sh --watch
 
-# Recovery: rebuild all config files from the DB (use when service is down)
+# Global CLI commands (available directly in PATH on server):
+sudo lite-panel reset-password --username admin          # Auto-generates secure random password & revokes sessions
+sudo lite-panel reset-password --username admin --password "NewPass123!" # Set explicit password
+sudo lite-panel generate-password --length 24            # Print random password
+sudo lite-panel rebuild                                  # Re-render all configs from DB
+
+# Recovery: rebuild all config files from the DB (fallback direct invocation)
 ssh -i test-server-key.pem ubuntu@13.233.146.180 \
-  'sudo /opt/lite-panel/venv/bin/python -m app.cli rebuild'
+  'sudo lite-panel rebuild'
 
 # Clean install from GitHub (once repo is pushed)
 ssh -i test-server-key.pem ubuntu@13.233.146.180 \
   'curl -fsSL https://raw.githubusercontent.com/takshaktiwari/lite-panel/main/install.sh | sudo bash'
 ```
+
 
 ## Key files map
 

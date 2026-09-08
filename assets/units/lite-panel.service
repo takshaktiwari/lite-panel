@@ -2,8 +2,9 @@
 Description=lite-panel web control panel (uvicorn)
 Documentation=https://github.com/takshaktiwari/lite-panel
 After=network.target
-StartLimitIntervalSec=60
-StartLimitBurst=3
+StartLimitIntervalSec=30
+StartLimitBurst=10
+
 
 [Service]
 Type=simple

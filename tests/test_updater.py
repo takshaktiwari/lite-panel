@@ -94,8 +94,10 @@ def test_panel_update_task_handler(tmp_path):
         # Verified that check ran git fetch, checkout, and pip install
         calls = [call[0][0] for call in ctx.check.call_args_list]
         assert ["git", "fetch", "--tags", "origin"] in calls
-        assert ["git", "checkout", "1.0.0"] in calls
+        assert ["git", "checkout", "-f", "1.0.0"] in calls
+        assert ["git", "reset", "--hard", "1.0.0"] in calls
         assert [str(venv_bin / "pip"), "install", "--quiet", "-r", str(panel_dir / "requirements.txt")] in calls
+
 
 
 @pytest.fixture
