@@ -27,21 +27,34 @@
     <label for="description">Description <span class="muted">(optional)</span></label>
     <input type="text" id="description" name="description" placeholder="e.g. Nightly backup">
 
-    <label>Schedule</label>
-    <div class="cron-fields">
+    <label for="preset">Schedule</label>
+    <select id="preset" name="preset" data-cron-preset>
+      {% for value, label in presets %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+      <option value="custom">Custom…</option>
+    </select>
+
+    <div class="cron-fields" data-cron-custom hidden>
       <div><input type="text" name="minute" value="*" required title="Minute"><span class="muted">minute</span></div>
       <div><input type="text" name="hour" value="*" required title="Hour"><span class="muted">hour</span></div>
       <div><input type="text" name="day_of_month" value="*" required title="Day of month"><span class="muted">day</span></div>
       <div><input type="text" name="month" value="*" required title="Month"><span class="muted">month</span></div>
       <div><input type="text" name="day_of_week" value="*" required title="Day of week"><span class="muted">weekday</span></div>
     </div>
-    <p class="muted" style="margin-top:2px;">
+    <p class="muted" data-cron-custom hidden style="margin-top:2px;">
       Digits, <code>*</code>, <code>,</code>, <code>-</code> and <code>/</code> only. Examples:
       <code>*/5 * * * *</code> every 5 minutes, <code>0 3 * * *</code> daily at 03:00.
     </p>
 
     <label for="command">Command</label>
-    <input type="text" id="command" name="command" required placeholder="/usr/bin/php /var/www/mysite/artisan schedule:run" style="font-family:monospace;">
+    <input type="text" id="command" name="command" required placeholder="/usr/bin/php8.3 /var/www/mysite/artisan schedule:run" style="font-family:monospace;">
+    {% if php_cli_paths %}
+    <p class="muted" style="margin-top:-8px;">
+      PHP CLI path{{ 's' if php_cli_paths|length != 1 }} on this server:
+      {% for p in php_cli_paths %}<code>{{ p }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+    </p>
+    {% endif %}
 
     <button class="button primary" type="submit" style="margin-top:10px;">Add cron job</button>
   </form>
@@ -91,4 +104,6 @@
   <p class="muted empty">No cron jobs yet.</p>
   {% endif %}
 </section>
+
+<script src="/static/cron.js"></script>
 {% endblock %}

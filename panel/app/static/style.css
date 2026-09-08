@@ -298,6 +298,11 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
    each labeled underneath so the meaning of "* * * * *" doesn't have to be
    memorized -- wraps to two rows on narrow screens rather than truncating. */
 .cron-fields { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+/* An author "display" rule always beats the UA stylesheet's [hidden] default,
+   preset order or not -- without this, toggling the "hidden" attribute via
+   JS would do nothing visible on an element .cron-fields already sets
+   display: flex on. */
+.cron-fields[hidden] { display: none; }
 .cron-fields > div { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .cron-fields input[type="text"] {
   width: 64px;

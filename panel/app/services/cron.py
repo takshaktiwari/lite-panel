@@ -23,6 +23,34 @@ logger = logging.getLogger(__name__)
 
 MARKER = "# managed by lite-panel -- edits here are overwritten on the next change"
 
+# (schedule, label) -- offered as a dropdown in the cron form so most jobs
+# never need someone to hand-write "*/5 * * * *" and get it wrong. Anything
+# not matching one of these falls back to "Custom", which is what the five
+# raw fields are still for.
+PRESETS = [
+    ("* * * * *", "Every minute"),
+    ("*/2 * * * *", "Every 2 minutes"),
+    ("*/5 * * * *", "Every 5 minutes"),
+    ("*/10 * * * *", "Every 10 minutes"),
+    ("*/15 * * * *", "Every 15 minutes"),
+    ("*/30 * * * *", "Every 30 minutes"),
+    ("0 * * * *", "Hourly"),
+    ("0 */2 * * *", "Every 2 hours"),
+    ("0 */6 * * *", "Every 6 hours"),
+    ("0 */12 * * *", "Every 12 hours"),
+    ("0 0 * * *", "Daily at midnight"),
+    ("0 0 * * 0", "Weekly (Sunday midnight)"),
+    ("0 0 1 * *", "Monthly (1st, midnight)"),
+]
+
+
+def match_preset(schedule: str) -> str:
+    """The preset value matching ``schedule``, or "custom" if none does."""
+    for value, _label in PRESETS:
+        if value == schedule:
+            return value
+    return "custom"
+
 
 def is_available() -> bool:
     return which("crontab") is not None

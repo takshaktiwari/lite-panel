@@ -141,3 +141,29 @@ def test_is_available_reflects_whether_crontab_is_on_path(monkeypatch):
 
     monkeypatch.setattr(cron_service, "which", lambda name: None)
     assert cron_service.is_available() is False
+
+
+# --------------------------------------------------------------------------
+# PRESETS / match_preset
+# --------------------------------------------------------------------------
+
+
+def test_every_preset_is_five_well_formed_fields():
+    for value, _label in cron_service.PRESETS:
+        fields = value.split(" ")
+        assert len(fields) == 5, value
+
+
+def test_preset_values_are_unique():
+    values = [value for value, _label in cron_service.PRESETS]
+    assert len(values) == len(set(values))
+
+
+def test_match_preset_finds_an_exact_match():
+    value, _label = cron_service.PRESETS[0]
+    assert cron_service.match_preset(value) == value
+
+
+def test_match_preset_falls_back_to_custom_for_anything_else():
+    assert cron_service.match_preset("7 3 1 6 2") == "custom"
+    assert cron_service.match_preset("") == "custom"

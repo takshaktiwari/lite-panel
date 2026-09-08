@@ -125,6 +125,13 @@ class PhpProvider(Provider):
     def socket_for(self, version: str) -> str:
         return str(FPM_SOCKET_DIR / f"php{validate_php_version(version)}-fpm.sock")
 
+    def cli_path_for(self, version: str) -> str:
+        """The CLI binary for a version -- what a cron job or shell script
+        should actually invoke. Installed by the "cli" package in
+        CORE_PACKAGES alongside fpm, so it exists for every version this
+        provider manages."""
+        return f"/usr/bin/php{validate_php_version(version)}"
+
     def detect_socket(self) -> Optional[str]:
         """Any live FPM socket, used when a site has no explicit version."""
         if not FPM_SOCKET_DIR.is_dir():

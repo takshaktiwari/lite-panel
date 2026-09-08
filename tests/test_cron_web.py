@@ -203,6 +203,51 @@ def test_edit_page_renders(signed_in, job):
     assert "echo hi" in response.text
 
 
+def test_edit_page_selects_the_matching_preset_and_hides_the_raw_fields(signed_in, job):
+    """job's fixture schedule is "* * * * *" -- an exact match for the
+    "Every minute" preset, so it should come up pre-selected with the raw
+    field inputs tucked away, not defaulted to "Custom"."""
+    response = signed_in.get(f"/cron/{job.id}/edit")
+    assert 'value="* * * * *" selected' in response.text
+    assert 'value="custom" selected' not in response.text
+    assert "data-cron-custom hidden" in response.text
+
+
+def test_edit_page_falls_back_to_custom_for_an_unusual_schedule(signed_in, db, site):
+    odd_job = CronJob(
+        site_id=site.id,
+        minute="7",
+        hour="3",
+        day_of_month="1",
+        month="6",
+        day_of_week="2",
+        command="echo odd",
+    )
+    db.add(odd_job)
+    db.commit()
+    db.refresh(odd_job)
+
+    response = signed_in.get(f"/cron/{odd_job.id}/edit")
+    assert 'value="custom" selected' in response.text
+    assert "data-cron-custom hidden" not in response.text
+
+
+def test_cron_page_lists_the_schedule_presets(signed_in, site):
+    response = signed_in.get("/cron")
+    assert "Every minute" in response.text
+    assert "Every 5 minutes" in response.text
+    assert "Hourly" in response.text
+    assert "Custom…" in response.text
+
+
+def test_cron_page_shows_the_php_cli_path_when_php_is_installed(signed_in, site, monkeypatch):
+    import app.routers.cron as cron_router
+
+    monkeypatch.setattr(cron_router, "_php_cli_paths", lambda: ["/usr/bin/php8.3"])
+    response = signed_in.get("/cron")
+    assert "/usr/bin/php8.3" in response.text
+
+
 def test_edit_updates_the_row_and_enqueues_a_sync(signed_in, db, job):
     token = _csrf(signed_in)
     response = signed_in.post(

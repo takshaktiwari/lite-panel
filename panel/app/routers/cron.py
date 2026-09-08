@@ -23,11 +23,20 @@ from app.database import get_session
 from app.deps import csrf_protect, render, require_session
 from app.jobs import enqueue
 from app.models import AuditLog, CronJob, Site
+from app.providers import get_provider
 from app.services import cron as cron_service
 from app.validators import ValidationError, validate_cron_command, validate_cron_field
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/cron")
+
+
+def _php_cli_paths() -> list:
+    """The real, invocable path for every PHP version installed on this
+    server -- shown next to the command field so a job doesn't have to guess
+    whether "php" on its own resolves to anything."""
+    php = get_provider("php")
+    return [php.cli_path_for(v) for v in php.installed_versions()]
 
 
 @router.get("")
@@ -49,6 +58,8 @@ def cron_list(
         jobs=jobs,
         sites=sites,
         cron_available=cron_service.is_available(),
+        presets=cron_service.PRESETS,
+        php_cli_paths=_php_cli_paths(),
     )
 
 
@@ -108,6 +119,9 @@ def edit_form(
         session=session,
         user=session.user,
         job=job,
+        presets=cron_service.PRESETS,
+        selected_schedule=cron_service.match_preset(job.schedule_display),
+        php_cli_paths=_php_cli_paths(),
     )
 
 

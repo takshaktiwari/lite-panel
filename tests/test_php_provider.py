@@ -19,6 +19,25 @@ def _provider():
 
 
 # --------------------------------------------------------------------------
+# cli_path_for() -- what a cron job should actually invoke
+# --------------------------------------------------------------------------
+
+
+def test_cli_path_for_returns_the_versioned_binary():
+    assert _provider().cli_path_for("8.3") == "/usr/bin/php8.3"
+
+
+def test_cli_path_for_rejects_a_malformed_version():
+    from app.validators import ValidationError
+
+    try:
+        _provider().cli_path_for("8.3; rm -rf /")
+        assert False, "expected a ValidationError"
+    except ValidationError:
+        pass
+
+
+# --------------------------------------------------------------------------
 # The regression itself
 # --------------------------------------------------------------------------
 
