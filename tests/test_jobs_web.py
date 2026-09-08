@@ -53,7 +53,8 @@ def test_job_detail_renders_for_running_job(signed_in, db):
     assert "Step 2 in progress" in resp.text
     assert "job-pulse" in resp.text
     assert "autoscroll-toggle" in resp.text
-    assert f"/jobs/{job.id}/poll" in resp.text
+    assert 'data-live="true"' in resp.text
+    assert '/static/job-detail.js' in resp.text
 
 
 def test_job_detail_renders_for_finished_job(signed_in, db):
