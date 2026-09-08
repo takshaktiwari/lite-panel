@@ -45,6 +45,7 @@ def browse(
             crumbs=[{"name": "Home", "path": "."}],
             current=".",
             parent=".",
+            root=str(files_service.root()),
             error=str(exc),
             status_code=400,
         )
@@ -225,6 +226,25 @@ def duplicate(
     return _back(path, notice=f"Created {copied.name}")
 
 
+@router.post("/move", dependencies=[Depends(csrf_protect)])
+def move(
+    path: str = Form(...),
+    target: str = Form(...),
+    destination: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """Move one item into another folder -- the row-level counterpart to
+    bulk-move, for when only a single item needs relocating."""
+    try:
+        moved = files_service.move_item(target, destination)
+    except (ValidationError, OSError) as exc:
+        return _back(path, error=str(exc))
+
+    _audit(db, session, "files.move", f"{target} -> {moved}")
+    return _back(path, notice=f"Moved to {moved.name}")
+
+
 @router.post("/archive", dependencies=[Depends(csrf_protect)])
 def archive_one(
     path: str = Form(...),
@@ -307,6 +327,31 @@ def bulk_copy(
         _audit(db, session, "files.copy", f"{name} -> {destination}")
 
     return _back(path, **_bulk_result(succeeded, failed, verb="Copied"))
+
+
+@router.post("/bulk-move", dependencies=[Depends(csrf_protect)])
+def bulk_move(
+    path: str = Form(...),
+    target: List[str] = Form(default=[]),
+    destination: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    if not target:
+        return _back(path, error="Nothing was selected.")
+
+    try:
+        dest_resolved = files_service.resolve(destination)
+        if not dest_resolved.is_dir():
+            return _back(path, error="Destination is not a directory.")
+    except ValidationError as exc:
+        return _back(path, error=str(exc))
+
+    succeeded, failed = files_service.bulk_move(target, destination)
+    for name in succeeded:
+        _audit(db, session, "files.move", f"{name} -> {destination}")
+
+    return _back(path, **_bulk_result(succeeded, failed, verb="Moved"))
 
 
 @router.post("/bulk-archive", dependencies=[Depends(csrf_protect)])

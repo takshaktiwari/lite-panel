@@ -102,6 +102,73 @@ def test_copied_directory_ownership_is_restored(sites_root):
 
 
 # --------------------------------------------------------------------------
+# move_item
+# --------------------------------------------------------------------------
+
+
+def test_move_relocates_into_the_destination_directory(sites_root):
+    (sites_root / "site.txt").write_text("hello")
+    (sites_root / "archive").mkdir()
+
+    moved = files_service.move_item("site.txt", "archive")
+
+    assert moved == sites_root / "archive" / "site.txt"
+    assert moved.read_text() == "hello"
+    assert not (sites_root / "site.txt").exists()
+
+
+def test_move_a_directory_recursively(sites_root):
+    src = sites_root / "app"
+    (src / "nested").mkdir(parents=True)
+    (src / "nested" / "file.txt").write_text("x")
+    (sites_root / "dest").mkdir()
+
+    moved = files_service.move_item("app", "dest")
+
+    assert (moved / "nested" / "file.txt").read_text() == "x"
+    assert not src.exists()
+
+
+def test_cannot_move_the_root_directory(sites_root):
+    (sites_root / "dest").mkdir()
+    with pytest.raises(ValidationError):
+        files_service.move_item(".", "dest")
+
+
+def test_cannot_move_a_folder_into_itself(sites_root):
+    (sites_root / "app").mkdir()
+    with pytest.raises(ValidationError):
+        files_service.move_item("app", "app")
+
+
+def test_move_refuses_an_existing_destination(sites_root):
+    (sites_root / "a.txt").write_text("a")
+    (sites_root / "dest").mkdir()
+    (sites_root / "dest" / "a.txt").write_text("already here")
+    with pytest.raises(ValidationError):
+        files_service.move_item("a.txt", "dest")
+
+
+def test_move_rejects_traversal_in_destination(sites_root):
+    (sites_root / "a.txt").write_text("a")
+    with pytest.raises(ValidationError):
+        files_service.move_item("a.txt", "../../etc")
+    assert (sites_root / "a.txt").exists()  # nothing moved on failure
+
+
+def test_bulk_move_reports_successes_and_failures(sites_root):
+    (sites_root / "a.txt").write_text("a")
+    (sites_root / "dest").mkdir()
+
+    succeeded, failed = files_service.bulk_move(["a.txt", "missing.txt"], "dest")
+
+    assert succeeded == ["a.txt"]
+    assert failed[0][0] == "missing.txt"
+    assert (sites_root / "dest" / "a.txt").read_text() == "a"
+    assert not (sites_root / "a.txt").exists()
+
+
+# --------------------------------------------------------------------------
 # bulk_delete / bulk_copy
 # --------------------------------------------------------------------------
 

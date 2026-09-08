@@ -314,6 +314,54 @@ def copy_item(
     return destination
 
 
+def move_item(candidate, destination_dir: str, *, new_name: Optional[str] = None) -> Path:
+    """Move a file or directory into ``destination_dir``, keeping its name
+    unless ``new_name`` is given.
+
+    Unlike :func:`copy_item`, this always needs a destination -- moving
+    something "in place" is just a rename, which already exists as
+    :func:`rename`.
+    """
+    source = resolve(candidate)
+    if source == root():
+        raise ValidationError("The root directory cannot be moved.")
+    if not source.exists():
+        raise ValidationError("That path does not exist.")
+
+    dest_parent = resolve(destination_dir)
+    if not dest_parent.is_dir():
+        raise ValidationError("Destination is not a directory.")
+    name = validate_filename(new_name) if new_name else source.name
+
+    destination = resolve(dest_parent / name)
+    if destination == source:
+        raise ValidationError("Source and destination are the same.")
+    if destination.exists():
+        raise ValidationError(f"'{name}' already exists there.")
+    if source.is_dir() and _is_within(destination, source):
+        raise ValidationError("Cannot move a folder into itself.")
+
+    owner = _owner_of(source)
+    shutil.move(str(source), str(destination))
+    # Same-filesystem moves are a plain rename and keep ownership as-is;
+    # this only matters if shutil.move had to fall back to copy+delete
+    # (crossing a filesystem boundary), but it is harmless either way.
+    _restore_owner_recursive(destination, owner)
+    return destination
+
+
+def bulk_move(candidates: List[str], destination_dir: str) -> Tuple[List[str], List[Tuple[str, str]]]:
+    succeeded: List[str] = []
+    failed: List[Tuple[str, str]] = []
+    for candidate in candidates:
+        try:
+            move_item(candidate, destination_dir)
+            succeeded.append(candidate)
+        except (ValidationError, OSError) as exc:
+            failed.append((candidate, str(exc)))
+    return succeeded, failed
+
+
 def bulk_delete(candidates: List[str]) -> Tuple[List[str], List[Tuple[str, str]]]:
     """Delete several paths, continuing past individual failures.
 

@@ -10,6 +10,8 @@
   </p>
 </header>
 
+{% set current_abs = root if current == '.' else root ~ '/' ~ current %}
+
 {# The bulk-selection form is deliberately empty here -- the checkboxes that
    belong to it live scattered through the table below, each pointing back
    at it via form="bulk-form" (valid HTML, and the only way to let a table
@@ -58,9 +60,12 @@
 
   <span style="flex:1 1 auto;"></span>
 
+  <button class="icon-button" type="submit" form="bulk-form" formaction="/files/bulk-move" title="Move selected to…"
+          data-prompt-field="destination" data-prompt-message="Move selected item(s) to which folder? Full path, e.g. {{ root }}/path/to/folder"
+          data-prompt-default="{{ current_abs }}">➡️</button>
   <button class="icon-button" type="submit" form="bulk-form" formaction="/files/bulk-copy" title="Copy selected to…"
-          data-prompt-field="destination" data-prompt-message="Copy selected item(s) to which folder? (path relative to Home)"
-          data-prompt-default=".">📋</button>
+          data-prompt-field="destination" data-prompt-message="Copy selected item(s) to which folder? Full path, e.g. {{ root }}/path/to/folder"
+          data-prompt-default="{{ current_abs }}">📋</button>
   <button class="icon-button" type="submit" form="bulk-form" formaction="/files/bulk-archive" title="Archive selected as .zip"
           data-prompt-field="archive_name" data-prompt-message="Archive name" data-prompt-default="archive">🗜</button>
   <button class="icon-button danger" type="submit" form="bulk-form" formaction="/files/bulk-delete" title="Delete selected"
@@ -123,6 +128,17 @@
                 <input type="hidden" name="path" value="{{ current }}">
                 <input type="hidden" name="target" value="{{ entry.relative }}">
                 <button class="dropdown-item" type="submit"><span class="icon">⧉</span> Duplicate</button>
+              </form>
+              <form method="post" action="/files/move">
+                {{ ui.csrf(session) }}
+                <input type="hidden" name="path" value="{{ current }}">
+                <input type="hidden" name="target" value="{{ entry.relative }}">
+                <input type="hidden" name="destination" value="">
+                <button class="dropdown-item" type="submit"
+                        data-prompt-field="destination" data-prompt-message="Move {{ entry.name }} to which folder? Full path, e.g. {{ root }}/path/to/folder"
+                        data-prompt-default="{{ current_abs }}">
+                  <span class="icon">➡️</span> Move
+                </button>
               </form>
               <form method="post" action="/files/archive">
                 {{ ui.csrf(session) }}

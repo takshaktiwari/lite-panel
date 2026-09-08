@@ -178,6 +178,60 @@ def test_bulk_copy_rejects_a_traversal_destination(signed_in, sites_root):
     assert not (sites_root.parent / "etc" / "a.txt").exists()
 
 
+def test_move_relocates_a_single_item(signed_in, sites_root):
+    (sites_root / "a.txt").write_text("hello")
+    (sites_root / "dest").mkdir()
+    token = _csrf(signed_in)
+
+    response = signed_in.post(
+        "/files/move",
+        data={"path": ".", "target": "a.txt", "destination": "dest", "csrf_token": token},
+    )
+    assert response.status_code == 303
+    assert (sites_root / "dest" / "a.txt").read_text() == "hello"
+    assert not (sites_root / "a.txt").exists()
+
+
+def test_bulk_move_relocates_every_selected_item(signed_in, sites_root):
+    (sites_root / "a.txt").write_text("a")
+    (sites_root / "b.txt").write_text("b")
+    (sites_root / "dest").mkdir()
+    token = _csrf(signed_in)
+
+    response = signed_in.post(
+        "/files/bulk-move",
+        data={
+            "path": ".",
+            "target": ["a.txt", "b.txt"],
+            "destination": "dest",
+            "csrf_token": token,
+        },
+    )
+    assert response.status_code == 303
+    assert (sites_root / "dest" / "a.txt").read_text() == "a"
+    assert (sites_root / "dest" / "b.txt").read_text() == "b"
+    assert not (sites_root / "a.txt").exists()
+    assert not (sites_root / "b.txt").exists()
+
+
+def test_bulk_move_rejects_a_traversal_destination(signed_in, sites_root):
+    (sites_root / "a.txt").write_text("a")
+    token = _csrf(signed_in)
+
+    response = signed_in.post(
+        "/files/bulk-move",
+        data={
+            "path": ".",
+            "target": ["a.txt"],
+            "destination": "../../etc",
+            "csrf_token": token,
+        },
+    )
+    assert response.status_code == 303
+    assert "error=" in response.headers["location"]
+    assert (sites_root / "a.txt").exists()  # nothing moved on failure
+
+
 def test_bulk_archive_bundles_every_selected_item(signed_in, sites_root):
     (sites_root / "a.txt").write_text("aaa")
     (sites_root / "b.txt").write_text("bbb")
