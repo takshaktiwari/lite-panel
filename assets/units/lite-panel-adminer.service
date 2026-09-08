@@ -14,10 +14,16 @@ Group=www-data
 # we need no FastCGI complexity for it.  Binds ONLY to loopback — nginx
 # proxies in; the port is never exposed to the internet.
 #
+# php -S reads no php.ini overrides of its own, so without the -d flags
+# below it runs with PHP's compiled-in default of upload_max_filesize=2M --
+# Adminer would refuse any import/upload bigger than that regardless of the
+# 1G the panel already allows at the nginx layer (see panel-vhost.conf.j2).
+# post_max_size must be >= upload_max_filesize or PHP silently empties $_POST.
+#
 # -t points at assets/vendor/ which contains:
 #   index.php  — the credentials() override that pins the server to localhost
 #   adminer.php — the vendored upstream (untouched)
-ExecStart=/usr/bin/php -S 127.0.0.1:8766 -t /opt/lite-panel/assets/vendor
+ExecStart=/usr/bin/php -d upload_max_filesize=1024M -d post_max_size=1024M -d memory_limit=1024M -d max_execution_time=300 -d max_input_time=300 -S 127.0.0.1:8766 -t /opt/lite-panel/assets/vendor
 
 Restart=on-failure
 RestartSec=5
