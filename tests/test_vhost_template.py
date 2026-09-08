@@ -36,6 +36,8 @@ def _render_vhost(*, php: bool) -> str:
             "server_names": ["blog.example.com", "www.blog.example.com"],
             "fpm_socket": "/run/php/lite-panel-blog.sock" if php else None,
             "acme_root": "/var/www/lite-panel-acme",
+            "www_redirect_only": True,
+            "www_https_redirect": False,
         },
     )
 

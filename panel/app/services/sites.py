@@ -210,16 +210,25 @@ def render_site(site: Site) -> None:
     Safe to call repeatedly: both writes are idempotent, which is what lets
     ``lite-panel rebuild`` reconstruct every site from the database.
     """
+    certbot = get_provider("certbot")
     from app.providers.certbot import ACME_ROOT
 
     nginx = get_provider("nginx")
     php = get_provider("php")
 
+    # Whether the *current* certificate on disk actually covers www --
+    # checked fresh each render, not assumed from `redirect_www`, so a
+    # rebuild always matches reality even when a past issue() had to drop
+    # www because it had no DNS record yet (see certbot.issue).
+    www_certified = site.ssl_enabled and certbot.covers_www(site.domain)
+
+    # A cert that doesn't cover www can't safely terminate TLS for it, so www
+    # falls back to a plain-http redirect regardless of `redirect_www` --
+    # exactly the block already used when the user asked for that redirect.
+    www_redirect_only = site.redirect_www or (site.ssl_enabled and not www_certified)
+
     server_names = [site.domain] + [alias.domain for alias in site.aliases]
-    if site.redirect_www:
-        # www is handled by its own redirect server block.
-        pass
-    else:
+    if not www_redirect_only:
         server_names.append(f"www.{site.domain}")
 
     fpm_socket = str(socket_for(site.name)) if site.php_version else None
@@ -232,6 +241,8 @@ def render_site(site: Site) -> None:
             "server_names": server_names,
             "fpm_socket": fpm_socket,
             "acme_root": str(ACME_ROOT),
+            "www_redirect_only": www_redirect_only,
+            "www_https_redirect": www_redirect_only and www_certified,
         },
     )
     nginx.enable_site(site.name)
@@ -328,8 +339,13 @@ def enable_ssl(db: OrmSession, ctx, site: Site, *, email: Optional[str] = None,
     certbot = get_provider("certbot")
 
     # Issue against the plain HTTP vhost that is already serving, so the
-    # ACME challenge can be answered before any redirect exists.
-    certbot.issue(ctx, site.domain, email=email, include_www=site.redirect_www, staging=staging)
+    # ACME challenge can be answered before any redirect exists. www is
+    # always attempted (both the alias and the redirect-to-bare-domain modes
+    # want it, if only to answer https://www with a valid cert before
+    # redirecting) -- certbot.issue drops it on its own if www has no DNS
+    # record, rather than failing the whole request over a subdomain nobody
+    # has pointed anywhere yet.
+    certbot.issue(ctx, site.domain, email=email, include_www=True, staging=staging)
 
     site.ssl_enabled = True
     db.flush()
