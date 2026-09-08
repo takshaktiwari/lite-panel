@@ -216,9 +216,12 @@ class Site(TimestampMixin, Base):
     aliases: Mapped[List["SiteAlias"]] = relationship(
         back_populates="site", cascade="all, delete-orphan"
     )
-    databases: Mapped[List["SiteDatabase"]] = relationship(
-        back_populates="site", cascade="all, delete-orphan"
-    )
+    # Deliberately no delete-orphan: a SiteDatabase's site_id is nullable
+    # precisely so deleting a site can detach it instead of erasing the panel's
+    # only record of a real database that is still sitting in MariaDB. See
+    # sites_service.delete_site, which either drops it for real or clears
+    # site_id -- never lets this cascade silently do either on its own.
+    databases: Mapped[List["SiteDatabase"]] = relationship(back_populates="site")
     ftp_accounts: Mapped[List["FtpAccount"]] = relationship(
         back_populates="site", cascade="all, delete-orphan"
     )

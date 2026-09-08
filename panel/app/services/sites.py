@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.models import Site
 from app.providers import get_provider
 from app.services import cron as cron_service
+from app.services import databases as db_service
 from app.services import renderer, tuning
 from app.shell import run
 from app.validators import (
@@ -369,12 +370,17 @@ def disable_ssl(db: OrmSession, ctx, site: Site) -> None:
 # --------------------------------------------------------------------------
 
 
-def delete_site(db: OrmSession, ctx, site: Site, *, remove_files: bool = False) -> None:
+def delete_site(db: OrmSession, ctx, site: Site, *, remove_files: bool = False,
+                delete_databases: bool = False) -> None:
     """Remove a site.
 
     Files are kept unless explicitly asked for: deleting a site by mistake
     should be recoverable, and the account's home directory is the only copy
-    of the operator's content on the box.
+    of the operator's content on the box. Linked databases follow the same
+    rule and default: ``delete_databases=False`` detaches them (clears
+    ``site_id``) instead of dropping real data, so they keep showing up as
+    ordinary managed databases afterward rather than becoming an orphaned
+    database nothing can see; ``delete_databases=True`` actually drops them.
     """
     domain, name, username = site.domain, site.name, site.system_user
     root_dir = site.root_dir
@@ -395,6 +401,20 @@ def delete_site(db: OrmSession, ctx, site: Site, *, remove_files: bool = False) 
         cron_service.remove_crontab(username)
     except Exception as exc:  # noqa: BLE001 - cron may not be installed
         ctx.log(f"note: {exc}")
+
+    records = list(site.databases)
+    for record in records:
+        if delete_databases:
+            try:
+                db_service.drop_database(record.db_name, record.db_user)
+                ctx.log(f"dropped database {record.db_name}")
+            except Exception as exc:  # noqa: BLE001 - MariaDB may not be installed
+                ctx.log(f"note: could not drop database {record.db_name}: {exc}")
+            db.delete(record)
+        else:
+            record.site_id = None
+    if records and not delete_databases:
+        ctx.log(f"kept {len(records)} database(s); no longer linked to this site")
 
     db.delete(site)
     db.commit()

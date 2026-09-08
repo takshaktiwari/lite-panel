@@ -164,13 +164,16 @@ def _try_enable_ssl_at_creation(db, ctx, site) -> None:
 def delete_site(ctx) -> None:
     site_id = ctx.payload["site_id"]
     remove_files = bool(ctx.payload.get("remove_files"))
+    delete_databases = bool(ctx.payload.get("delete_databases"))
 
     with session_scope() as db:
         site = db.get(Site, site_id)
         if site is None:
             raise JobFailed("That site no longer exists.")
         try:
-            sites_service.delete_site(db, ctx, site, remove_files=remove_files)
+            sites_service.delete_site(
+                db, ctx, site, remove_files=remove_files, delete_databases=delete_databases
+            )
         except (ValidationError, RuntimeError) as exc:
             raise _fail(exc) from exc
 

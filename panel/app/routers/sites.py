@@ -217,6 +217,7 @@ def delete_site(
     site_id: int,
     confirm: str = Form(""),
     remove_files: str = Form(""),
+    delete_databases: str = Form(""),
     session=Depends(require_session),
     db: OrmSession = Depends(get_session),
 ):
@@ -236,7 +237,11 @@ def delete_site(
         db,
         "site.delete",
         f"Delete site {site.domain}",
-        payload={"site_id": site.id, "remove_files": bool(remove_files)},
+        payload={
+            "site_id": site.id,
+            "remove_files": bool(remove_files),
+            "delete_databases": bool(delete_databases),
+        },
         user_id=session.user_id,
     )
     _audit(db, session, "site.delete", site.domain)
