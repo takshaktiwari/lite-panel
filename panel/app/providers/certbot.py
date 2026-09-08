@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import logging
+import secrets
 import socket
+import ssl
+import urllib.error
+import urllib.request
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set, Tuple
 
 from app.providers.base import Provider, register
 from app.services import apt
@@ -21,6 +25,10 @@ LIVE_DIR = Path("/etc/letsencrypt/live")
 # /.well-known/acme-challenge/ from here, so issuing and renewing a
 # certificate never depends on the site's own document root being writable.
 ACME_ROOT = Path("/var/www/lite-panel-acme")
+
+# Where an HTTP-01 challenge file actually lands under ACME_ROOT. nginx serves
+# this prefix with `root`, so the URI path is appended to the root directory.
+CHALLENGE_SUBPATH = Path(".well-known/acme-challenge")
 
 
 @register
@@ -124,6 +132,12 @@ class CertbotProvider(Provider):
 
         ACME_ROOT.mkdir(parents=True, exist_ok=True)
 
+        # Everything Let's Encrypt needs is checked here first, because every
+        # failed order counts against a per-hostname failed-validation limit
+        # (5/hour) that blind retries burn through -- and because certbot's own
+        # failure output is a wall of text that buries the one line that matters.
+        self._preflight(ctx, domain)
+
         www_domain = f"www.{domain}"
         request_www = include_www and self._resolves(www_domain)
         if include_www and not request_www:
@@ -149,13 +163,120 @@ class CertbotProvider(Provider):
         ctx.log(f"Requesting a certificate for {domain}")
         code = ctx.run(args, timeout=600)
         if code != 0:
+            # DNS was already confirmed to resolve in _preflight, so pointing
+            # at DNS first (as this message used to) would send the operator
+            # to check the one thing already known to be fine.
             raise RuntimeError(
-                "Certificate request failed. The usual cause is DNS: "
-                f"{domain} must already point at this server's public IP, and "
-                "port 80 must be reachable from the internet."
+                f"Certificate request failed. {domain} does resolve, so the cause is "
+                "usually reachability rather than DNS: port 80 must be open to the "
+                "internet and reach this server, and any proxy in front of it (e.g. "
+                "Cloudflare) must pass /.well-known/acme-challenge/ through to the "
+                "origin. See the certbot output above for what the CA reported."
             )
         ctx.log(f"Certificate installed for {domain}")
         return request_www
+
+    # -- pre-flight --------------------------------------------------------
+
+    def _preflight(self, ctx, domain: str) -> None:
+        """Check what Let's Encrypt is about to check, before asking it to.
+
+        Two very different outcomes on purpose:
+
+        * No DNS record at all is a hard stop. There is no arrangement of
+          firewall, nginx or certbot flags under which a name that does not
+          resolve can be validated, so failing here costs the operator a
+          10-second wait instead of a minute plus one of five hourly
+          failed-validation slots for that hostname.
+        * A challenge file that cannot be fetched back is only a *warning*.
+          It is the same path the CA will take, so it is worth reporting
+          loudly -- but it is fetched from this box, and a server that cannot
+          reach its own public hostname (hairpin NAT, split-horizon DNS, an
+          egress filter) is a false alarm we must not turn into a refusal.
+        """
+        from app.services import system
+
+        ips = self._resolved_ips(domain)
+        if not ips:
+            server_ip = system.public_ip()
+            target = f" pointing to {server_ip}" if server_ip else ""
+            raise ValidationError(
+                f"{domain} has no DNS record, so Let's Encrypt cannot reach it to "
+                f"verify the domain is yours. Add a DNS A record for {domain}"
+                f"{target}, give it a minute to propagate, then enable HTTPS again. "
+                "Nothing was sent to Let's Encrypt, so no rate limit was used."
+            )
+
+        ctx.log(f"{domain} resolves to {', '.join(sorted(ips))}")
+
+        server_ip = system.public_ip()
+        if server_ip and server_ip not in ips:
+            # Not an error: a proxied domain (Cloudflare's orange cloud) is a
+            # perfectly normal setup that resolves to the proxy, not to us.
+            ctx.log(
+                f"note: {domain} does not resolve to this server ({server_ip}) -- "
+                "fine if it is proxied (e.g. Cloudflare), a problem if it is not"
+            )
+
+        ok, detail = self._challenge_reachable(domain)
+        if ok:
+            ctx.log(f"HTTP-01 challenge path is reachable at http://{domain}")
+        else:
+            ctx.log(f"warning: could not fetch a test challenge file over http://{domain} -- {detail}")
+            ctx.log("continuing anyway; Let's Encrypt reaches this server from outside, which this check cannot do")
+
+    @staticmethod
+    def _resolved_ips(hostname: str) -> Set[str]:
+        try:
+            infos = socket.getaddrinfo(hostname, None)
+        except socket.gaierror:
+            return set()
+        return {info[4][0] for info in infos}
+
+    @staticmethod
+    def _challenge_reachable(domain: str) -> Tuple[bool, str]:
+        """Serve a token under the ACME path and fetch it back over the public
+        hostname -- the same round trip the CA makes.
+
+        Redirects are followed and TLS is not verified, because that is what
+        the CA itself does for HTTP-01: an http -> https redirect is allowed
+        and the certificate on the far end is explicitly not checked (it is
+        usually the very certificate being replaced).
+        """
+        directory = ACME_ROOT / CHALLENGE_SUBPATH
+        token = f"lite-panel-preflight-{secrets.token_urlsafe(16)}"
+        probe = directory / token
+
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            # Traversed and read by nginx as www-data, not by root.
+            for parent in (ACME_ROOT, ACME_ROOT / ".well-known", directory):
+                parent.chmod(0o755)
+            probe.write_text(token, encoding="utf-8")
+            probe.chmod(0o644)
+        except OSError as exc:
+            return False, f"could not write the test file: {exc}"
+
+        url = f"http://{domain}/.well-known/acme-challenge/{token}"
+        unverified = ssl.create_default_context()
+        unverified.check_hostname = False
+        unverified.verify_mode = ssl.CERT_NONE
+        opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=unverified))
+        try:
+            with opener.open(url, timeout=15) as response:
+                body = response.read(len(token) + 64).decode("utf-8", "replace").strip()
+            if body == token:
+                return True, "ok"
+            return False, "something else answered on port 80 (the file came back with different content)"
+        except urllib.error.HTTPError as exc:
+            return False, f"HTTP {exc.code} from the server that answered"
+        except Exception as exc:  # noqa: BLE001 - any failure here is advisory
+            return False, str(exc)
+        finally:
+            try:
+                probe.unlink()
+            except OSError:
+                pass
 
     @staticmethod
     def _resolves(hostname: str) -> bool:
