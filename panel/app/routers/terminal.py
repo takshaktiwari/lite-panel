@@ -67,7 +67,25 @@ def _allowed_origin(websocket: WebSocket) -> bool:
     host = websocket.headers.get("host")
     if not origin or not host:
         return False
-    return origin in (f"https://{host}", f"http://{host}")
+
+    # Exact match first (handles https://example.com:8443 == https://example.com:8443)
+    if origin in (f"https://{host}", f"http://{host}"):
+        return True
+
+    # Robust match: normalize hostname and ignore port mismatch if proxy strips/adds it
+    # (e.g. Origin: https://208.116.19.77:8443 when proxy Host header is 208.116.19.77 or vice-versa)
+    try:
+        from urllib.parse import urlsplit
+
+        parsed = urlsplit(origin)
+        origin_host = parsed.hostname
+        expected_host = host.split(":")[0].strip().lower()
+        if origin_host and expected_host and origin_host.lower() == expected_host:
+            return True
+    except Exception:
+        pass
+
+    return False
 
 
 def _session_from_cookie(db: OrmSession, websocket: WebSocket) -> Optional[Session]:

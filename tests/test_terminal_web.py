@@ -67,6 +67,15 @@ def test_websocket_rejects_a_forged_origin(signed_in):
             pass
 
 
+def test_websocket_accepts_origin_with_port(signed_in):
+    # Simulates browser sending Origin with custom port while proxy sends Host without port
+    with signed_in.websocket_connect(
+        "/terminal/ws",
+        headers={"origin": "https://testserver:8443", "host": "testserver"},
+    ):
+        pass
+
+
 def test_websocket_rejects_without_a_session(client):
     with pytest.raises(Exception):
         with client.websocket_connect("/terminal/ws", headers={"origin": "http://testserver"}):
