@@ -48,7 +48,7 @@
         <td>{{ entry.db_user }}</td>
         <td class="muted">{{ sizes.get(entry.db_name, 0) }} MB</td>
         <td style="text-align:right;white-space:nowrap;">
-          <a class="button" href="/adminer/?db={{ entry.db_name }}" target="_blank" rel="noopener">Open in Adminer</a>
+          <button class="button" type="button" data-adminer-db="{{ entry.db_name }}">Open in Adminer</button>
         </td>
       </tr>
       {% endfor %}
@@ -73,5 +73,7 @@
   </table>
 </section>
 {% endif %}
+
+<script src="/static/adminer.js"></script>
 {% endif %}
 {% endblock %}

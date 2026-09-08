@@ -50,6 +50,15 @@ class MariaDbProvider(Provider):
         # a full restart, and on a small box the buffer-pool size in it is the
         # difference between starting and being OOM-killed.
         ctx.check(["systemctl", "restart", "mariadb"], timeout=180)
+
+        from app.services import databases as db_service
+
+        try:
+            db_service.ensure_adminer_account()
+            ctx.log("Adminer login account ready")
+        except Exception as exc:  # noqa: BLE001 - Adminer working is not install-critical
+            ctx.log(f"note: could not set up Adminer's login account: {exc}")
+
         ctx.log("MariaDB ready")
 
     def uninstall(self, ctx, version: Optional[str] = None) -> None:

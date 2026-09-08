@@ -28,6 +28,12 @@ SYSTEM_SCHEMAS = frozenset(
 # would expose them to the internet the moment port 3306 were opened.
 DEFAULT_HOST = "localhost"
 
+# The OS user Adminer's own PHP process runs as (see
+# assets/units/lite-panel-adminer.service). Matched exactly by a MariaDB
+# account name so unix_socket peer authentication can approve it with no
+# password at all.
+ADMINER_OS_USER = "www-data"
+
 
 def _connect():
     """Open a root connection over the unix socket."""
@@ -169,3 +175,33 @@ def change_password(db_user: str, password: str, *, host: str = DEFAULT_HOST) ->
     with _connect() as conn, conn.cursor() as cur:
         cur.execute("ALTER USER %s@%s IDENTIFIED BY %s", (db_user, host, password))
         cur.execute("FLUSH PRIVILEGES")
+
+
+def ensure_adminer_account() -> None:
+    """A MariaDB account Adminer can log into with an empty password field.
+
+    Adminer runs as the "www-data" OS user (see the systemd unit). Creating
+    a MariaDB account of that same name with unix_socket authentication
+    means MariaDB approves the login by checking who is actually on the
+    other end of the socket -- no password to generate, show once, store,
+    or rotate, and critically, nothing that touches a site's own database
+    credentials the way minting a fresh one for it would (that would break
+    the site's own app the moment its stored connection string went stale).
+
+    Privileges mirror what the panel's own root connection already does
+    through this page (create/drop any database, reset any password) --
+    this does not hand out anything an admin using Databases couldn't
+    already do, just through Adminer's UI instead of this one.
+    """
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "CREATE USER IF NOT EXISTS %s@%s IDENTIFIED VIA unix_socket",
+            (ADMINER_OS_USER, DEFAULT_HOST),
+        )
+        cur.execute(
+            "GRANT ALL PRIVILEGES ON *.* TO %s@%s",
+            (ADMINER_OS_USER, DEFAULT_HOST),
+        )
+        cur.execute("FLUSH PRIVILEGES")
+
+    logger.info("Adminer's passwordless login account (%s@%s) is ready", ADMINER_OS_USER, DEFAULT_HOST)
