@@ -99,9 +99,10 @@ step "Installing system dependencies"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 
-# php-cli needed for the Adminer php -S server.  Other PHP stack components
-# are installed later through the panel's own setup wizard, not here.
-PKGS=(python3-venv python3-pip git curl nginx openssl php-cli ca-certificates)
+# php-cli + php-mysql needed for the Adminer php -S server (mysqli/PDO_MySQL
+# is how Adminer talks to MariaDB). Other PHP stack components are installed
+# later through the panel's own setup wizard, not here.
+PKGS=(python3-venv python3-pip git curl nginx openssl php-cli php-mysql ca-certificates)
 
 MISSING=()
 for pkg in "${PKGS[@]}"; do
