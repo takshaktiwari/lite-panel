@@ -50,15 +50,7 @@ class MariaDbProvider(Provider):
         # a full restart, and on a small box the buffer-pool size in it is the
         # difference between starting and being OOM-killed.
         ctx.check(["systemctl", "restart", "mariadb"], timeout=180)
-
-        from app.services import databases as db_service
-
-        try:
-            db_service.ensure_adminer_account()
-            ctx.log("Adminer login account ready")
-        except Exception as exc:  # noqa: BLE001 - Adminer working is not install-critical
-            ctx.log(f"note: could not set up Adminer's login account: {exc}")
-
+        self._ensure_adminer_account(ctx)
         ctx.log("MariaDB ready")
 
     def uninstall(self, ctx, version: Optional[str] = None) -> None:
@@ -86,18 +78,37 @@ class MariaDbProvider(Provider):
     def render_config(self, ctx=None) -> None:
         from app.services import renderer, tuning
 
-        if not CONFIG_PATH.parent.is_dir():
+        if CONFIG_PATH.parent.is_dir():
+            renderer.render_to_file(
+                "mariadb.cnf.j2",
+                CONFIG_PATH,
+                {"settings": tuning.mariadb_settings()},
+            )
             if ctx:
-                ctx.log(f"skipping tuning: {CONFIG_PATH.parent} does not exist")
-            return
+                ctx.log(f"wrote {CONFIG_PATH}")
+        elif ctx:
+            ctx.log(f"skipping tuning: {CONFIG_PATH.parent} does not exist")
 
-        renderer.render_to_file(
-            "mariadb.cnf.j2",
-            CONFIG_PATH,
-            {"settings": tuning.mariadb_settings()},
-        )
-        if ctx:
-            ctx.log(f"wrote {CONFIG_PATH}")
+        # Best-effort: this is what lets an install from before Adminer
+        # auto-login existed pick it up on the next "Rebuild" (see
+        # lite-panel-rebuild / the Stack page), without needing a full
+        # reinstall. install() also calls this directly, right after MariaDB
+        # is confirmed running -- this second call is for everyone who
+        # installed before that existed.
+        self._ensure_adminer_account(ctx)
+
+    def _ensure_adminer_account(self, ctx=None) -> None:
+        from app.services import databases as db_service
+
+        try:
+            db_service.ensure_adminer_account()
+            if ctx:
+                ctx.log("Adminer login account ready")
+        except Exception as exc:  # noqa: BLE001 - Adminer working is not install-critical
+            if ctx:
+                ctx.log(f"note: could not set up Adminer's login account: {exc}")
+            else:
+                logger.warning("could not set up Adminer's login account: %s", exc)
 
     @staticmethod
     def socket_path() -> Optional[str]:
