@@ -53,17 +53,58 @@ def job_detail(
             status_code=404,
         )
 
-    # A finished job renders its stored log. A running one starts empty and
-    # fills from the stream, so lines are never shown twice.
+    # For finished jobs, render full stored log.
+    # For running jobs, render whatever has been buffered so far so the user
+    # sees immediate context even before new events arrive.
+    if job.is_terminal:
+        static_log = job.log
+    else:
+        buffered_lines = log_buffer.since(job_id, 0)
+        static_log = "\n".join(buffered_lines) + ("\n" if buffered_lines else "")
+
     return render(
         request,
         "jobs/detail.html",
         session=session,
         user=session.user,
         job=job,
-        static_log=job.log if job.is_terminal else "",
+        static_log=static_log,
         live=not job.is_terminal,
     )
+
+
+@router.get("/{job_id}/poll")
+def job_poll(
+    job_id: int,
+    offset: int = 0,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """JSON polling endpoint for job status and incremental log lines.
+
+    Used alongside or as a fallback to the SSE stream. Allows client-side auto-update
+    every 2-3s even if SSE drops, and informs the UI about status changes live.
+    """
+    job = db.get(Job, job_id)
+    if job is None:
+        return {"error": "Not found", "is_terminal": True}
+
+    lines = log_buffer.since(job_id, offset)
+    # If the buffer has no lines for this offset (e.g. after finish or buffer discard),
+    # fall back to persisted log on the job row.
+    log_text = job.log if job.is_terminal and not lines else None
+
+    return {
+        "id": job.id,
+        "status": job.status.value,
+        "is_terminal": job.is_terminal,
+        "error": job.error,
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+        "lines": lines,
+        "next_offset": offset + len(lines),
+        "log": log_text,
+    }
 
 
 @router.get("/{job_id}/stream")

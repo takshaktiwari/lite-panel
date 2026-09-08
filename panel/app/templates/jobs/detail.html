@@ -4,36 +4,185 @@
 
 {% block content %}
 <header class="page-head">
-  <h1>{{ job.description }}</h1>
-  <p class="muted">{{ ui.badge(job.status.value, job.status.value) }}
-    {% if job.error %}<span class="alert-error" style="margin-left:8px;">{{ job.error }}</span>{% endif %}</p>
+  <div style="display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+    <h1>{{ job.description }}</h1>
+    <a href="/jobs" class="muted" style="font-size: 13px;">&larr; Back to all jobs</a>
+  </div>
+  <div class="job-meta-bar" style="margin-top: 8px;">
+    <span id="job-badge" class="badge {{ job.status.value }}">
+      {% if not job.is_terminal %}<span class="job-pulse" id="job-pulse"></span>{% endif %}
+      <span id="job-status-text">{{ job.status.value }}</span>
+    </span>
+    <span class="muted" id="job-kind-tag">Kind: <code>{{ job.kind }}</code></span>
+    <span class="muted" id="job-timer" data-started="{{ job.started_at.isoformat() if job.started_at else '' }}" data-finished="{{ job.finished_at.isoformat() if job.finished_at else '' }}">
+      {% if job.started_at %}
+        Started {{ job.started_at.strftime('%Y-%m-%d %H:%M:%S') }}
+      {% else %}
+        Pending start...
+      {% endif %}
+    </span>
+    <span id="job-error-msg" class="alert-error" style="display: {{ 'inline-block' if job.error else 'none' }}; margin-left: 4px; padding: 2px 8px; border-radius: 4px;">{{ job.error or '' }}</span>
+  </div>
 </header>
+
+<div class="job-log-toolbar">
+  <span class="job-log-stats" id="log-stats">Log output</span>
+  <label style="font-size: 12px; color: var(--muted); cursor: pointer; user-select: none;">
+    <input type="checkbox" id="autoscroll-toggle" checked style="vertical-align: middle; margin-right: 4px;"> Auto-scroll
+  </label>
+</div>
 
 <pre class="job-log" id="log">{{ static_log }}</pre>
 
 {% if live %}
 <script>
 (function () {
-  const log = document.getElementById("log");
-  const source = new EventSource("/jobs/{{ job.id }}/stream");
+  const jobId = {{ job.id }};
+  const logEl = document.getElementById("log");
+  const badgeEl = document.getElementById("job-badge");
+  const statusTextEl = document.getElementById("job-status-text");
+  const pulseEl = document.getElementById("job-pulse");
+  const timerEl = document.getElementById("job-timer");
+  const errorEl = document.getElementById("job-error-msg");
+  const statsEl = document.getElementById("log-stats");
+  const autoscrollToggle = document.getElementById("autoscroll-toggle");
 
-  source.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    for (const line of data.lines) {
-      log.textContent += line + "\n";
+  let isTerminal = false;
+  let sseDoneReceived = false;
+  // Initialize line count based on pre-rendered lines
+  const initialText = logEl.textContent.trim();
+  let lineCount = initialText ? initialText.split("\n").length : 0;
+  let nextOffset = lineCount;
+
+  function updateLineStats() {
+    if (statsEl) {
+      statsEl.textContent = `${lineCount} line${lineCount === 1 ? '' : 's'}`;
     }
-    log.scrollTop = log.scrollHeight;
-  };
+  }
+  updateLineStats();
 
-  source.addEventListener("done", () => {
-    source.close();
-    setTimeout(() => window.location.reload(), 400);
-  });
+  // Scroll to bottom initially if content exists
+  if (logEl.scrollHeight > logEl.clientHeight) {
+    logEl.scrollTop = logEl.scrollHeight;
+  }
 
-  source.onerror = () => {
-    // The browser retries automatically; nothing to do here.
-  };
+  function appendLines(lines) {
+    if (!lines || !lines.length) return;
+    for (const line of lines) {
+      logEl.textContent += line + "\n";
+      lineCount++;
+    }
+    updateLineStats();
+    if (autoscrollToggle && autoscrollToggle.checked) {
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+  }
+
+  function markFinished(status, errorMsg) {
+    if (isTerminal) return;
+    isTerminal = true;
+    if (pulseEl) pulseEl.remove();
+    badgeEl.className = "badge " + status;
+    statusTextEl.textContent = status;
+
+    if (errorMsg) {
+      errorEl.textContent = errorMsg;
+      errorEl.style.display = "inline-block";
+    }
+
+    if (pollTimer) clearInterval(pollTimer);
+    if (clockTimer) clearInterval(clockTimer);
+  }
+
+  // --- 1. Live SSE Stream ---
+  let source = null;
+  try {
+    source = new EventSource("/jobs/" + jobId + "/stream");
+
+    source.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.lines) {
+          appendLines(data.lines);
+          nextOffset += data.lines.length;
+        }
+      } catch (err) {
+        console.error("SSE parse error", err);
+      }
+    };
+
+    source.addEventListener("done", (event) => {
+      sseDoneReceived = true;
+      try {
+        const data = JSON.parse(event.data);
+        markFinished(data.status);
+      } catch (e) {
+        markFinished("success");
+      }
+      if (source) source.close();
+      // Smooth reload after 600ms so full database row view is rendered
+      setTimeout(() => window.location.reload(), 600);
+    });
+
+    source.onerror = () => {
+      // If SSE disconnects or stalls, fallback polling ensures seamless continuous updates
+    };
+  } catch (err) {
+    console.warn("EventSource unavailable or failed", err);
+  }
+
+  // --- 2. Live Polling Fallback & Status Check (every 2.5s) ---
+  const pollTimer = setInterval(async () => {
+    if (isTerminal) return;
+    try {
+      const res = await fetch("/jobs/{{ job.id }}/poll?offset=" + nextOffset, {
+        headers: { "Accept": "application/json" }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+
+      if (data.status) {
+        badgeEl.className = "badge " + data.status;
+        statusTextEl.textContent = data.status;
+      }
+
+      if (data.lines && data.lines.length > 0) {
+        appendLines(data.lines);
+        nextOffset = data.next_offset || (nextOffset + data.lines.length);
+      }
+
+      if (data.is_terminal) {
+        markFinished(data.status, data.error);
+        if (source) source.close();
+        setTimeout(() => window.location.reload(), 600);
+      }
+    } catch (e) {
+      // Ignore network blips during polling
+    }
+  }, 2500);
+
+  // --- 3. Live Elapsed Time Counter ---
+  const startedAttr = timerEl.getAttribute("data-started");
+  const startTime = startedAttr ? new Date(startedAttr).getTime() : Date.now();
+
+  function formatDuration(ms) {
+    const totalSec = Math.max(0, Math.floor(ms / 1000));
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    if (mins > 0) {
+      return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
+  }
+
+  const clockTimer = setInterval(() => {
+    if (isTerminal) return;
+    const elapsed = Date.now() - startTime;
+    timerEl.textContent = `Running for ${formatDuration(elapsed)}`;
+  }, 1000);
+
 })();
 </script>
 {% endif %}
 {% endblock %}
+
