@@ -33,21 +33,22 @@
   }
 
   async function openAdminer(dbName) {
-    let response;
+    let html;
     try {
-      response = await fetch("/adminer/?username=" + encodeURIComponent(ADMINER_USER), {
+      // Adminer's own login page intentionally responds 403 (not 200) --
+      // that is not a fetch failure, just how it marks "not logged in yet".
+      // response.ok would be false for it, so status is never checked here;
+      // only whether the fetch itself succeeded and what the body contains.
+      const response = await fetch("/adminer/?username=" + encodeURIComponent(ADMINER_USER), {
         credentials: "same-origin",
       });
+      html = await response.text();
     } catch (err) {
       fallback(dbName);
       return;
     }
-    if (!response.ok) {
-      fallback(dbName);
-      return;
-    }
 
-    const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+    const doc = new DOMParser().parseFromString(html, "text/html");
     const usernameField = doc.querySelector('[name="auth[username]"]');
     if (!usernameField || !usernameField.form) {
       // No login form -- already signed in (or an unexpected page shape).
