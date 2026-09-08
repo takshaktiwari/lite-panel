@@ -13,15 +13,31 @@
   "use strict";
 
   const ADMINER_USER = "www-data";
+  // unix_socket authentication ignores whatever password is sent -- MariaDB
+  // approves the login by checking who is actually on the other end of the
+  // socket, not this value. It only has to be non-empty: Adminer refuses an
+  // actually-empty password with "does not support accessing a database
+  // without a password" before the connection is even attempted.
+  const ADMINER_PASSWORD_PLACEHOLDER = "unix-socket-auth-ignores-this";
 
   function fallback(dbName) {
-    window.open("/adminer/?db=" + encodeURIComponent(dbName), "_blank", "noopener");
+    // Adminer looks up a stored login by the "username" query param (see
+    // get_session() in adminer.php) -- without it, even an already-logged-in
+    // session shows the login form again, so this has to be included for
+    // the "already signed in" case this fallback also covers.
+    window.open(
+      "/adminer/?username=" + encodeURIComponent(ADMINER_USER) + "&db=" + encodeURIComponent(dbName),
+      "_blank",
+      "noopener"
+    );
   }
 
   async function openAdminer(dbName) {
     let response;
     try {
-      response = await fetch("/adminer/", { credentials: "same-origin" });
+      response = await fetch("/adminer/?username=" + encodeURIComponent(ADMINER_USER), {
+        credentials: "same-origin",
+      });
     } catch (err) {
       fallback(dbName);
       return;
@@ -45,7 +61,7 @@
       if (el) el.value = value;
     };
     setField("auth[username]", ADMINER_USER);
-    setField("auth[password]", "");
+    setField("auth[password]", ADMINER_PASSWORD_PLACEHOLDER);
     setField("auth[db]", dbName);
 
     form.action = "/adminer/";
