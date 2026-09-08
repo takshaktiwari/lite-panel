@@ -24,7 +24,13 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from app.config import get_settings
-from app.validators import ValidationError, resolve_within, validate_filename
+from app.validators import (
+    ValidationError,
+    resolve_within,
+    validate_chmod_scope,
+    validate_filename,
+    validate_permission_mode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +74,7 @@ class Entry:
     modified: Optional[datetime]
     owner: str
     mode: str
+    permissions: str
     is_symlink: bool
 
     @property
@@ -142,6 +149,7 @@ def _describe(path: Path) -> Entry:
         ),
         owner=owner,
         mode=stat.filemode(info.st_mode) if info else "?",
+        permissions=(f"{stat.S_IMODE(info.st_mode):03o}" if info else "?"),
         is_symlink=is_link,
     )
 
@@ -348,6 +356,63 @@ def move_item(candidate, destination_dir: str, *, new_name: Optional[str] = None
     # (crossing a filesystem boundary), but it is harmless either way.
     _restore_owner_recursive(destination, owner)
     return destination
+
+
+def chmod(candidate, mode: str) -> Path:
+    """Set the permission bits of a single file or folder."""
+    target = resolve(candidate)
+    if target == root():
+        raise ValidationError("The root directory's permissions cannot be changed.")
+    if not target.exists():
+        raise ValidationError("That path does not exist.")
+
+    os.chmod(target, validate_permission_mode(mode))
+    return target
+
+
+def chmod_recursive(candidate, mode: str, scope: str) -> int:
+    """Apply ``mode`` to every file, folder, or both, inside ``candidate``
+    (the directory itself is left untouched -- this is for its contents).
+
+    Walks with ``followlinks=False``: a symlink planted inside a site's own
+    directory must never let a recursive chmod reach a file it doesn't
+    actually own, the same containment concern every other tree-walking
+    operation in this module guards against.
+    """
+    target = resolve(candidate)
+    if not target.is_dir():
+        raise ValidationError("That path is not a directory.")
+
+    numeric_mode = validate_permission_mode(mode)
+    scope = validate_chmod_scope(scope)
+
+    count = 0
+    for dirpath, dirnames, filenames in os.walk(target, followlinks=False):
+        current = Path(dirpath)
+        names = []
+        if scope in ("dirs", "both"):
+            names.extend(dirnames)
+        if scope in ("files", "both"):
+            names.extend(filenames)
+        for name in names:
+            child = current / name
+            if child.is_symlink():
+                continue
+            os.chmod(child, numeric_mode)
+            count += 1
+    return count
+
+
+def bulk_chmod(candidates: List[str], mode: str) -> Tuple[List[str], List[Tuple[str, str]]]:
+    succeeded: List[str] = []
+    failed: List[Tuple[str, str]] = []
+    for candidate in candidates:
+        try:
+            chmod(candidate, mode)
+            succeeded.append(candidate)
+        except (ValidationError, OSError) as exc:
+            failed.append((candidate, str(exc)))
+    return succeeded, failed
 
 
 def bulk_move(candidates: List[str], destination_dir: str) -> Tuple[List[str], List[Tuple[str, str]]]:

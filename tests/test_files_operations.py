@@ -173,6 +173,120 @@ def test_bulk_move_reports_successes_and_failures(sites_root):
 # --------------------------------------------------------------------------
 
 
+# --------------------------------------------------------------------------
+# chmod / chmod_recursive / bulk_chmod
+# --------------------------------------------------------------------------
+
+
+def test_chmod_sets_the_permission_bits(sites_root):
+    import stat
+
+    target = sites_root / "a.txt"
+    target.write_text("a")
+
+    files_service.chmod("a.txt", "600")
+
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+
+
+def test_chmod_rejects_an_invalid_mode(sites_root):
+    (sites_root / "a.txt").write_text("a")
+    with pytest.raises(ValidationError):
+        files_service.chmod("a.txt", "999")
+    with pytest.raises(ValidationError):
+        files_service.chmod("a.txt", "12345")
+
+
+def test_chmod_refuses_the_root_directory(sites_root):
+    with pytest.raises(ValidationError):
+        files_service.chmod(".", "777")
+
+
+def test_chmod_refuses_a_missing_path(sites_root):
+    with pytest.raises(ValidationError):
+        files_service.chmod("missing.txt", "644")
+
+
+def test_bulk_chmod_reports_successes_and_failures(sites_root):
+    (sites_root / "a.txt").write_text("a")
+    (sites_root / "b.txt").write_text("b")
+
+    succeeded, failed = files_service.bulk_chmod(["a.txt", "b.txt", "missing.txt"], "600")
+
+    assert set(succeeded) == {"a.txt", "b.txt"}
+    assert failed[0][0] == "missing.txt"
+
+
+def test_chmod_recursive_applies_only_to_files(sites_root):
+    import stat
+
+    (sites_root / "app" / "nested").mkdir(parents=True)
+    (sites_root / "app" / "file.txt").write_text("x")
+    (sites_root / "app" / "nested" / "inner.txt").write_text("y")
+
+    count = files_service.chmod_recursive("app", "600", "files")
+
+    assert count == 2
+    assert stat.S_IMODE((sites_root / "app" / "file.txt").stat().st_mode) == 0o600
+    assert stat.S_IMODE((sites_root / "app" / "nested" / "inner.txt").stat().st_mode) == 0o600
+    # The folder itself and the nested folder were not touched.
+    assert stat.S_IMODE((sites_root / "app" / "nested").stat().st_mode) != 0o600
+
+
+def test_chmod_recursive_applies_only_to_dirs(sites_root):
+    import stat
+
+    (sites_root / "app" / "nested").mkdir(parents=True)
+    (sites_root / "app" / "file.txt").write_text("x")
+
+    count = files_service.chmod_recursive("app", "700", "dirs")
+
+    assert count == 1
+    assert stat.S_IMODE((sites_root / "app" / "nested").stat().st_mode) == 0o700
+    assert stat.S_IMODE((sites_root / "app" / "file.txt").stat().st_mode) != 0o700
+
+
+def test_chmod_recursive_applies_to_both(sites_root):
+    (sites_root / "app" / "nested").mkdir(parents=True)
+    (sites_root / "app" / "file.txt").write_text("x")
+
+    count = files_service.chmod_recursive("app", "750", "both")
+
+    assert count == 2
+
+
+def test_chmod_recursive_does_not_follow_a_symlinked_directory_outside_the_root(sites_root):
+    """A symlink planted inside a site pointing outside the sites root must
+    not let a recursive chmod reach files it doesn't own."""
+    import os
+    import stat
+
+    outside = sites_root.parent / "outside"
+    outside.mkdir()
+    outside_file = outside / "secret.txt"
+    outside_file.write_text("secret")
+    os.chmod(outside_file, 0o644)
+
+    (sites_root / "app").mkdir()
+    os.symlink(outside, sites_root / "app" / "escape")
+
+    files_service.chmod_recursive("app", "600", "both")
+
+    assert stat.S_IMODE(outside_file.stat().st_mode) == 0o644
+
+
+def test_chmod_recursive_rejects_a_file_target(sites_root):
+    (sites_root / "a.txt").write_text("a")
+    with pytest.raises(ValidationError):
+        files_service.chmod_recursive("a.txt", "644", "files")
+
+
+def test_chmod_recursive_rejects_an_invalid_scope(sites_root):
+    (sites_root / "app").mkdir()
+    with pytest.raises(ValidationError):
+        files_service.chmod_recursive("app", "644", "everything")
+
+
 def test_bulk_delete_reports_successes_and_failures_separately(sites_root):
     (sites_root / "a.txt").write_text("a")
     (sites_root / "b.txt").write_text("b")

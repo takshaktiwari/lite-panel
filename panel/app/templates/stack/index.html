@@ -107,4 +107,82 @@
   <p class="muted">No additional versions available.</p>
   {% endif %}
 </section>
+
+<section class="panel">
+  <h2>Common tools</h2>
+  <p class="muted">General-purpose packages most apps end up needing. Install or remove each independently — nothing here affects the components above.</p>
+
+  <table class="table">
+    <thead><tr><th>Tool</th><th>Status</th><th>Version</th><th></th></tr></thead>
+    <tbody>
+      {% for t in tools %}
+      <tr>
+        <td>
+          <strong>{{ t.name }}</strong>
+          <div class="muted">{{ t.description }}</div>
+        </td>
+        <td>
+          <span class="dot {{ 'ok' if t.installed else 'off' }}"></span>
+          {% if t.installed %}installed{% else %}not installed{% endif %}
+        </td>
+        <td class="muted">{{ t.versions | join(', ') if t.versions else '—' }}</td>
+        <td style="text-align:right;">
+          {% if t.installed %}
+          <form method="post" action="/stack/uninstall" style="display:inline;">
+            {{ ui.csrf(session) }}
+            <input type="hidden" name="key" value="{{ t.key }}">
+            <button class="button" type="submit" data-confirm="Remove {{ t.name }}?">Remove</button>
+          </form>
+          {% else %}
+          <form method="post" action="/stack/install" style="display:inline;">
+            {{ ui.csrf(session) }}
+            <input type="hidden" name="key" value="{{ t.key }}">
+            <button class="button primary" type="submit">Install</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <td>
+          <strong>Node.js</strong>
+          <div class="muted">JavaScript runtime, npm included. One version runs system-wide at a time.</div>
+        </td>
+        <td>
+          <span class="dot {{ 'ok' if node_installed else 'off' }}"></span>
+          {% if node_installed %}installed{% else %}not installed{% endif %}
+        </td>
+        <td class="muted">{{ node_installed | join(', ') if node_installed else '—' }}</td>
+        <td style="text-align:right;">
+          {% if node_installed %}
+          <form method="post" action="/stack/uninstall" style="display:inline;">
+            {{ ui.csrf(session) }}
+            <input type="hidden" name="key" value="nodejs">
+            <input type="hidden" name="version" value="{{ node_installed[0] }}">
+            <button class="button" type="submit" data-confirm="Remove Node.js {{ node_installed[0] }}?">Remove</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  {% if node_available %}
+  <form method="post" action="/stack/install" style="display:flex;gap:10px;align-items:flex-end;margin-top:12px;">
+    {{ ui.csrf(session) }}
+    <input type="hidden" name="key" value="nodejs">
+    <div style="flex:1;">
+      <label for="node-version">{{ 'Switch Node.js version' if node_installed else 'Install Node.js' }}</label>
+      <select name="version" id="node-version">
+        {% for version in node_available %}
+        <option value="{{ version }}">Node.js {{ version }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="button primary" type="submit" style="margin-bottom:14px;">{{ 'Switch' if node_installed else 'Install' }}</button>
+  </form>
+  {% elif not node_installed %}
+  <p class="muted" style="margin-top:12px;">No Node.js versions available right now.</p>
+  {% endif %}
+</section>
 {% endblock %}

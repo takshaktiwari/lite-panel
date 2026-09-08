@@ -113,6 +113,98 @@ def test_extract_rejects_zip_slip_end_to_end(signed_in, sites_root):
 
 
 # --------------------------------------------------------------------------
+# Permissions
+# --------------------------------------------------------------------------
+
+
+def test_chmod_updates_the_permission_bits(signed_in, sites_root):
+    import stat
+
+    (sites_root / "a.txt").write_text("a")
+    token = _csrf(signed_in)
+
+    response = signed_in.post(
+        "/files/chmod",
+        data={"path": ".", "target": "a.txt", "mode": "600", "csrf_token": token},
+    )
+    assert response.status_code == 303
+    assert stat.S_IMODE((sites_root / "a.txt").stat().st_mode) == 0o600
+
+
+def test_chmod_rejects_an_invalid_mode(signed_in, sites_root):
+    (sites_root / "a.txt").write_text("a")
+    token = _csrf(signed_in)
+
+    response = signed_in.post(
+        "/files/chmod",
+        data={"path": ".", "target": "a.txt", "mode": "not-a-mode", "csrf_token": token},
+    )
+    assert response.status_code == 303
+    assert "error=" in response.headers["location"]
+
+
+def test_bulk_chmod_updates_every_selected_item(signed_in, sites_root):
+    import stat
+
+    (sites_root / "a.txt").write_text("a")
+    (sites_root / "b.txt").write_text("b")
+    token = _csrf(signed_in)
+
+    response = signed_in.post(
+        "/files/bulk-chmod",
+        data={"path": ".", "target": ["a.txt", "b.txt"], "mode": "600", "csrf_token": token},
+    )
+    assert response.status_code == 303
+    assert stat.S_IMODE((sites_root / "a.txt").stat().st_mode) == 0o600
+    assert stat.S_IMODE((sites_root / "b.txt").stat().st_mode) == 0o600
+
+
+def test_bulk_chmod_with_nothing_selected_is_a_clean_no_op(signed_in, sites_root):
+    token = _csrf(signed_in)
+    response = signed_in.post(
+        "/files/bulk-chmod", data={"path": ".", "mode": "644", "csrf_token": token}
+    )
+    assert response.status_code == 303
+    assert "error=" in response.headers["location"]
+
+
+def test_chmod_recursive_updates_files_inside_a_folder(signed_in, sites_root):
+    import stat
+
+    (sites_root / "app" / "nested").mkdir(parents=True)
+    (sites_root / "app" / "file.txt").write_text("x")
+    (sites_root / "app" / "nested" / "inner.txt").write_text("y")
+    token = _csrf(signed_in)
+
+    response = signed_in.post(
+        "/files/chmod-recursive",
+        data={
+            "path": ".",
+            "target": "app",
+            "mode": "600",
+            "scope": "files",
+            "csrf_token": token,
+        },
+    )
+    assert response.status_code == 303
+    assert "notice=" in response.headers["location"]
+    assert stat.S_IMODE((sites_root / "app" / "file.txt").stat().st_mode) == 0o600
+    assert stat.S_IMODE((sites_root / "app" / "nested" / "inner.txt").stat().st_mode) == 0o600
+
+
+def test_chmod_recursive_rejects_a_file_target(signed_in, sites_root):
+    (sites_root / "a.txt").write_text("a")
+    token = _csrf(signed_in)
+
+    response = signed_in.post(
+        "/files/chmod-recursive",
+        data={"path": ".", "target": "a.txt", "mode": "644", "scope": "files", "csrf_token": token},
+    )
+    assert response.status_code == 303
+    assert "error=" in response.headers["location"]
+
+
+# --------------------------------------------------------------------------
 # Bulk actions
 # --------------------------------------------------------------------------
 

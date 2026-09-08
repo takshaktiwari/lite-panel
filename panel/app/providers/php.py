@@ -50,6 +50,9 @@ class PhpProvider(Provider):
 
     # -- discovery ---------------------------------------------------------
 
+    def validate_version(self, value: str) -> str:
+        return validate_php_version(value)
+
     def available_versions(self) -> List[str]:
         """PHP versions genuinely installable on this machine right now.
 

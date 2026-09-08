@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import sessionmaker
 
 from app.config import get_settings
-from app.models import Base, CronJob
+from app.models import Base, CronJob, FtpAccount
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_additive_columns()
     _ensure_cron_site_nullable()
+    _ensure_ftp_account_site_nullable()
     logger.info("database ready at %s", settings.sqlalchemy_url)
 
 
@@ -105,6 +106,33 @@ def _ensure_cron_site_nullable() -> None:
             f"INSERT INTO cron_jobs ({columns}) SELECT {columns} FROM cron_jobs_old"
         )
         conn.exec_driver_sql("DROP TABLE cron_jobs_old")
+
+
+def _ensure_ftp_account_site_nullable() -> None:
+    """``ftp_accounts.site_id`` started out NOT NULL -- every FTP account was
+    a site's own system user. Standalone accounts (any folder, not tied to a
+    site) need it nullable; same rebuild-in-place approach as
+    :func:`_ensure_cron_site_nullable`, for the same reason (SQLite has no
+    ALTER COLUMN). A fresh install never reaches this -- create_all() already
+    made the table with today's schema.
+    """
+    with engine.begin() as conn:
+        info = list(conn.exec_driver_sql("PRAGMA table_info(ftp_accounts)"))
+        if not info:
+            return  # table doesn't exist yet; create_all() will have made it nullable
+
+        site_col = next((row for row in info if row[1] == "site_id"), None)
+        if site_col is None or not site_col[3]:
+            return  # already nullable
+
+        logger.info("rebuilding ftp_accounts so site_id can be null (standalone accounts)")
+        columns = ", ".join(row[1] for row in info)
+        conn.exec_driver_sql("ALTER TABLE ftp_accounts RENAME TO ftp_accounts_old")
+        FtpAccount.__table__.create(bind=conn)
+        conn.exec_driver_sql(
+            f"INSERT INTO ftp_accounts ({columns}) SELECT {columns} FROM ftp_accounts_old"
+        )
+        conn.exec_driver_sql("DROP TABLE ftp_accounts_old")
 
 
 @contextmanager

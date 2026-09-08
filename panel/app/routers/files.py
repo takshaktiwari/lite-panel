@@ -245,6 +245,43 @@ def move(
     return _back(path, notice=f"Moved to {moved.name}")
 
 
+@router.post("/chmod", dependencies=[Depends(csrf_protect)])
+def chmod(
+    path: str = Form(...),
+    target: str = Form(...),
+    mode: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    try:
+        files_service.chmod(target, mode)
+    except (ValidationError, OSError) as exc:
+        return _back(path, error=str(exc))
+
+    _audit(db, session, "files.chmod", f"{target} -> {mode}")
+    return _back(path, notice=f"Updated permissions on {target}")
+
+
+@router.post("/chmod-recursive", dependencies=[Depends(csrf_protect)])
+def chmod_recursive(
+    path: str = Form(...),
+    target: str = Form(...),
+    mode: str = Form(...),
+    scope: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """Apply a permission to every file, folder, or both inside ``target`` --
+    the "select a whole tree at once" counterpart to the row-level /chmod."""
+    try:
+        count = files_service.chmod_recursive(target, mode, scope)
+    except (ValidationError, OSError) as exc:
+        return _back(path, error=str(exc))
+
+    _audit(db, session, "files.chmod", f"{target}/* ({scope}) -> {mode}")
+    return _back(path, notice=f"Updated permissions on {count} item(s) inside {target}")
+
+
 @router.post("/archive", dependencies=[Depends(csrf_protect)])
 def archive_one(
     path: str = Form(...),
@@ -302,6 +339,24 @@ def bulk_delete(
         _audit(db, session, "files.delete", name)
 
     return _back(path, **_bulk_result(succeeded, failed, verb="Deleted"))
+
+
+@router.post("/bulk-chmod", dependencies=[Depends(csrf_protect)])
+def bulk_chmod(
+    path: str = Form(...),
+    target: List[str] = Form(default=[]),
+    mode: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    if not target:
+        return _back(path, error="Nothing was selected.")
+
+    succeeded, failed = files_service.bulk_chmod(target, mode)
+    for name in succeeded:
+        _audit(db, session, "files.chmod", f"{name} -> {mode}")
+
+    return _back(path, **_bulk_result(succeeded, failed, verb="Updated permissions on"))
 
 
 @router.post("/bulk-copy", dependencies=[Depends(csrf_protect)])

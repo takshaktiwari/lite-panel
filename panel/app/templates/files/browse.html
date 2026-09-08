@@ -22,6 +22,7 @@
   <input type="hidden" name="path" value="{{ current }}">
   <input type="hidden" name="destination" value="">
   <input type="hidden" name="archive_name" value="">
+  <input type="hidden" name="mode" value="">
 </form>
 
 <div class="bulk-toolbar">
@@ -68,6 +69,8 @@
           data-prompt-default="{{ current_abs }}">📋</button>
   <button class="icon-button" type="submit" form="bulk-form" formaction="/files/bulk-archive" title="Archive selected as .zip"
           data-prompt-field="archive_name" data-prompt-message="Archive name" data-prompt-default="archive">🗜</button>
+  <button class="icon-button" type="submit" form="bulk-form" formaction="/files/bulk-chmod" title="Change permissions of selected"
+          data-prompt-field="mode" data-prompt-message="New permissions for the selected item(s), e.g. 644 or 755" data-prompt-default="644">🔒</button>
   <button class="icon-button danger" type="submit" form="bulk-form" formaction="/files/bulk-delete" title="Delete selected"
           data-confirm="Delete the selected item(s)?">🗑</button>
 </div>
@@ -82,7 +85,7 @@
     <thead>
       <tr>
         <th class="checkbox-cell"><input type="checkbox" id="select-all" style="width:auto;margin:0;"></th>
-        <th>Name</th><th>Size</th><th>Modified</th><th>Owner</th><th></th>
+        <th>Name</th><th>Size</th><th>Modified</th><th>Owner</th><th>Perms</th><th></th>
       </tr>
     </thead>
     <tbody>
@@ -105,6 +108,7 @@
         <td class="muted">{{ entry.size_display }}</td>
         <td class="muted">{{ entry.modified.strftime('%Y-%m-%d %H:%M') if entry.modified else '—' }}</td>
         <td class="muted">{{ entry.owner }}</td>
+        <td class="muted" style="font-family:monospace;">{{ entry.permissions }}</td>
         <td style="text-align:right;">
           <details class="dropdown">
             <summary class="icon-button" title="Actions">⋮</summary>
@@ -156,6 +160,16 @@
                   <span class="icon">✏️</span> Rename
                 </button>
               </form>
+              <form method="post" action="/files/chmod">
+                {{ ui.csrf(session) }}
+                <input type="hidden" name="path" value="{{ current }}">
+                <input type="hidden" name="target" value="{{ entry.relative }}">
+                <input type="hidden" name="mode" value="">
+                <button class="dropdown-item" type="submit"
+                        data-prompt-field="mode" data-prompt-message="New permissions for {{ entry.name }}, e.g. 644 or 755" data-prompt-default="{{ entry.permissions }}">
+                  <span class="icon">🔒</span> Permissions
+                </button>
+              </form>
               <form method="post" action="/files/delete">
                 {{ ui.csrf(session) }}
                 <input type="hidden" name="path" value="{{ current }}">
@@ -164,6 +178,12 @@
                   <span class="icon">🗑</span> Delete
                 </button>
               </form>
+              {% if entry.is_dir %}
+              <button type="button" class="dropdown-item" data-chmod-dialog
+                      data-target="{{ entry.relative }}" data-name="{{ entry.name }}">
+                <span class="icon">🔒</span> Permissions inside…
+              </button>
+              {% endif %}
             </div>
           </details>
         </td>
@@ -175,6 +195,30 @@
   <p class="muted empty">This directory is empty.</p>
   {% endif %}
 </section>
+
+{# One shared dialog for every folder's "Permissions inside…" action --
+   file-manager.js fills in the target/name when a row opens it. #}
+<dialog id="chmod-dialog" class="dialog">
+  <form method="post" action="/files/chmod-recursive">
+    {{ ui.csrf(session) }}
+    <input type="hidden" name="path" value="{{ current }}">
+    <input type="hidden" name="target" value="">
+    <h2>Set permissions inside <span id="chmod-dialog-name"></span></h2>
+    <label for="chmod-dialog-mode">Permission (3 digits, e.g. 644 or 755)</label>
+    <input type="text" id="chmod-dialog-mode" name="mode" placeholder="755"
+           pattern="[0-7]{3}" maxlength="3" required>
+    <label for="chmod-dialog-scope">Apply to</label>
+    <select id="chmod-dialog-scope" name="scope">
+      <option value="files">Files only</option>
+      <option value="dirs">Folders only</option>
+      <option value="both">Files &amp; folders</option>
+    </select>
+    <div class="dialog-actions">
+      <button type="button" class="button" data-dialog-close>Cancel</button>
+      <button type="submit" class="button primary">Apply</button>
+    </div>
+  </form>
+</dialog>
 
 <script src="/static/file-manager.js"></script>
 {% endblock %}

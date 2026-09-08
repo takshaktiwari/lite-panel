@@ -27,6 +27,7 @@ class ProviderStatus:
     service_active: bool = False
     service_installed: bool = False
     detail: str = ""
+    description: str = ""
 
 
 class Provider(ABC):
@@ -42,12 +43,23 @@ class Provider(ABC):
     multi_version: bool = False
     #: systemd unit, when the component has one.
     service_name: Optional[str] = None
+    #: Grouping for the Stack page: "infra" (nginx, PHP, MariaDB, ...) versus
+    #: "tools" (git, Composer, ...) -- general-purpose packages an app might
+    #: need that aren't part of the panel's own serving stack.
+    category: str = "infra"
 
     # -- discovery ---------------------------------------------------------
 
     def available_versions(self) -> List[str]:
         """Versions installable on this machine, discovered at runtime."""
         return []
+
+    def validate_version(self, value: str) -> str:
+        """Normalise/validate a version string before it reaches
+        install()/uninstall(). The default passes it through unchanged;
+        a multi_version provider should override this with a real check
+        (see PhpProvider, NodeProvider)."""
+        return value
 
     @abstractmethod
     def installed_versions(self) -> List[str]:
@@ -89,6 +101,7 @@ class Provider(ABC):
             service_active=service.active,
             service_installed=service.installed,
             detail=service.detail,
+            description=self.description,
         )
 
     def restart_service(self, ctx) -> None:

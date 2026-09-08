@@ -28,15 +28,21 @@ def stack_page(
     php = get_provider("php")
     installed_php = php.installed_versions()
 
+    node = get_provider("nodejs")
+    installed_node = node.installed_versions()
+
     return render(
         request,
         "stack/index.html",
         session=session,
         user=session.user,
-        providers=[p.status() for p in all_providers()],
+        providers=[p.status() for p in all_providers() if p.category == "infra"],
+        tools=[p.status() for p in all_providers() if p.category == "tools" and p.key != "nodejs"],
         php_available=[v for v in php.available_versions() if v not in installed_php],
         php_installed=installed_php,
         php_repo=php.repository_status(),
+        node_available=[v for v in node.available_versions() if v not in installed_node],
+        node_installed=installed_node,
     )
 
 
@@ -58,7 +64,7 @@ def install(
         return _back(error=f"Choose a {provider.name} version to install.")
     if version:
         try:
-            version = validate_php_version(version) if key == "php" else version
+            version = provider.validate_version(version)
         except ValidationError as exc:
             return _back(error=str(exc))
 
@@ -66,13 +72,14 @@ def install(
     # was submitted from: a version offered a minute ago (or in another
     # browser tab) may no longer be real, and this is what turns that into a
     # clean redirect instead of a job that runs apt-get and fails loudly.
-    if key == "php" and version:
+    if provider.multi_version and version:
         really_available = provider.available_versions()
         if version not in really_available:
+            fallback = "none yet — add the PHP repository below" if key == "php" else "none"
             return _back(
                 error=(
-                    f"PHP {version} is not installable on this server right now. "
-                    f"Available: {', '.join(really_available) or 'none yet — add the PHP repository below'}."
+                    f"{provider.name} {version} is not installable on this server right now. "
+                    f"Available: {', '.join(really_available) or fallback}."
                 )
             )
 

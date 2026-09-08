@@ -277,25 +277,28 @@ def change_database_password(ctx) -> None:
 # --------------------------------------------------------------------------
 
 
-@register("ftp.enable")
-def enable_ftp(ctx) -> None:
+@register("ftp.create")
+def create_ftp_account(ctx) -> None:
     with session_scope() as db:
-        site = db.get(Site, ctx.payload["site_id"])
-        if site is None:
-            raise JobFailed("That site no longer exists.")
         try:
-            ftp_service.enable_ftp(db, ctx, site, ctx.payload["password"])
+            ftp_service.create_account(
+                db,
+                ctx,
+                username=ctx.payload["username"],
+                password=ctx.payload["password"],
+                path=ctx.payload["path"],
+            )
         except (ValidationError, RuntimeError) as exc:
             raise _fail(exc) from exc
 
 
-@register("ftp.disable")
-def disable_ftp(ctx) -> None:
+@register("ftp.delete")
+def delete_ftp_account(ctx) -> None:
     with session_scope() as db:
         account = db.get(FtpAccount, ctx.payload["account_id"])
         if account is None:
             raise JobFailed("That FTP account no longer exists.")
-        ftp_service.disable_ftp(db, ctx, account)
+        ftp_service.delete_account(db, ctx, account)
 
 
 @register("ftp.password")

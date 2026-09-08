@@ -252,21 +252,30 @@ class SiteDatabase(TimestampMixin, Base):
 
 
 class FtpAccount(TimestampMixin, Base):
-    """FTP access for a site.
+    """One FTP login, scoped to one folder under the sites root.
 
-    Normally this *is* the site's system user, which is why there is no ACL
-    reconciliation anywhere in this codebase.
+    Two kinds, told apart by whether ``site_id`` is set:
+
+    - Linked to a site (``site_id`` set): this *is* that site's own system
+      user, given a password. ``home_dir`` is always that site's exact
+      ``root_dir``. No ACL reconciliation needed -- ownership is already
+      right.
+    - Standalone (``site_id`` null): a dedicated system user created just
+      for this account, which owns ``home_dir`` outright. This is what lets
+      an account point at any folder -- a site subfolder, or nothing to do
+      with a site at all -- at the cost of a folder ever having more than
+      one account: ownership isn't shared, so it's first-come.
     """
 
     __tablename__ = "ftp_accounts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    site_id: Mapped[Optional[int]] = mapped_column(ForeignKey("sites.id"), nullable=True)
     username: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     home_dir: Mapped[str] = mapped_column(String(255), nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    site: Mapped[Site] = relationship(back_populates="ftp_accounts")
+    site: Mapped[Optional[Site]] = relationship(back_populates="ftp_accounts")
 
 
 class CronJob(TimestampMixin, Base):

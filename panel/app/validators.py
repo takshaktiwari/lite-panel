@@ -198,6 +198,19 @@ def validate_php_version(value: str) -> str:
     return value
 
 
+_NODE_MAJOR = re.compile(r"^[1-9][0-9]?$")
+
+
+def validate_node_major(value: str) -> str:
+    """A Node.js major version number, e.g. "20" -- the granularity
+    NodeSource actually lets an operator pick (a specific patch version is
+    not selectable, only the major release line)."""
+    value = _clean(value, "Node.js version")
+    if not _NODE_MAJOR.match(value):
+        raise ValidationError("Node.js version must be a major version number, e.g. 20.")
+    return value
+
+
 def validate_package_name(value: str) -> str:
     """An apt package name.
 
@@ -299,6 +312,31 @@ def validate_filename(value: str) -> str:
         raise ValidationError("File name cannot contain a path separator.")
     if len(value) > 255:
         raise ValidationError("File name is too long.")
+    return value
+
+
+_PERMISSION_MODE = re.compile(r"^[0-7]{3}$")
+CHMOD_SCOPES = frozenset({"files", "dirs", "both"})
+
+
+def validate_permission_mode(value: str) -> int:
+    """A chmod mode like "644" or "755", returned as the octal int
+    ``os.chmod`` expects.
+
+    Deliberately exactly 3 digits: no setuid/setgid/sticky bit, since nothing
+    a site's own files need justifies a panel-driven way to set those.
+    """
+    value = _clean(value, "permission")
+    if not _PERMISSION_MODE.match(value):
+        raise ValidationError("Permission must be 3 digits, e.g. 644 or 755.")
+    return int(value, 8)
+
+
+def validate_chmod_scope(value: str) -> str:
+    """Which entries a recursive permission change applies to."""
+    value = _clean(value, "scope")
+    if value not in CHMOD_SCOPES:
+        raise ValidationError("Scope must be one of: files, folders, both.")
     return value
 
 

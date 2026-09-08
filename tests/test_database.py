@@ -93,3 +93,82 @@ def test_ensure_cron_site_nullable_is_a_no_op_when_the_table_does_not_exist_yet(
         conn.exec_driver_sql("DROP TABLE cron_jobs")
 
     database._ensure_cron_site_nullable()  # must not raise
+
+
+# --------------------------------------------------------------------------
+# _ensure_ftp_account_site_nullable -- same rebuild-in-place shape, for
+# standalone FTP accounts (see FtpAccount's docstring in app.models)
+# --------------------------------------------------------------------------
+
+
+def _create_legacy_ftp_accounts_table(conn):
+    """The pre-standalone-accounts schema: site_id NOT NULL."""
+    conn.exec_driver_sql("DROP TABLE IF EXISTS ftp_accounts")
+    conn.exec_driver_sql(
+        """
+        CREATE TABLE ftp_accounts (
+            id INTEGER PRIMARY KEY,
+            created_at DATETIME NOT NULL,
+            site_id INTEGER NOT NULL,
+            username VARCHAR(32) NOT NULL,
+            home_dir VARCHAR(255) NOT NULL,
+            is_enabled BOOLEAN NOT NULL
+        )
+        """
+    )
+
+
+def _ftp_site_id_is_not_null(conn) -> bool:
+    info = list(conn.exec_driver_sql("PRAGMA table_info(ftp_accounts)"))
+    site_col = next(row for row in info if row[1] == "site_id")
+    return bool(site_col[3])
+
+
+def test_ensure_ftp_account_site_nullable_relaxes_an_old_table(db):
+    site = Site(
+        name="demo",
+        domain="demo.example.com",
+        system_user="site_demo",
+        root_dir="/var/www/demo",
+        webroot="/var/www/demo",
+    )
+    db.add(site)
+    db.commit()
+
+    with database.engine.begin() as conn:
+        _create_legacy_ftp_accounts_table(conn)
+        conn.exec_driver_sql(
+            "INSERT INTO ftp_accounts (created_at, site_id, username, home_dir, is_enabled) "
+            f"VALUES ('2026-01-01 00:00:00', {site.id}, 'site_demo', '/var/www/demo', 1)"
+        )
+        assert _ftp_site_id_is_not_null(conn) is True
+
+    database._ensure_ftp_account_site_nullable()
+
+    with database.engine.begin() as conn:
+        assert _ftp_site_id_is_not_null(conn) is False
+        rows = list(conn.exec_driver_sql("SELECT username, home_dir FROM ftp_accounts"))
+        assert rows == [("site_demo", "/var/www/demo")]
+
+        # And a NULL site_id -- a standalone account -- is now accepted.
+        conn.exec_driver_sql(
+            "INSERT INTO ftp_accounts (created_at, site_id, username, home_dir, is_enabled) "
+            "VALUES ('2026-01-01 00:00:00', NULL, 'bob', '/var/www/uploads', 1)"
+        )
+
+
+def test_ensure_ftp_account_site_nullable_is_a_no_op_on_a_current_table(db):
+    with database.engine.begin() as conn:
+        assert _ftp_site_id_is_not_null(conn) is False
+
+    database._ensure_ftp_account_site_nullable()  # must not raise or drop data
+
+    with database.engine.begin() as conn:
+        assert _ftp_site_id_is_not_null(conn) is False
+
+
+def test_ensure_ftp_account_site_nullable_is_a_no_op_when_the_table_does_not_exist_yet(db):
+    with database.engine.begin() as conn:
+        conn.exec_driver_sql("DROP TABLE ftp_accounts")
+
+    database._ensure_ftp_account_site_nullable()  # must not raise
