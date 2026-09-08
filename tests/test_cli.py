@@ -72,6 +72,55 @@ def test_create_admin_reads_from_stdin(tmp_path, monkeypatch, capsys):
         _cfg.get_settings.cache_clear()
 
 
+def test_reset_password_auto_generates(tmp_path, monkeypatch, capsys):
+    import io
+
+    db_url = f"sqlite:///{tmp_path}/reset-test.db"
+    monkeypatch.setenv("LITE_PANEL_DATABASE_URL", db_url)
+
+    from app import config as _cfg
+    from app.database import session_scope
+    from app.models import AdminUser
+
+    _cfg.get_settings.cache_clear()
+    try:
+        # 1. Create admin first
+        monkeypatch.setattr("sys.stdin", io.StringIO("InitialPassword123!\n"))
+        assert main(["create-admin", "--username", "adminuser"]) == 0
+
+        # 2. Reset without password argument or input (auto-generates)
+        monkeypatch.setattr("sys.stdin", io.StringIO(""))
+        rc = main(["reset-password", "--username", "adminuser"])
+        assert rc == 0
+
+        out = capsys.readouterr().out
+        assert "Password reset successful" in out
+        assert "New generated password:" in out
+    finally:
+        _cfg.get_settings.cache_clear()
+
+
+def test_reset_password_explicit_argument(tmp_path, monkeypatch, capsys):
+    db_url = f"sqlite:///{tmp_path}/reset-test2.db"
+    monkeypatch.setenv("LITE_PANEL_DATABASE_URL", db_url)
+
+    from app import config as _cfg
+
+    _cfg.get_settings.cache_clear()
+    try:
+        import io
+        monkeypatch.setattr("sys.stdin", io.StringIO("InitialPassword123!\n"))
+        assert main(["create-admin", "--username", "adminuser2"]) == 0
+
+        rc = main(["reset-password", "--username", "adminuser2", "--password", "CustomNewPass1234!"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Password reset successful" in out
+    finally:
+        _cfg.get_settings.cache_clear()
+
+
+
 # ---------------------------------------------------------------------------
 # rebuild — in-process path (app not reachable)
 # ---------------------------------------------------------------------------

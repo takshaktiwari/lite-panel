@@ -445,3 +445,74 @@ def bootstrap(ctx) -> None:
 
     ctx.log("")
     ctx.log("Setup complete.")
+
+
+@register("panel.update")
+def update_panel(ctx) -> None:
+    """Self-update Lite-Panel from GitHub.
+
+    1. Fetches latest git tags and commits from origin.
+    2. Checks out the requested release tag (or latest origin/main).
+    3. Upgrades python requirements in the panel's virtualenv.
+    4. Schedules a service restart via systemd or detached nohup.
+    """
+    from app.config import get_settings
+    from app.services.version import clear_cache
+
+    settings = get_settings()
+    install_dir = settings.install_dir
+    target_tag = ctx.payload.get("tag")
+
+    ctx.log(f"Starting Lite-Panel update (target: {target_tag or 'latest'})")
+
+    if not install_dir.is_dir() or not (install_dir / ".git").is_dir():
+        # Fall back to repo root in development mode if applicable
+        from app.config import REPO_ROOT
+        if (REPO_ROOT / ".git").is_dir():
+            install_dir = REPO_ROOT
+        else:
+            raise _fail(RuntimeError(f"Install directory {install_dir} is not a git repository."))
+
+    ctx.log(f"Updating repository at {install_dir}")
+
+    # 1. Fetch tags and branches
+    ctx.check(["git", "fetch", "--tags", "origin"], cwd=install_dir)
+
+    # 2. Checkout target tag or pull main
+    if target_tag:
+        ctx.log(f"Checking out tag: {target_tag}")
+        ctx.check(["git", "checkout", target_tag], cwd=install_dir)
+    else:
+        ctx.log("Pulling latest from origin/main")
+        ctx.check(["git", "pull", "--ff-only", "origin", "main"], cwd=install_dir)
+
+    # 3. Update dependencies
+    venv_pip = install_dir / "venv" / "bin" / "pip"
+    req_file = install_dir / "panel" / "requirements.txt"
+    if venv_pip.is_file() and req_file.is_file():
+        ctx.log("Updating Python dependencies...")
+        ctx.check([str(venv_pip), "install", "--quiet", "-r", str(req_file)])
+
+    # Clear version cache so the updated version immediately reflects
+    clear_cache()
+
+    ctx.log("")
+    ctx.log("Lite-Panel code and dependencies updated successfully.")
+    ctx.log("Scheduling service restart...")
+
+    # Flush all output to db before scheduling restart
+    ctx.flush()
+
+    # 4. Schedule delayed restart so this job finishes and flushes cleanly
+    try:
+        from app.shell import run
+        # Use nohup + sleep 2 so the HTTP connection and job status flush first
+        run(
+            ["nohup", "sh", "-c", "sleep 2 && systemctl restart lite-panel.service >/dev/null 2>&1 &"],
+            check=False,
+            timeout=5,
+        )
+        ctx.log("Service restart scheduled in 2 seconds.")
+    except Exception as exc:  # noqa: BLE001
+        ctx.log(f"Note: Could not automatically restart service: {exc}")
+

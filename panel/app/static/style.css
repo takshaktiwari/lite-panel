@@ -353,6 +353,11 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 }
 .button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .button:hover { filter: brightness(.97); }
+.button.button-sm {
+  padding: 4px 10px;
+  font-size: 12.5px;
+  border-radius: 5px;
+}
 
 .link-button {
   background: none;
@@ -383,6 +388,21 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   background: color-mix(in srgb, var(--warn) 10%, transparent);
   color: var(--warn);
 }
+.alert-update {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+}
+
+.update-nav-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
 
 /* --- login ------------------------------------------------------------- */
 

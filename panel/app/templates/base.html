@@ -29,7 +29,12 @@
       <a href="/terminal" class="{{ 'active' if request.url.path.startswith('/terminal') }}">Terminal</a>
       <a href="/logs" class="{{ 'active' if request.url.path.startswith('/logs') }}">Logs</a>
       <a href="/monitor" class="{{ 'active' if request.url.path.startswith('/monitor') }}">Monitor</a>
-      <a href="/setup" class="{{ 'active' if request.url.path.startswith('/setup') }}">Setup</a>
+      <a href="/setup" class="{{ 'active' if request.url.path.startswith('/setup') }}" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Setup</span>
+        {% if update_info and update_info.update_available %}
+        <span class="update-nav-dot" title="Update available: {{ update_info.latest_version }}"></span>
+        {% endif %}
+      </a>
     </nav>
 
     <div class="sidebar-foot">
@@ -56,6 +61,17 @@
   </aside>
 
   <main class="content">
+    {% if update_info and update_info.update_available and request.url.path != '/setup' %}
+    <div class="alert alert-update">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;width:100%;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:16px;">🚀</span>
+          <span><strong>Lite-Panel update available!</strong> Version <strong>{{ update_info.latest_version }}</strong> is ready (running {{ update_info.current_version }}).</span>
+        </div>
+        <a href="/setup#update-section" class="button button-sm primary">View &amp; Update</a>
+      </div>
+    </div>
+    {% endif %}
     {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
     {% if notice %}<div class="alert alert-notice">{{ notice }}</div>{% endif %}
     {% block content %}{% endblock %}

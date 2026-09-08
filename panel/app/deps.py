@@ -84,12 +84,17 @@ def render(
     **kwargs,
 ):
     """Render a template with the values every page needs."""
+    from app.services.version import check_for_updates
+
     payload = {**(context or {}), **kwargs}
     payload.setdefault("session", None)
     payload.setdefault("user", None)
+    # Cached check for Lite-Panel self-update (fast memory read)
+    payload.setdefault("update_info", check_for_updates())
     # Messages survive a redirect via the query string. Jinja escapes them on
     # the way out, so a crafted link can show a misleading notice at worst,
     # never inject markup.
     payload.setdefault("notice", request.query_params.get("notice"))
     payload.setdefault("error", request.query_params.get("error"))
     return templates.TemplateResponse(request, template, payload, status_code=status_code)
+

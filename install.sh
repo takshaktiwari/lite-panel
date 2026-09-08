@@ -343,9 +343,23 @@ ADMIN_PASSWORD=$(openssl rand -base64 20 | tr -d '=+/')
 if echo "$ADMIN_PASSWORD" | "$VENV_DIR/bin/python3" -m app.cli create-admin --username admin 2>/dev/null; then
   ok "Admin account created"
 else
-  warn "Admin account already exists — password NOT changed (use 'lite-panel reset-password' to change it)"
+  warn "Admin account already exists — password NOT changed (use 'lite-panel reset-password --username admin' to change it)"
   ADMIN_PASSWORD="<unchanged — check your records>"
 fi
+
+# Install global CLI shortcut so operators can run 'lite-panel reset-password' anytime via SSH
+cat > /usr/local/bin/lite-panel <<'WRAPPER'
+#!/usr/bin/env bash
+set -e
+if [[ -f /etc/lite-panel/panel.env ]]; then
+  set -a; source /etc/lite-panel/panel.env; set +a
+fi
+export PYTHONPATH="/opt/lite-panel/panel:${PYTHONPATH:-}"
+exec /opt/lite-panel/venv/bin/python3 -m app.cli "$@"
+WRAPPER
+chmod +x /usr/local/bin/lite-panel
+ok "Global CLI command installed at /usr/local/bin/lite-panel"
+
 
 # ---------------------------------------------------------------------------
 # Step 11 — Health check

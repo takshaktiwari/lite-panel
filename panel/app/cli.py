@@ -51,7 +51,20 @@ def cmd_reset_password(args) -> int:
 
     from app.models import AdminUser
 
-    password = _read_password(args)
+    generated = False
+    if args.password:
+        password = args.password
+    elif not sys.stdin.isatty():
+        data = sys.stdin.read().strip()
+        if data:
+            password = data
+        else:
+            password = generate_password(24)
+            generated = True
+    else:
+        password = generate_password(24)
+        generated = True
+
     try:
         validate_new_password(password)
     except ValidationError as exc:
@@ -68,8 +81,13 @@ def cmd_reset_password(args) -> int:
         # sessions alive does not lock anyone out.
         for session in list(user.sessions):
             db.delete(session)
-    print(f"password reset for '{args.username}'; all sessions revoked")
+
+    print(f"Password reset successful for user '{args.username}'!")
+    if generated:
+        print(f"New generated password: {password}")
+    print("All existing active sessions revoked.")
     return 0
+
 
 
 def cmd_generate_password(args) -> int:
@@ -219,8 +237,10 @@ def main(argv=None) -> int:
 
     reset = sub.add_parser("reset-password", help="reset an admin password")
     reset.add_argument("--username", required=True)
-    reset.add_argument("--password", help="omit to read from stdin (preferred)")
+    reset.add_argument("--password", help="new password (omit or use --generate to auto-generate)")
+    reset.add_argument("--generate", action="store_true", help="generate a secure random password")
     reset.set_defaults(func=cmd_reset_password)
+
 
     gen = sub.add_parser("generate-password", help="print a random password")
     gen.add_argument("--length", type=int, default=20)

@@ -123,3 +123,51 @@ async def run_setup(
     db.commit()
 
     return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+
+
+@router.post("/update-check", dependencies=[Depends(csrf_protect)])
+def check_updates_now(
+    session=Depends(require_session),
+):
+    from app.services.version import check_for_updates
+
+    info = check_for_updates(force=True)
+    if info.update_available:
+        notice = f"New version available: {info.latest_version}"
+    elif info.error:
+        notice = f"Check finished with warning: {info.error}"
+    else:
+        notice = f"Lite-Panel is up to date (version {info.current_version})."
+
+    return RedirectResponse(f"/setup?notice={notice}#update-section", status_code=303)
+
+
+@router.post("/update", dependencies=[Depends(csrf_protect)])
+async def update_panel_now(
+    request: Request,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    form = await request.form()
+    target_tag = str(form.get("tag") or "").strip() or None
+
+    job = enqueue(
+        db,
+        "panel.update",
+        f"Update Lite-Panel to {target_tag or 'latest'}",
+        payload={"tag": target_tag} if target_tag else {},
+        user_id=session.user_id,
+    )
+
+    db.add(
+        AuditLog(
+            user_id=session.user_id,
+            username=session.user.username,
+            action="panel.update",
+            target=target_tag or "latest",
+        )
+    )
+    db.commit()
+
+    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+
