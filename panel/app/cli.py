@@ -1,7 +1,12 @@
 """Command line entry points used by install.sh and for recovery.
 
-Run as ``/opt/lite-panel/venv/bin/python -m app.cli <command>``.
+Run directly via the global CLI wrapper:
+    sudo lite-panel <command>
+
+Or manually via python:
+    PYTHONPATH=/opt/lite-panel/panel /opt/lite-panel/venv/bin/python3 -m app.cli <command>
 """
+
 
 from __future__ import annotations
 

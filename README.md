@@ -94,18 +94,22 @@ Once Certbot is installed via the Stack tab, click **Enable SSL** on any site to
 
 ## Management commands
 
-All commands run from the venv at `/opt/lite-panel/venv/bin/python -m app.cli`:
+Lite-Panel provides a global `lite-panel` command installed in `/usr/local/bin/lite-panel`:
 
 ```bash
-# Reset the admin password
-echo "newpassword" | sudo /opt/lite-panel/venv/bin/python -m app.cli reset-password --username admin
+# Reset the admin password (auto-generates a secure 24-character password and revokes all active sessions)
+sudo lite-panel reset-password --username admin
+
+# Or set a specific password (minimum 12 characters)
+sudo lite-panel reset-password --username admin --password "YourSecurePass123!"
 
 # Re-render all panel-managed config files from the database (recovery tool)
-sudo /opt/lite-panel/venv/bin/python -m app.cli rebuild
+sudo lite-panel rebuild
 
 # Generate a random password
-sudo /opt/lite-panel/venv/bin/python -m app.cli generate-password --length 24
+sudo lite-panel generate-password --length 24
 ```
+
 
 ### Service management
 
