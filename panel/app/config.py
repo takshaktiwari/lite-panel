@@ -41,9 +41,11 @@ class Settings(BaseSettings):
     config_dir: Path = Path("/etc/lite-panel")
     log_dir: Path = Path("/var/log/lite-panel")
 
-    # Root under which site directories live.  Also the containment boundary
-    # for the file manager: nothing outside this tree is reachable.
-    sites_root: Path = Path("/home")
+    # Root under which site directories live -- /var/www/<site-name>, the
+    # layout operators coming from cPanel/Plesk/traditional LAMP boxes expect.
+    # Also the containment boundary for the file manager: nothing outside
+    # this tree is reachable.
+    sites_root: Path = Path("/var/www")
 
     # Signing/session secret.  install.sh generates one; a blank value in
     # dev_mode gets a throwaway random key at startup instead of failing.

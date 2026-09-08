@@ -53,6 +53,8 @@ def new_site_form(
         user=session.user,
         php_versions=get_provider("php").installed_versions(),
         nginx_ready=get_provider("nginx").is_installed(),
+        certbot_ready=get_provider("certbot").is_installed(),
+        sites_root=str(sites_service.sites_root()),
     )
 
 
@@ -64,6 +66,7 @@ def create_site(
     php_version: str = Form(""),
     subfolder: str = Form("public"),
     redirect_www: str = Form(""),
+    enable_ssl: str = Form(""),
     session=Depends(require_session),
     db: OrmSession = Depends(get_session),
 ):
@@ -87,6 +90,8 @@ def create_site(
             user=session.user,
             php_versions=php.installed_versions(),
             nginx_ready=get_provider("nginx").is_installed(),
+            certbot_ready=get_provider("certbot").is_installed(),
+            sites_root=str(sites_service.sites_root()),
             error=str(exc),
             form={"domain": domain, "name": name, "subfolder": subfolder},
             status_code=400,
@@ -107,6 +112,7 @@ def create_site(
             "php_version": php_version.strip() or None,
             "subfolder": subfolder,
             "redirect_www": bool(redirect_www),
+            "enable_ssl": bool(enable_ssl),
         },
         user_id=session.user_id,
     )

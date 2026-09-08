@@ -117,7 +117,7 @@ def create_site(ctx) -> None:
     payload = ctx.payload
     with session_scope() as db:
         try:
-            sites_service.create_site(
+            site = sites_service.create_site(
                 db,
                 ctx,
                 name=payload["name"],
@@ -128,6 +128,35 @@ def create_site(ctx) -> None:
             )
         except (ValidationError, RuntimeError) as exc:
             raise _fail(exc) from exc
+
+        if payload.get("enable_ssl"):
+            _try_enable_ssl_at_creation(db, ctx, site)
+
+
+def _try_enable_ssl_at_creation(db, ctx, site) -> None:
+    """Best-effort HTTPS right after creating a site.
+
+    Never fails the site.create job: issuing a certificate needs the
+    domain's DNS to already point here, which is frequently not true yet at
+    the moment a site is created. The site itself is created and works over
+    plain HTTP either way -- this just saves a manual "Enable SSL" click on
+    the site detail page for the common case where DNS is already correct.
+    """
+    certbot = get_provider("certbot")
+    if not certbot.is_installed():
+        ctx.log(
+            "HTTPS was requested but certbot isn't installed -- install it from "
+            "the Stack page, then use \"Enable SSL\" on this site."
+        )
+        return
+    try:
+        sites_service.enable_ssl(db, ctx, site)
+    except (ValidationError, RuntimeError) as exc:
+        ctx.log(
+            f"warning: could not enable HTTPS yet ({exc}). The site is live over "
+            "HTTP -- make sure DNS points here, then use \"Enable SSL\" on the "
+            "site detail page to retry."
+        )
 
 
 @register("site.delete")

@@ -19,6 +19,7 @@ from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
+from app.config import get_settings
 from app.models import Site
 from app.providers import get_provider
 from app.services import renderer, tuning
@@ -33,7 +34,6 @@ from app.validators import (
 
 logger = logging.getLogger(__name__)
 
-SITES_ROOT = Path("/home")
 FPM_SOCKET_DIR = Path("/run/php")
 PHP_LOG_DIR = Path("/var/log/php")
 
@@ -50,8 +50,20 @@ FTP_SHELL = "/bin/false"
 # --------------------------------------------------------------------------
 
 
+def sites_root() -> Path:
+    return get_settings().sites_root
+
+
 def root_dir_for(name: str) -> Path:
-    return SITES_ROOT / site_username(name)
+    """Where a site's files live: /var/www/<name>.
+
+    Deliberately the plain site name, not the "site_"-prefixed system
+    username -- the username needs that prefix to dodge reserved account
+    names (see validators.site_username), but the directory a person browses
+    to over FTP or in the file manager should just be /var/www/blog, not
+    /var/www/site_blog.
+    """
+    return sites_root() / validate_site_name(name)
 
 
 def webroot_for(name: str, subfolder: str = "public") -> Path:
@@ -91,6 +103,11 @@ def create_site(
         raise ValidationError(f"{domain} is already served by another site.")
     if php_version and not get_provider("php").is_version_installed(php_version):
         raise ValidationError(f"PHP {php_version} is not installed.")
+
+    # Normally already there (nginx's own package creates it), but don't
+    # depend on install order -- useradd --home-dir only creates the final
+    # directory, not missing parents.
+    sites_root().mkdir(parents=True, exist_ok=True)
 
     root_dir = root_dir_for(name)
     webroot = webroot_for(name, subfolder)

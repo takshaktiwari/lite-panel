@@ -16,8 +16,14 @@
   <input type="text" id="domain" name="domain" placeholder="example.com" required
          value="{{ form.domain if form else '' }}" autofocus>
 
-  <label for="name">Short name <span class="muted">(optional — derived from the domain)</span></label>
-  <input type="text" id="name" name="name" placeholder="example" value="{{ form.name if form else '' }}">
+  <label for="name">Site folder <span class="muted">(optional — derived from the domain)</span></label>
+  <div style="display:flex;align-items:stretch;margin-bottom:14px;">
+    <span style="display:flex;align-items:center;padding:0 10px;border:1px solid var(--border);
+                 border-right:0;border-radius:6px 0 0 6px;background:var(--bg);color:var(--muted);
+                 font-family:var(--mono);font-size:13px;white-space:nowrap;">{{ sites_root }}/</span>
+    <input type="text" id="name" name="name" placeholder="example" value="{{ form.name if form else '' }}"
+           style="border-radius:0 6px 6px 0;margin-bottom:0;font-family:var(--mono);">
+  </div>
 
   <label for="php_version">PHP version</label>
   {% if php_versions %}
@@ -31,13 +37,28 @@
   <p class="muted">No PHP versions installed. <a href="/stack">Install one</a>, or continue without PHP.</p>
   {% endif %}
 
-  <label for="subfolder">Webroot subfolder <span class="muted">(inside the site's home directory)</span></label>
+  <label for="subfolder">Webroot subfolder <span class="muted">(e.g. {{ sites_root }}/name/public)</span></label>
   <input type="text" id="subfolder" name="subfolder" value="public">
 
-  <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
+  <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:8px;">
     <input type="checkbox" name="redirect_www" value="1" checked style="width:auto;margin:0;">
     Redirect www to the bare domain
   </label>
+
+  <label style="display:flex;align-items:center;gap:8px;font-weight:normal;{{ 'opacity:.5;' if not certbot_ready }}">
+    <input type="checkbox" name="enable_ssl" value="1" style="width:auto;margin:0;" {{ 'disabled' if not certbot_ready }}>
+    Enable HTTPS and redirect to it always
+  </label>
+  {% if certbot_ready %}
+  <p class="muted" style="margin:4px 0 0;font-size:12.5px;">
+    Needs the domain's DNS already pointed at this server. If it isn't yet, the site is
+    still created over plain HTTP — use "Enable SSL" on the site page once DNS is ready.
+  </p>
+  {% else %}
+  <p class="muted" style="margin:4px 0 0;font-size:12.5px;">
+    <a href="/stack">Install SSL support</a> from the Stack page to enable this.
+  </p>
+  {% endif %}
 
   <button type="submit" class="button primary" style="margin-top:14px;">Create site</button>
 </form>
