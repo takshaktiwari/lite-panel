@@ -13,6 +13,8 @@
   if (!jobId) return;
 
   const isLive = logEl.getAttribute("data-live") === "true";
+  const returnTo = logEl.getAttribute("data-return-to") || "";
+  const returnNotice = logEl.getAttribute("data-notice") || "";
   const badgeEl = document.getElementById("job-badge");
   const statusTextEl = document.getElementById("job-status-text");
   const pulseEl = document.getElementById("job-pulse");
@@ -73,6 +75,22 @@
     }
   }
 
+  // On success, hand the browser back to wherever the action was started
+  // from (the job's own page stays put on failure so the error is visible).
+  // A one-time notice tied to the job -- e.g. a generated password -- rides
+  // along on the query string so it still surfaces on the destination page.
+  function finish(status) {
+    if (status === "success" && returnTo) {
+      let url = returnTo;
+      if (returnNotice) {
+        url += (url.indexOf("?") === -1 ? "?" : "&") + "notice=" + encodeURIComponent(returnNotice);
+      }
+      window.location.href = url;
+      return;
+    }
+    window.location.reload();
+  }
+
   function markFinished(status, errorMsg) {
     if (isTerminal) return;
     isTerminal = true;
@@ -119,7 +137,7 @@
       } catch (e) {}
       markFinished(status);
       if (source) source.close();
-      setTimeout(() => window.location.reload(), 500);
+      setTimeout(() => finish(status), 500);
     });
 
     source.onerror = () => {
@@ -154,7 +172,7 @@
       if (data.is_terminal) {
         markFinished(data.status, data.error);
         if (source) source.close();
-        setTimeout(() => window.location.reload(), 500);
+        setTimeout(() => finish(data.status), 500);
       }
     } catch (e) {
       // Ignore network hiccups during poll

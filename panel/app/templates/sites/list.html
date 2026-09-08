@@ -15,7 +15,7 @@
 <section class="panel">
   {% if sites %}
   <table class="table">
-    <thead><tr><th>Domain</th><th>PHP</th><th>SSL</th><th>System user</th></tr></thead>
+    <thead><tr><th>Domain</th><th>PHP</th><th>SSL</th><th>System user</th><th style="text-align:right;">Quick access</th></tr></thead>
     <tbody>
       {% for site in sites %}
       <tr>
@@ -23,6 +23,16 @@
         <td>{{ site.php_version or '—' }}</td>
         <td>{{ ui.badge('on', 'success') if site.ssl_enabled else ui.badge('off') }}</td>
         <td class="muted">{{ site.system_user }}</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <a class="icon-button" title="Open site in new tab"
+             href="{{ 'https' if site.ssl_enabled else 'http' }}://{{ site.domain }}"
+             target="_blank" rel="noopener">🌐</a>
+          <a class="icon-button" title="Browse files" href="/files?path={{ site.name }}">📁</a>
+          <a class="icon-button" title="Open terminal" href="/terminal">⌨️</a>
+          {% if site.databases %}
+          <button type="button" class="icon-button" title="Open in Adminer" data-adminer-db="{{ site.databases[0].db_name }}">🗄️</button>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -31,4 +41,6 @@
   <p class="muted empty">No sites yet. <a href="/sites/new">Create your first one</a>.</p>
   {% endif %}
 </section>
+
+<script src="/static/adminer.js"></script>
 {% endblock %}

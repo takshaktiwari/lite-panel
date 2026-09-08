@@ -171,7 +171,7 @@ def test_setup_update_enqueues_job(signed_in, db):
     assert resp.status_code == 303
     assert resp.headers["location"].startswith("/jobs/")
 
-    job_id = int(resp.headers["location"].split("/")[-1])
+    job_id = int(resp.headers["location"].split("?")[0].rsplit("/", 1)[-1])
     job = db.get(Job, job_id)
     assert job is not None
     assert job.kind == "panel.update"

@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.database import get_session
-from app.deps import csrf_protect, render, require_session
+from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
 from app.models import AuditLog, Site, SiteDatabase
 from app.providers import get_provider
@@ -125,10 +125,7 @@ def create_database(
     if password:
         notice_msg = f"Save this password now — it is not stored: {password}"
 
-    return RedirectResponse(
-        f"/jobs/{job.id}?notice={quote(notice_msg)}",
-        status_code=303,
-    )
+    return job_redirect(job.id, "/databases", notice=notice_msg)
 
 
 @router.post("/user/password", dependencies=[Depends(csrf_protect)])
@@ -155,9 +152,8 @@ def reset_user_password(
         user_id=session.user_id,
     )
     _audit(db, session, "database.password", db_user)
-    return RedirectResponse(
-        f"/jobs/{job.id}?notice={quote(f'New password for {db_user} (not stored): {password}')}",
-        status_code=303,
+    return job_redirect(
+        job.id, "/databases", notice=f"New password for {db_user} (not stored): {password}"
     )
 
 
@@ -183,7 +179,7 @@ def delete_database(
         user_id=session.user_id,
     )
     _audit(db, session, "database.delete", record.db_name)
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/databases")
 
 
 @router.post("/{database_id}/user", dependencies=[Depends(csrf_protect)])
@@ -231,10 +227,7 @@ def reassign_user(
     if password:
         notice += f" with new password (not stored): {password}"
 
-    return RedirectResponse(
-        f"/jobs/{job.id}?notice={quote(notice)}",
-        status_code=303,
-    )
+    return job_redirect(job.id, "/databases", notice=notice)
 
 
 @router.post("/{database_id}/password", dependencies=[Depends(csrf_protect)])
@@ -259,9 +252,10 @@ def reset_password(
         user_id=session.user_id,
     )
     _audit(db, session, "database.password", record.db_user)
-    return RedirectResponse(
-        f"/jobs/{job.id}?notice={quote(f'New password for {record.db_user} (not stored): {password}')}",
-        status_code=303,
+    return job_redirect(
+        job.id,
+        "/databases",
+        notice=f"New password for {record.db_user} (not stored): {password}",
     )
 
 

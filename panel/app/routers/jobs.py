@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.database import SessionLocal, get_session
-from app.deps import render, require_session
+from app.deps import render, require_session, safe_return_to
 from app.jobs import log_buffer
 from app.models import Job
 
@@ -62,6 +62,9 @@ def job_detail(
         buffered_lines = log_buffer.since(job_id, 0)
         static_log = "\n".join(buffered_lines) + ("\n" if buffered_lines else "")
 
+    raw_return_to = request.query_params.get("return_to")
+    return_to = safe_return_to(raw_return_to, default="") or None
+
     return render(
         request,
         "jobs/detail.html",
@@ -70,6 +73,7 @@ def job_detail(
         job=job,
         static_log=static_log,
         live=not job.is_terminal,
+        return_to=return_to,
     )
 
 

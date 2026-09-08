@@ -9,10 +9,10 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
-from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import Session as OrmSession, selectinload
 
 from app.database import get_session
-from app.deps import csrf_protect, render, require_session
+from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
 from app.models import AuditLog, FtpAccount, Site, SiteDatabase
 from app.providers import get_provider
@@ -29,7 +29,9 @@ def site_list(
     session=Depends(require_session),
     db: OrmSession = Depends(get_session),
 ):
-    sites = db.scalars(select(Site).order_by(Site.name)).all()
+    sites = db.scalars(
+        select(Site).options(selectinload(Site.databases)).order_by(Site.name)
+    ).all()
     return render(
         request,
         "sites/list.html",
@@ -115,7 +117,7 @@ def create_site(
         user_id=session.user_id,
     )
     _audit(db, session, "site.create", domain)
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/sites")
 
 
 @router.get("/{site_id}")
@@ -164,7 +166,7 @@ def change_php(
         user_id=session.user_id,
     )
     _audit(db, session, "site.php_version", f"{site.domain} -> {php_version or 'none'}")
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, f"/sites/{site.id}")
 
 
 @router.post("/{site_id}/ssl", dependencies=[Depends(csrf_protect)])
@@ -207,7 +209,7 @@ def toggle_ssl(
         )
 
     _audit(db, session, f"site.ssl_{action}", site.domain)
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, f"/sites/{site.id}")
 
 
 @router.post("/{site_id}/delete", dependencies=[Depends(csrf_protect)])
@@ -238,7 +240,7 @@ def delete_site(
         user_id=session.user_id,
     )
     _audit(db, session, "site.delete", site.domain)
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/sites")
 
 
 # --------------------------------------------------------------------------

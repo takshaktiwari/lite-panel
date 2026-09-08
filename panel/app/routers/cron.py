@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.database import get_session
-from app.deps import csrf_protect, render, require_session
+from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
 from app.models import AuditLog, CronJob, Site
 from app.providers import get_provider
@@ -124,7 +124,7 @@ def create(
     _audit(db, session, "cron.create", f"{job.target_label}: {job.command[:100]}")
 
     sync_job = _sync(db, session, site)
-    return RedirectResponse(f"/jobs/{sync_job.id}", status_code=303)
+    return job_redirect(sync_job.id, "/cron")
 
 
 @router.get("/{job_id}/edit")
@@ -185,7 +185,7 @@ def edit(
     _audit(db, session, "cron.edit", f"{job.target_label}: {job.command[:100]}")
 
     sync_job = _sync(db, session, job.site)
-    return RedirectResponse(f"/jobs/{sync_job.id}", status_code=303)
+    return job_redirect(sync_job.id, "/cron")
 
 
 @router.post("/{job_id}/toggle", dependencies=[Depends(csrf_protect)])
@@ -203,7 +203,7 @@ def toggle(
     _audit(db, session, "cron.toggle", f"{job.target_label}: {'enabled' if job.is_enabled else 'disabled'}")
 
     sync_job = _sync(db, session, job.site)
-    return RedirectResponse(f"/jobs/{sync_job.id}", status_code=303)
+    return job_redirect(sync_job.id, "/cron")
 
 
 @router.post("/{job_id}/delete", dependencies=[Depends(csrf_protect)])
@@ -224,7 +224,7 @@ def delete(
     _audit(db, session, "cron.delete", f"{target_label}: {command[:100]}")
 
     sync_job = _sync(db, session, site)
-    return RedirectResponse(f"/jobs/{sync_job.id}", status_code=303)
+    return job_redirect(sync_job.id, "/cron")
 
 
 # --------------------------------------------------------------------------

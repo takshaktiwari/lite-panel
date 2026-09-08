@@ -218,8 +218,9 @@ code, .mono {
   font-size: 15px;
   line-height: 1;
   cursor: pointer;
+  text-decoration: none;
 }
-.icon-button:hover { filter: brightness(.97); }
+.icon-button:hover { filter: brightness(.97); text-decoration: none; }
 .icon-button.danger { color: var(--danger); }
 
 .dropdown { position: relative; display: inline-block; }

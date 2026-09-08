@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.database import get_session
-from app.deps import csrf_protect, render, require_session
+from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
 from app.models import AuditLog, InstalledProvider
 from app.providers import get_provider
@@ -122,7 +122,7 @@ async def run_setup(
     )
     db.commit()
 
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/setup")
 
 
 @router.post("/update-check", dependencies=[Depends(csrf_protect)])
@@ -169,5 +169,5 @@ async def update_panel_now(
     )
     db.commit()
 
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/setup")
 

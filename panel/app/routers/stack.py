@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session as OrmSession
 
 from app.database import get_session
-from app.deps import csrf_protect, render, require_session
+from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
 from app.models import AuditLog
 from app.providers import all_providers, get_provider
@@ -92,7 +92,7 @@ def install(
         user_id=session.user_id,
     )
     _audit(db, session, "stack.install", f"{key} {version or ''}".strip())
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/stack")
 
 
 @router.post("/uninstall", dependencies=[Depends(csrf_protect)])
@@ -118,7 +118,7 @@ def uninstall(
         user_id=session.user_id,
     )
     _audit(db, session, "stack.uninstall", f"{key} {version or ''}".strip())
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/stack")
 
 
 @router.post("/php/add-repository", dependencies=[Depends(csrf_protect)])
@@ -140,7 +140,7 @@ def add_php_repository(
         user_id=session.user_id,
     )
     _audit(db, session, "stack.php_add_repository", None)
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/stack")
 
 
 # --------------------------------------------------------------------------
@@ -221,7 +221,7 @@ async def update_extensions(
         user_id=session.user_id,
     )
     _audit(db, session, "stack.extensions", f"php{version}: +{len(add)} -{len(remove)}")
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, f"/stack/php/{version}")
 
 
 # --------------------------------------------------------------------------
@@ -241,7 +241,7 @@ def rebuild(
         user_id=session.user_id,
     )
     _audit(db, session, "stack.rebuild", None)
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/stack")
 
 
 # --------------------------------------------------------------------------

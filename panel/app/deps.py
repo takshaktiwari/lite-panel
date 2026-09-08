@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import Depends, Request
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session as OrmSession
 
@@ -73,6 +75,32 @@ def client_ip(request: Request) -> str:
     if forwarded:
         return forwarded.split(",")[0].strip()[:45]
     return (request.client.host if request.client else "unknown")[:45]
+
+
+def safe_return_to(path: Optional[str], default: str = "/") -> str:
+    """Guard against an open redirect: only ever hand back a same-origin path."""
+    if path and path.startswith("/") and not path.startswith("//"):
+        return path
+    return default
+
+
+def job_redirect(
+    job_id: int,
+    return_to: str,
+    *,
+    notice: Optional[str] = None,
+    status_code: int = 303,
+):
+    """Redirect to a job's detail page, tagging it with where the browser
+    should go once the job finishes -- see job-detail.js. The job page itself
+    stays put on failure so the error is visible; `return_to` (and `notice`,
+    forwarded along so a one-time password notice isn't lost) is only ever
+    followed once the job actually succeeds.
+    """
+    params = [f"return_to={quote(safe_return_to(return_to))}"]
+    if notice:
+        params.append(f"notice={quote(notice)}")
+    return RedirectResponse(f"/jobs/{job_id}?{'&'.join(params)}", status_code=status_code)
 
 
 def render(

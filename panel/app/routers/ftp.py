@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.database import get_session
-from app.deps import csrf_protect, render, require_session
+from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
 from app.models import AuditLog, FtpAccount, Site
 from app.providers import get_provider
@@ -80,10 +80,8 @@ def create(
     )
     _audit(db, session, "ftp.create", path)
 
-    return RedirectResponse(
-        f"/jobs/{job.id}?notice="
-        + quote(f"Save this password now, it is not stored: {password}"),
-        status_code=303,
+    return job_redirect(
+        job.id, "/ftp", notice=f"Save this password now, it is not stored: {password}"
     )
 
 
@@ -108,10 +106,7 @@ def change_password(
         user_id=session.user_id,
     )
     _audit(db, session, "ftp.password", account.username)
-    return RedirectResponse(
-        f"/jobs/{job.id}?notice={quote(f'New password (not stored): {password}')}",
-        status_code=303,
-    )
+    return job_redirect(job.id, "/ftp", notice=f"New password (not stored): {password}")
 
 
 @router.post("/{account_id}/delete", dependencies=[Depends(csrf_protect)])
@@ -132,7 +127,7 @@ def delete(
         user_id=session.user_id,
     )
     _audit(db, session, "ftp.delete", account.username)
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/ftp")
 
 
 # --------------------------------------------------------------------------
