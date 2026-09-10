@@ -11,7 +11,14 @@
     <dl class="stats">
       <div><dt>System user</dt><dd>{{ site.system_user }}</dd></div>
       <div><dt>Home directory</dt><dd>{{ site.root_dir }}</dd></div>
-      <div><dt>Webroot</dt><dd>{{ site.webroot }}</dd></div>
+      <div>
+        <dt>Webroot</dt>
+        <dd style="display:flex;align-items:center;gap:8px;">
+          {{ site.webroot }}
+          <button type="button" class="icon-button" id="edit-webroot" title="Change document path"
+                  style="width:22px;height:22px;font-size:12px;">✎</button>
+        </dd>
+      </div>
       <div><dt>FPM socket</dt><dd>{{ socket or '—' }}</dd></div>
       <div><dt>SSL</dt><dd>{{ 'Enabled' if site.ssl_enabled else 'Disabled' }}</dd></div>
     </dl>
@@ -36,20 +43,6 @@
         </div>
         <button class="button primary" type="submit" style="margin-bottom:14px;">Apply</button>
       </form>
-    </section>
-
-    <section class="panel">
-      <h2>Document path</h2>
-      <p class="muted">The folder inside <code>{{ site.root_dir }}</code> that nginx serves from. Leave blank to serve from the site's home directory.</p>
-      <form method="post" action="/sites/{{ site.id }}/webroot" style="display:flex;gap:10px;align-items:flex-end;">
-        {{ ui.csrf(session) }}
-        <div style="flex:1;">
-          <label for="webroot">Subfolder</label>
-          <input type="text" id="webroot" name="webroot" value="{{ webroot_subfolder }}" placeholder="e.g. public">
-        </div>
-        <button class="button primary" type="submit" style="margin-bottom:14px;">Apply</button>
-      </form>
-      <p class="muted" style="margin-top:-8px;font-size:13px;">Currently serving from <code>{{ site.webroot }}</code>.</p>
     </section>
 
     <section class="panel">
@@ -145,5 +138,21 @@
   </form>
 </section>
 
+{# Opened by the pencil next to "Webroot" above -- webroot-edit.js drives it. #}
+<dialog id="webroot-dialog" class="dialog wide">
+  <form method="post" action="/sites/{{ site.id }}/webroot">
+    {{ ui.csrf(session) }}
+    <h2>Change document path</h2>
+    <p class="muted">The folder nginx serves {{ site.domain }} from. Must stay inside <code>{{ site.root_dir }}</code> -- PHP can't reach outside it either.</p>
+    <label for="webroot-dialog-path">Document path</label>
+    <input type="text" id="webroot-dialog-path" name="webroot" value="{{ site.webroot }}" required>
+    <div class="dialog-actions">
+      <button type="button" class="button" data-dialog-close>Cancel</button>
+      <button type="submit" class="button primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
 <script src="/static/dns-check.js"></script>
+<script src="/static/webroot-edit.js"></script>
 {% endblock %}

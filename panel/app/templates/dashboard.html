@@ -6,7 +6,7 @@
 <header class="page-head">
   <div>
     <h1>{{ info.hostname }}</h1>
-    <p class="muted">{{ info.os_name }} · kernel {{ info.kernel }} · up {{ uptime }}</p>
+    <p class="muted">{{ info.os_name }} · kernel {{ info.kernel }} · up {{ uptime }} · <strong>Server time:</strong> {{ server_time }}</p>
   </div>
 </header>
 
@@ -53,7 +53,8 @@
   <section class="panel">
     <h2>Overview</h2>
     <dl class="stats">
-      <div><dt>Sites</dt><dd>{{ site_count }}</dd></div>
+      <div><dt>Sites created</dt><dd><a href="/sites" style="text-decoration:none;color:inherit;">{{ site_count }}</a></dd></div>
+      <div><dt>Server time</dt><dd style="font-size:13px;">{{ server_time }}</dd></div>
       <div><dt>Databases</dt><dd>{{ database_count }}</dd></div>
       <div><dt>Jobs running</dt><dd>{{ running_jobs }}</dd></div>
       <div><dt>Load average</dt><dd>{{ info.load_average | join(' ') }}</dd></div>

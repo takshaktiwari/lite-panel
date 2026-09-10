@@ -49,17 +49,3 @@ def test_root_dir_rejects_a_malformed_name():
 
     with pytest.raises(ValidationError):
         sites_service.root_dir_for("../etc")
-
-
-def test_relative_webroot_is_blank_when_it_equals_root_dir():
-    from app.models import Site
-
-    site = Site(root_dir="/var/www/blog", webroot="/var/www/blog")
-    assert sites_service.relative_webroot(site) == ""
-
-
-def test_relative_webroot_reports_the_subfolder():
-    from app.models import Site
-
-    site = Site(root_dir="/var/www/blog", webroot="/var/www/blog/public")
-    assert sites_service.relative_webroot(site) == "public"

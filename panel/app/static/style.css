@@ -68,6 +68,10 @@ code, .mono {
   display: flex;
   flex-direction: column;
   padding: 18px 0 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .brand {
@@ -76,10 +80,17 @@ code, .mono {
   gap: 8px;
   padding: 0 18px 18px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 .brand-mark { color: var(--accent); }
 
-.sidebar nav { display: flex; flex-direction: column; }
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
 .sidebar nav a {
   padding: 8px 18px;
   color: var(--text);
@@ -101,6 +112,7 @@ code, .mono {
   justify-content: space-between;
   align-items: center;
   position: relative;
+  flex-shrink: 0;
 }
 .who { font-weight: 500; }
 

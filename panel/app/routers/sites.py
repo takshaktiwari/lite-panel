@@ -147,7 +147,6 @@ def site_detail(
         certbot_ready=certbot.is_installed(),
         has_certificate=certbot.has_certificate(site.domain) if certbot.is_installed() else False,
         socket=str(sites_service.socket_for(site.name)) if site.php_version else None,
-        webroot_subfolder=sites_service.relative_webroot(site),
     )
 
 
@@ -214,19 +213,20 @@ def change_webroot(
     if site is None:
         return _back(error="That site no longer exists.")
 
-    try:
-        subfolder = _clean_subfolder(webroot)
-    except ValidationError as exc:
-        return RedirectResponse(f"/sites/{site.id}?error={quote(str(exc))}", status_code=303)
+    webroot = webroot.strip()
+    if not webroot:
+        return RedirectResponse(
+            f"/sites/{site.id}?error={quote('Document path is required.')}", status_code=303
+        )
 
     job = enqueue(
         db,
         "site.webroot",
         f"Change document path for {site.domain}",
-        payload={"site_id": site.id, "subfolder": subfolder},
+        payload={"site_id": site.id, "webroot": webroot},
         user_id=session.user_id,
     )
-    _audit(db, session, "site.webroot", f"{site.domain} -> /{subfolder}" if subfolder else f"{site.domain} -> (site root)")
+    _audit(db, session, "site.webroot", f"{site.domain} -> {webroot}")
     return job_redirect(job.id, f"/sites/{site.id}")
 
 

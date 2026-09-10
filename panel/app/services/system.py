@@ -219,3 +219,13 @@ def format_uptime(seconds: int) -> str:
     if hours:
         return f"{hours}h {minutes}m"
     return f"{minutes}m"
+
+
+def server_time() -> str:
+    """Current server local time with timezone code or offset."""
+    from datetime import datetime
+
+    now = datetime.now().astimezone()
+    tz = now.strftime("%Z") or now.strftime("%z")
+    return f"{now.strftime('%Y-%m-%d %H:%M:%S')} {tz}".strip()
+

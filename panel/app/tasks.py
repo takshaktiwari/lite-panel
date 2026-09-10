@@ -197,7 +197,7 @@ def change_site_webroot(ctx) -> None:
         if site is None:
             raise JobFailed("That site no longer exists.")
         try:
-            sites_service.set_webroot(db, ctx, site, ctx.payload.get("subfolder", ""))
+            sites_service.set_webroot(db, ctx, site, ctx.payload.get("webroot", ""))
         except (ValidationError, RuntimeError) as exc:
             raise _fail(exc) from exc
 

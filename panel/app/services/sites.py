@@ -28,6 +28,7 @@ from app.services import renderer, tuning
 from app.shell import run
 from app.validators import (
     ValidationError,
+    resolve_within,
     site_username,
     validate_domain,
     validate_php_version,
@@ -75,20 +76,6 @@ def webroot_for(name: str, subfolder: str = "") -> Path:
 
 def socket_for(name: str) -> Path:
     return FPM_SOCKET_DIR / f"lite-panel-{validate_site_name(name)}.sock"
-
-
-def relative_webroot(site: Site) -> str:
-    """The subfolder ``site.webroot`` sits under ``site.root_dir``, or "" when
-    they're the same directory -- what the "Document path" field on the site
-    detail page shows and edits, mirroring the subfolder typed at creation."""
-    root = Path(site.root_dir)
-    webroot = Path(site.webroot)
-    if webroot == root:
-        return ""
-    try:
-        return str(webroot.relative_to(root))
-    except ValueError:
-        return str(webroot)
 
 
 # --------------------------------------------------------------------------
@@ -348,33 +335,35 @@ def set_php_version(db: OrmSession, ctx, site: Site, version: Optional[str]) -> 
     ctx.log(f"{site.domain} now runs PHP {version or 'no PHP'}")
 
 
-def set_webroot(db: OrmSession, ctx, site: Site, subfolder: str) -> None:
+def set_webroot(db: OrmSession, ctx, site: Site, new_path: str) -> None:
     """Point nginx at a different folder inside the site's home directory.
 
-    ``subfolder`` is validated segment-by-segment by the router before this
-    is called (the same way the optional nesting typed at creation is), so
-    it can never climb outside ``root_dir`` via "..". The folder is created
-    and handed to the site's own user if it doesn't already exist -- a
-    document path change is often exactly how an operator points nginx at a
-    "public" folder that a deploy just created.
+    ``new_path`` comes free-typed from the site detail page's "Document
+    path" dialog -- it can be the full absolute path, a relative one, or
+    anything containing "..", so :func:`resolve_within` is what actually
+    keeps it honest, the same containment check the file manager rests on.
+    It must resolve inside ``root_dir``: PHP-FPM's ``open_basedir`` is scoped
+    to ``root_dir`` (see fpm-pool.conf.j2), so a webroot outside it couldn't
+    execute PHP even if nginx could serve static files from it. The folder is
+    created and handed to the site's own user if it doesn't already exist.
     """
-    new_webroot = webroot_for(site.name, subfolder)
+    resolved = resolve_within(site.root_dir, new_path)
 
-    if str(new_webroot) == site.webroot:
-        ctx.log(f"{site.domain} already serves from {new_webroot}")
+    if str(resolved) == site.webroot:
+        ctx.log(f"{site.domain} already serves from {resolved}")
         return
 
-    new_webroot.mkdir(parents=True, exist_ok=True)
-    run(["chown", "-R", f"{site.system_user}:{site.system_user}", str(new_webroot)])
+    resolved.mkdir(parents=True, exist_ok=True)
+    run(["chown", "-R", f"{site.system_user}:{site.system_user}", str(resolved)])
 
-    ctx.log(f"Moving {site.domain}'s document path to {new_webroot}")
-    site.webroot = str(new_webroot)
+    ctx.log(f"Moving {site.domain}'s document path to {resolved}")
+    site.webroot = str(resolved)
     db.flush()
     render_site(site)
 
     get_provider("nginx").reload(ctx)
     db.commit()
-    ctx.log(f"{site.domain} now serves from {new_webroot}")
+    ctx.log(f"{site.domain} now serves from {resolved}")
 
 
 def enable_ssl(db: OrmSession, ctx, site: Site, *, email: Optional[str] = None,
