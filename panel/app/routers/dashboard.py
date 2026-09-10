@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, Form, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 
-from fastapi.responses import RedirectResponse
-
 from app.database import get_session
-from app.deps import render, require_session
+from app.deps import csrf_protect, render, require_session
 from app.models import Job, JobStatus, Site, SiteDatabase
 from app.providers import get_provider
 from app.services import system
@@ -35,6 +36,7 @@ def _services() -> list:
             installed=php_status.service_installed,
             active=php_status.service_active,
             detail=php_status.detail,
+            unit="php-fpm",
         ),
         system.service_state("mariadb"),
         system.ServiceState(
@@ -42,10 +44,44 @@ def _services() -> list:
             installed=redis_status.service_installed,
             active=redis_status.service_active,
             detail=redis_status.detail,
+            unit="redis-server",
         ),
         system.service_state("vsftpd"),
         system.service_state("lite-panel"),
     ]
+
+
+@router.post("/service/toggle", dependencies=[Depends(csrf_protect)])
+def toggle_service(
+    request: Request,
+    unit: str = Form(...),
+    action: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    from app.models import AuditLog
+
+    unit = unit.strip()
+    action = action.strip().lower()
+
+    if unit == "lite-panel" and action == "stop":
+        return RedirectResponse("/?error=Stopping+the+lite-panel+daemon+from+its+own+dashboard+is+not+allowed", status_code=303)
+
+    try:
+        system.manage_service(unit, action)
+        db.add(
+            AuditLog(
+                user_id=session.user_id,
+                username=session.user.username,
+                action=f"service.{action}",
+                target=unit,
+            )
+        )
+        db.commit()
+        return RedirectResponse(f"/?notice=Service+{unit}+{action}ed+successfully", status_code=303)
+    except Exception as exc:
+        return RedirectResponse(f"/?error={quote(str(exc))}", status_code=303)
+
 
 
 @router.get("/")

@@ -150,14 +150,15 @@ def parse_user_rules_file(filepath: str = "/etc/ufw/user.rules") -> List[Firewal
             continue
 
         is_v6 = "6" in p.name
-        for line in content.splitlines():
+        lines = content.splitlines()
+        for idx, line in enumerate(lines):
             line_clean = line.strip()
-            # Rules in user.rules start with e.g.
-            # ### tuple ### allow tcp 22 0.0.0.0/0 any 0.0.0.0/0 in
-            # -A ufw-user-input -p tcp --dport 22 -j ACCEPT -m comment --comment 'ufw-user-SSH'
+            # Rules in user.rules start with:
+            # ### tuple ### <action> <proto> <port> <dst_ip> <app> <src_ip> <direction>
+            # The next non-empty line contains the iptables rule with:
+            # -m comment --comment 'ufw-user-...'
             if line_clean.startswith("### tuple ###"):
                 parts = line_clean.split()
-                # format: ### tuple ### <action> <proto> <port> <dst_ip> <app> <src_ip> <direction>
                 if len(parts) >= 8:
                     action_raw = parts[3].upper()
                     proto_raw = parts[4].lower()
@@ -173,13 +174,23 @@ def parse_user_rules_file(filepath: str = "/etc/ufw/user.rules") -> List[Firewal
                     if is_v6 and from_val == "Anywhere":
                         from_val += " (v6)"
 
+                    # Look ahead up to 3 lines for iptables comment
+                    comment = ""
+                    for offset in range(1, 4):
+                        if idx + offset < len(lines):
+                            following = lines[idx + offset]
+                            c_match = re.search(r"--comment\s+['\"](?:ufw-user-)?(.*?)['\"]", following)
+                            if c_match:
+                                comment = c_match.group(1).strip()
+                                break
+
                     rules.append(
                         FirewallRule(
                             number=num,
                             to_port=to_port,
                             action=action,
                             from_ip=from_val,
-                            comment="",
+                            comment=comment,
                             raw=line_clean,
                         )
                     )

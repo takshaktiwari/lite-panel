@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import platform
+import re
 import shutil
 import socket
 from dataclasses import dataclass, field
@@ -42,6 +43,7 @@ class ServiceState:
     installed: bool
     active: bool
     detail: str = ""
+    unit: str = ""
 
 
 @dataclass
@@ -149,7 +151,38 @@ def service_state(name: str) -> ServiceState:
     # get" means it was never installed. The distinction matters on the
     # dashboard: one needs starting, the other needs installing.
     installed = state not in ("", "unknown") and "not-found" not in state
-    return ServiceState(name=name, installed=installed, active=state == "active", detail=state)
+    return ServiceState(name=name, installed=installed, active=state == "active", detail=state, unit=name)
+
+
+def manage_service(service_name: str, action: str) -> None:
+    """Start, stop, or restart a systemd service."""
+    if not which("systemctl"):
+        raise RuntimeError("systemctl is not available on this system.")
+
+    action = action.lower()
+    if action not in ("start", "stop", "restart", "reload"):
+        raise ValueError(f"Invalid service action: {action}")
+
+    # Whitelist or validate allowed units to prevent arbitrary command execution
+    # Supported: nginx, mariadb, vsftpd, redis-server, php-fpm (all or versioned), lite-panel
+    if not re.match(r"^[a-zA-Z0-9_\-\.@]+$", service_name):
+        raise ValueError(f"Invalid service name: {service_name}")
+
+    if service_name == "php-fpm":
+        from app.providers import get_provider
+        php = get_provider("php")
+        for ver in php.installed_versions():
+            unit = php.service_for(ver)
+            run(["systemctl", action, unit], check=True, timeout=30)
+        return
+
+    # Check that service is installed
+    st = service_state(service_name)
+    if not st.installed and action in ("start", "restart", "reload"):
+        raise RuntimeError(f"Service '{service_name}' is not installed.")
+
+    run(["systemctl", action, service_name], check=True, timeout=30)
+    logger.info("Executed systemctl %s on %s", action, service_name)
 
 
 def service_states(names=KNOWN_SERVICES) -> List[ServiceState]:

@@ -113,11 +113,11 @@ class TestFirewallService(unittest.TestCase):
 *filter
 :ufw-user-input - [0:0]
 ### tuple ### allow tcp 22 0.0.0.0/0 any 0.0.0.0/0 in
--A ufw-user-input -p tcp --dport 22 -j ACCEPT
+-A ufw-user-input -p tcp --dport 22 -j ACCEPT -m comment --comment 'ufw-user-SSH'
 ### tuple ### allow tcp 80 0.0.0.0/0 any 0.0.0.0/0 in
 -A ufw-user-input -p tcp --dport 80 -j ACCEPT
 ### tuple ### allow tcp 3306 0.0.0.0/0 any 192.168.1.50 in
--A ufw-user-input -s 192.168.1.50 -p tcp --dport 3306 -j ACCEPT
+-A ufw-user-input -s 192.168.1.50 -p tcp --dport 3306 -j ACCEPT -m comment --comment 'ufw-user-Remote DB'
 COMMIT
 """
         with tempfile.NamedTemporaryFile("w+", delete=False) as f:
@@ -131,9 +131,11 @@ COMMIT
             self.assertEqual(rules[0].to_port, "22/tcp")
             self.assertEqual(rules[0].action, "ALLOW")
             self.assertEqual(rules[0].from_ip, "Anywhere")
+            self.assertEqual(rules[0].comment, "SSH")
 
             self.assertEqual(rules[2].to_port, "3306/tcp")
             self.assertEqual(rules[2].from_ip, "192.168.1.50")
+            self.assertEqual(rules[2].comment, "Remote DB")
         finally:
             Path(temp_path).unlink(missing_ok=True)
 

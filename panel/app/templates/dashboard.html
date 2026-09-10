@@ -37,14 +37,36 @@
     <h2>Services</h2>
     <ul class="service-list">
       {% for service in services %}
-      <li>
-        <span class="dot {{ 'ok' if service.active else ('warn' if service.installed else 'off') }}"></span>
-        <span class="service-name">{{ service.name }}</span>
-        <span class="muted">
-          {% if service.active %}running
-          {% elif service.installed %}stopped
-          {% else %}not installed{% endif %}
-        </span>
+      <li style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+          <span class="dot {{ 'ok' if service.active else ('warn' if service.installed else 'off') }}"></span>
+          <span class="service-name">{{ service.name }}</span>
+          <span class="muted" style="font-size:12px;">
+            {% if service.active %}running
+            {% elif service.installed %}stopped
+            {% else %}not installed{% endif %}
+          </span>
+        </div>
+
+        <div>
+          {% if service.installed and service.unit and service.unit != 'lite-panel' %}
+          <form method="post" action="/service/toggle" style="margin:0;display:inline-flex;align-items:center;">
+            {{ ui.csrf(session) }}
+            <input type="hidden" name="unit" value="{{ service.unit }}">
+            <input type="hidden" name="action" value="{{ 'stop' if service.active else 'start' }}">
+            <label class="toggle-switch" title="{{ 'Click to stop ' ~ service.name if service.active else 'Click to start ' ~ service.name }}">
+              <input type="checkbox" class="service-toggle-input" {{ 'checked' if service.active }}
+                     data-confirm="{{ 'Stop service ' ~ service.name ~ '?' if service.active else 'Start service ' ~ service.name ~ '?' }}">
+              <span class="toggle-slider"></span>
+            </label>
+          </form>
+          {% else %}
+          <label class="toggle-switch" title="{{ 'Service not installed' if not service.installed else 'Panel daemon managed by systemd' }}">
+            <input type="checkbox" {{ 'checked' if service.active }} disabled>
+            <span class="toggle-slider"></span>
+          </label>
+          {% endif %}
+        </div>
       </li>
       {% endfor %}
     </ul>
@@ -82,4 +104,6 @@
   <p class="muted empty">Nothing has run yet.</p>
   {% endif %}
 </section>
+
+<script src="/static/dashboard.js"></script>
 {% endblock %}

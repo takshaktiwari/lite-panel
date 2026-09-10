@@ -150,9 +150,9 @@
           <button type="button" class="button btn-view-pubkey" data-key-id="{{ key.id }}" data-key-name="{{ key.name }}">
             View Key
           </button>
-          <form method="post" action="/ssh/{{ key.id }}/delete" style="display:inline;" onsubmit="return confirm('Revoke SSH key &quot;{{ key.name }}&quot; for {{ key.system_user }}?');">
+          <form method="post" action="/ssh/{{ key.id }}/delete" style="display:inline;">
             {{ ui.csrf(session) }}
-            <button type="submit" class="button" style="color:var(--danger);">Revoke</button>
+            <button type="submit" class="button" data-confirm='Revoke SSH key "{{ key.name }}" for {{ key.system_user }}?' style="color:var(--danger);">Revoke</button>
           </form>
         </td>
       </tr>
