@@ -21,47 +21,49 @@
     </p>
   </section>
 
-  <section class="panel">
-    <h2>PHP version</h2>
-    <form method="post" action="/sites/{{ site.id }}/php" style="display:flex;gap:10px;align-items:flex-end;">
-      {{ ui.csrf(session) }}
-      <div style="flex:1;">
-        <select name="php_version">
-          <option value="">None</option>
-          {% for version in php_versions %}
-          <option value="{{ version }}" {{ 'selected' if version == site.php_version }}>PHP {{ version }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <button class="button primary" type="submit" style="margin-bottom:14px;">Apply</button>
-    </form>
-  </section>
-</div>
+  <div style="display:flex;flex-direction:column;gap:20px;">
+    <section class="panel">
+      <h2>PHP version</h2>
+      <form method="post" action="/sites/{{ site.id }}/php" style="display:flex;gap:10px;align-items:flex-end;">
+        {{ ui.csrf(session) }}
+        <div style="flex:1;">
+          <select name="php_version">
+            <option value="">None</option>
+            {% for version in php_versions %}
+            <option value="{{ version }}" {{ 'selected' if version == site.php_version }}>PHP {{ version }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="button primary" type="submit" style="margin-bottom:14px;">Apply</button>
+      </form>
+    </section>
 
-<section class="panel">
-  <h2>SSL</h2>
-  {% if not certbot_ready %}
-  <p class="muted">Install SSL support from the <a href="/stack">Stack page</a> first.</p>
-  {% elif site.ssl_enabled %}
-  <p>HTTPS is active for this site.</p>
-  <form method="post" action="/sites/{{ site.id }}/ssl">
-    {{ ui.csrf(session) }}
-    <input type="hidden" name="action" value="disable">
-    <button class="button" type="submit">Disable HTTPS</button>
-  </form>
-  {% else %}
-  <form method="post" action="/sites/{{ site.id }}/ssl" style="max-width:420px;">
-    {{ ui.csrf(session) }}
-    <input type="hidden" name="action" value="enable">
-    <label for="email">Contact email <span class="muted">(optional, for renewal notices)</span></label>
-    <input type="text" id="email" name="email" placeholder="you@example.com">
-    <p class="muted" style="margin:-8px 0 12px;">
-      {{ site.domain }} must already point at this server's public IP before requesting a certificate.
-    </p>
-    <button class="button primary" type="submit">Enable HTTPS</button>
-  </form>
-  {% endif %}
-</section>
+    <section class="panel">
+      <h2>SSL</h2>
+      {% if not certbot_ready %}
+      <p class="muted">Install SSL support from the <a href="/stack">Stack page</a> first.</p>
+      {% elif site.ssl_enabled %}
+      <p>HTTPS is active for this site.</p>
+      <form method="post" action="/sites/{{ site.id }}/ssl">
+        {{ ui.csrf(session) }}
+        <input type="hidden" name="action" value="disable">
+        <button class="button" type="submit">Disable HTTPS</button>
+      </form>
+      {% else %}
+      <form method="post" action="/sites/{{ site.id }}/ssl" style="max-width:420px;">
+        {{ ui.csrf(session) }}
+        <input type="hidden" name="action" value="enable">
+        <label for="email">Contact email <span class="muted">(optional, for renewal notices)</span></label>
+        <input type="text" id="email" name="email" placeholder="you@example.com">
+        <p class="muted" style="margin:-8px 0 12px;">
+          {{ site.domain }} must already point at this server's public IP before requesting a certificate.
+        </p>
+        <button class="button primary" type="submit">Enable HTTPS</button>
+      </form>
+      {% endif %}
+    </section>
+  </div>
+</div>
 
 <section class="panel" id="dns-check-panel" data-site-id="{{ site.id }}" data-domain="{{ site.domain }}">
   <h2>DNS propagation</h2>
