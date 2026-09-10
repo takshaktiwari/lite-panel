@@ -114,6 +114,13 @@ def get_status() -> FirewallStatus:
             rules = parse_numbered_rules(num_res.stdout)
         except Exception as exc:
             logger.debug("error parsing numbered rules: %s", exc)
+    else:
+        # UFW is disabled: `ufw status numbered` returns "Status: inactive" and omits rules.
+        # Parse persisted rules from /etc/ufw/user.rules so the user can inspect/manage configured rules.
+        try:
+            rules = parse_user_rules_file()
+        except Exception as exc:
+            logger.debug("error parsing inactive user rules file: %s", exc)
 
     return FirewallStatus(
         available=True,
@@ -122,6 +129,62 @@ def get_status() -> FirewallStatus:
         default_outgoing=default_out,
         rules=rules,
     )
+
+
+def parse_user_rules_file(filepath: str = "/etc/ufw/user.rules") -> List[FirewallRule]:
+    """Parse rules directly from /etc/ufw/user.rules (and user6.rules if available)
+    when UFW is inactive and `ufw status numbered` prints 'Status: inactive'.
+    """
+    from pathlib import Path
+    rules: List[FirewallRule] = []
+    num = 1
+
+    for path_str in (filepath, "/etc/ufw/user6.rules"):
+        p = Path(path_str)
+        if not p.is_file():
+            continue
+        try:
+            content = p.read_text(encoding="utf-8", errors="replace")
+        except Exception as exc:
+            logger.debug("could not read %s: %s", path_str, exc)
+            continue
+
+        is_v6 = "6" in p.name
+        for line in content.splitlines():
+            line_clean = line.strip()
+            # Rules in user.rules start with e.g.
+            # ### tuple ### allow tcp 22 0.0.0.0/0 any 0.0.0.0/0 in
+            # -A ufw-user-input -p tcp --dport 22 -j ACCEPT -m comment --comment 'ufw-user-SSH'
+            if line_clean.startswith("### tuple ###"):
+                parts = line_clean.split()
+                # format: ### tuple ### <action> <proto> <port> <dst_ip> <app> <src_ip> <direction>
+                if len(parts) >= 8:
+                    action_raw = parts[3].upper()
+                    proto_raw = parts[4].lower()
+                    port_raw = parts[5]
+                    src_ip = parts[8] if len(parts) > 8 else parts[7]
+
+                    action = "ALLOW" if "ALLOW" in action_raw else ("DENY" if "DENY" in action_raw else action_raw)
+                    to_port = f"{port_raw}/{proto_raw}" if proto_raw != "any" else port_raw
+                    if is_v6:
+                        to_port += " (v6)"
+
+                    from_val = "Anywhere" if src_ip in ("0.0.0.0/0", "::/0", "any") else src_ip
+                    if is_v6 and from_val == "Anywhere":
+                        from_val += " (v6)"
+
+                    rules.append(
+                        FirewallRule(
+                            number=num,
+                            to_port=to_port,
+                            action=action,
+                            from_ip=from_val,
+                            comment="",
+                            raw=line_clean,
+                        )
+                    )
+                    num += 1
+    return rules
 
 
 def parse_numbered_rules(output: str) -> List[FirewallRule]:
@@ -139,14 +202,14 @@ def parse_numbered_rules(output: str) -> List[FirewallRule]:
         line_clean = line.strip()
         match = re.match(r"^\[\s*(\d+)\]\s+(.*?)\s+(ALLOW|DENY|REJECT|LIMIT)(?:\s+IN|\s+OUT)?\s+(.*?)(?:\s+#\s*(.*))?$", line_clean, re.IGNORECASE)
         if match:
-            num = int(match.group(1))
+            rule_num = int(match.group(1))
             to_port = match.group(2).strip()
             action = match.group(3).upper()
             from_ip = match.group(4).strip()
             comment = (match.group(5) or "").strip()
             rules.append(
                 FirewallRule(
-                    number=num,
+                    number=rule_num,
                     to_port=to_port,
                     action=action,
                     from_ip=from_ip,

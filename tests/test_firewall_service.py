@@ -105,6 +105,38 @@ class TestFirewallService(unittest.TestCase):
         cmd = mock_run.call_args[0][0]
         self.assertEqual(cmd, ["ufw", "--force", "delete", "2"])
 
+    def test_parse_user_rules_file(self):
+        import tempfile
+        from pathlib import Path
+
+        sample_file = """
+*filter
+:ufw-user-input - [0:0]
+### tuple ### allow tcp 22 0.0.0.0/0 any 0.0.0.0/0 in
+-A ufw-user-input -p tcp --dport 22 -j ACCEPT
+### tuple ### allow tcp 80 0.0.0.0/0 any 0.0.0.0/0 in
+-A ufw-user-input -p tcp --dport 80 -j ACCEPT
+### tuple ### allow tcp 3306 0.0.0.0/0 any 192.168.1.50 in
+-A ufw-user-input -s 192.168.1.50 -p tcp --dport 3306 -j ACCEPT
+COMMIT
+"""
+        with tempfile.NamedTemporaryFile("w+", delete=False) as f:
+            f.write(sample_file)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            rules = fw_service.parse_user_rules_file(temp_path)
+            self.assertEqual(len(rules), 3)
+            self.assertEqual(rules[0].to_port, "22/tcp")
+            self.assertEqual(rules[0].action, "ALLOW")
+            self.assertEqual(rules[0].from_ip, "Anywhere")
+
+            self.assertEqual(rules[2].to_port, "3306/tcp")
+            self.assertEqual(rules[2].from_ip, "192.168.1.50")
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
 
 if __name__ == "__main__":
     unittest.main()

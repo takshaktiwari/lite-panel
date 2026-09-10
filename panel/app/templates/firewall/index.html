@@ -54,15 +54,15 @@
     <div class="metric-detail muted">Unmatched outbound packets</div>
   </div>
   <div class="metric">
-    <div class="metric-label">Active Rules</div>
+    <div class="metric-label">{{ 'Active Rules' if status.enabled else 'Configured Rules' }}</div>
     <div class="metric-value" style="font-size:20px;">{{ status.rules|length }}</div>
-    <div class="metric-detail muted">Custom firewall entries</div>
+    <div class="metric-detail muted">{{ 'Active firewall entries' if status.enabled else 'Saved rules (ready upon enable)' }}</div>
   </div>
 </div>
 
 {% if not status.enabled %}
 <div class="alert alert-notice">
-  The firewall is currently <strong>disabled</strong>. When enabled, SSH (port 22) is automatically ensured to prevent lockout.
+  The firewall is currently <strong>disabled</strong>. The rules listed below are configured and saved in UFW, and will take effect once the firewall is enabled.
 </div>
 {% endif %}
 
