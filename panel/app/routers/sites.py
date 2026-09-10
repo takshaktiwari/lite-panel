@@ -7,7 +7,7 @@ from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession, selectinload
 
@@ -16,7 +16,9 @@ from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
 from app.models import AuditLog, FtpAccount, Site, SiteDatabase
 from app.providers import get_provider
+from app.services import dns_check as dns_check_service
 from app.services import sites as sites_service
+from app.services import system as system_service
 from app.validators import ValidationError, validate_domain, validate_site_name
 
 logger = logging.getLogger(__name__)
@@ -145,6 +147,36 @@ def site_detail(
         has_certificate=certbot.has_certificate(site.domain) if certbot.is_installed() else False,
         socket=str(sites_service.socket_for(site.name)) if site.php_version else None,
     )
+
+
+@router.get("/{site_id}/dns-check")
+def dns_check(
+    site_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """On-demand fan-out to public resolvers, fetched by the detail page's button."""
+    site = db.get(Site, site_id)
+    if site is None:
+        return JSONResponse({"error": "That site no longer exists."}, status_code=404)
+
+    expected_ip = system_service.public_ip()
+    results = dns_check_service.check_propagation(site.domain, expected_ip)
+    return JSONResponse({
+        "domain": site.domain,
+        "expected_ip": expected_ip,
+        "resolvers": [
+            {
+                "label": r.label,
+                "resolver_ip": r.resolver_ip,
+                "region": r.region,
+                "answers": r.answers,
+                "matches": r.matches,
+                "error": r.error,
+            }
+            for r in results
+        ],
+    })
 
 
 @router.post("/{site_id}/php", dependencies=[Depends(csrf_protect)])

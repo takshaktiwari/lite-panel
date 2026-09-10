@@ -10,3 +10,4 @@ python-multipart>=0.0.9        # form parsing (login, file uploads)
 bcrypt>=4.1,<6.0               # password hashing, used directly (no passlib)
 psutil>=6.0                    # dashboard stats
 PyMySQL>=1.1,<2.0              # MariaDB over unix socket, parameterized queries
+dnspython>=2.6,<3.0             # querying specific public resolvers for DNS propagation checks

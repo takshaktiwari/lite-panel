@@ -63,6 +63,13 @@
   {% endif %}
 </section>
 
+<section class="panel" id="dns-check-panel" data-site-id="{{ site.id }}" data-domain="{{ site.domain }}">
+  <h2>DNS propagation</h2>
+  <p class="muted">Check whether {{ site.domain }} already resolves to this server across a spread of independent public DNS resolvers.</p>
+  <button type="button" class="button" id="btn-check-dns">Check DNS propagation</button>
+  <div id="dns-check-result" style="margin-top:14px;"></div>
+</section>
+
 <section class="panel">
   <h2>Databases</h2>
   {% if databases %}
@@ -112,4 +119,6 @@
     <button type="submit" class="button" style="margin-top:14px;color:var(--danger);">Delete site</button>
   </form>
 </section>
+
+<script src="/static/dns-check.js"></script>
 {% endblock %}
