@@ -27,7 +27,7 @@
 
 <div class="bulk-toolbar">
   <details class="dropdown">
-    <summary class="button primary">+ New</summary>
+    <summary class="button primary button-sm">+ New</summary>
     <div class="dropdown-menu align-left" style="min-width:250px;padding:12px;">
       <form method="post" action="/files/mkdir" style="margin-bottom:10px;">
         {{ ui.csrf(session) }}
@@ -38,7 +38,7 @@
           <button class="button" type="submit">Create</button>
         </div>
       </form>
-      <form method="post" action="/files/new-file" style="margin-bottom:10px;">
+      <form method="post" action="/files/new-file" style="margin-bottom:0;">
         {{ ui.csrf(session) }}
         <input type="hidden" name="path" value="{{ current }}">
         <label for="filename">New file</label>
@@ -47,17 +47,10 @@
           <button class="button" type="submit">Create</button>
         </div>
       </form>
-      <form method="post" action="/files/upload" enctype="multipart/form-data" style="margin-bottom:0;">
-        {{ ui.csrf(session) }}
-        <input type="hidden" name="path" value="{{ current }}">
-        <label for="upload">Upload file</label>
-        <div style="display:flex;gap:6px;">
-          <input type="file" id="upload" name="upload" required style="margin:0;">
-          <button class="button" type="submit">Upload</button>
-        </div>
-      </form>
     </div>
   </details>
+
+  <button type="button" class="button button-sm" id="open-upload-dialog">Upload</button>
 
   <span style="flex:1 1 auto;"></span>
 
@@ -220,5 +213,19 @@
   </form>
 </dialog>
 
+{# Upload modal -- file-upload.js drives the whole flow: chunked upload per
+   file, a progress row per queued file, and the close/cancel confirmation
+   while anything is still in flight. #}
+<dialog id="upload-dialog" class="dialog wide">
+  <h2>Upload files</h2>
+  <label for="upload-file-input">Choose file(s) to upload</label>
+  <input type="file" id="upload-file-input" multiple>
+  <ul id="upload-queue"></ul>
+  <div class="dialog-actions">
+    <button type="button" class="button" id="upload-dialog-close">Close</button>
+  </div>
+</dialog>
+
 <script src="/static/file-manager.js"></script>
+<script src="/static/file-upload.js"></script>
 {% endblock %}

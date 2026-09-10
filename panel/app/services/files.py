@@ -18,10 +18,11 @@ import pwd
 import shutil
 import stat
 import zipfile
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+from uuid import uuid4
 
 from app.config import get_settings
 from app.validators import (
@@ -52,6 +53,16 @@ MAX_EXTRACT_ENTRIES = 50_000
 # the limit is always the box's own disk rather than a number that goes
 # stale the moment someone provisions a bigger one.
 EXTRACT_FREE_SPACE_MARGIN_BYTES = 512 * 1024 * 1024  # 512 MB
+
+# Chunked uploads write straight into their destination directory as
+# ".lpu-<id>.part" so the final rename is always same-filesystem and instant
+# regardless of file size. Sessions live in a process-local dict -- the panel
+# runs a single Uvicorn worker, and an upload is not meant to survive a
+# refresh or a restart, only the browser tab that started it.
+UPLOAD_FREE_SPACE_MARGIN_BYTES = 512 * 1024 * 1024  # 512 MB
+CHUNK_UPLOAD_PREFIX = ".lpu-"
+CHUNK_UPLOAD_SUFFIX = ".part"
+UPLOAD_SESSION_TTL = timedelta(hours=2)
 
 ARCHIVE_EXTENSIONS = frozenset({".zip"})
 
@@ -134,8 +145,14 @@ def list_directory(candidate) -> List[Entry]:
         raise ValidationError("Permission denied reading that directory.") from None
 
     for child in children:
+        if _is_partial_upload_name(child.name):
+            continue
         entries.append(_describe(child))
     return entries
+
+
+def _is_partial_upload_name(name: str) -> bool:
+    return name.startswith(CHUNK_UPLOAD_PREFIX) and name.endswith(CHUNK_UPLOAD_SUFFIX)
 
 
 def _describe(path: Path) -> Entry:
@@ -572,21 +589,127 @@ def is_archive_name(name: str) -> bool:
     return Path(name).suffix.lower() in ARCHIVE_EXTENSIONS
 
 
-def save_upload(parent_candidate, filename: str, data: bytes) -> Path:
+# --------------------------------------------------------------------------
+# Chunked uploads
+# --------------------------------------------------------------------------
+
+
+@dataclass
+class _UploadSession:
+    id: str
+    parent: Path
+    final_name: str
+    part_path: Path
+    total_size: int
+    owner: Optional[Tuple[int, int]]
+    received_bytes: int = 0
+    next_index: int = 0
+    last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+_upload_sessions: Dict[str, _UploadSession] = {}
+
+
+def _discard_upload_session(upload_id: str) -> None:
+    session = _upload_sessions.pop(upload_id, None)
+    if session is None:
+        return
+    try:
+        session.part_path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.debug("could not remove partial upload %s: %s", session.part_path, exc)
+
+
+def _sweep_expired_upload_sessions() -> None:
+    now = datetime.now(timezone.utc)
+    expired = [
+        upload_id
+        for upload_id, session in _upload_sessions.items()
+        if now - session.last_activity > UPLOAD_SESSION_TTL
+    ]
+    for upload_id in expired:
+        _discard_upload_session(upload_id)
+
+
+def init_upload(parent_candidate, filename: str, total_size: int) -> _UploadSession:
+    # Called on every new upload, so this is also where abandoned sessions
+    # (tab closed mid-upload with no explicit cancel) get cleaned up, without
+    # needing a background thread.
+    _sweep_expired_upload_sessions()
+
     filename = validate_filename(filename)
-    if len(data) > MAX_UPLOAD_BYTES:
+    if total_size < 0 or total_size > MAX_UPLOAD_BYTES:
         raise ValidationError(f"Uploads are limited to {format_size(MAX_UPLOAD_BYTES)}.")
 
     parent = resolve(parent_candidate)
     if not parent.is_dir():
         raise ValidationError("Upload target is not a directory.")
 
-    target = resolve(parent / filename)
-    target.write_bytes(data)
+    free_bytes = shutil.disk_usage(parent).free
+    if total_size > free_bytes - UPLOAD_FREE_SPACE_MARGIN_BYTES:
+        headroom = max(free_bytes - UPLOAD_FREE_SPACE_MARGIN_BYTES, 0)
+        raise ValidationError(
+            f"'{filename}' is {format_size(total_size)}, but only "
+            f"{format_size(headroom)} is free on disk."
+        )
+
+    upload_id = uuid4().hex
+    part_path = parent / f"{CHUNK_UPLOAD_PREFIX}{upload_id}{CHUNK_UPLOAD_SUFFIX}"
+    part_path.write_bytes(b"")
+
+    session = _UploadSession(
+        id=upload_id,
+        parent=parent,
+        final_name=filename,
+        part_path=part_path,
+        total_size=total_size,
+        owner=_owner_of(parent),
+    )
+    _upload_sessions[upload_id] = session
+    return session
+
+
+def append_chunk(upload_id: str, index: int, data: bytes) -> int:
+    session = _upload_sessions.get(upload_id)
+    if session is None:
+        raise ValidationError("Upload session not found or has expired.")
+
+    if index < session.next_index:
+        # Already applied -- a client retry after a dropped response, not a
+        # real problem. Report success without writing it twice.
+        return session.received_bytes
+    if index != session.next_index:
+        raise ValidationError("Upload chunks arrived out of order.")
+    if session.received_bytes + len(data) > session.total_size:
+        raise ValidationError("Upload received more data than expected.")
+
+    with open(session.part_path, "ab") as fh:
+        fh.write(data)
+
+    session.received_bytes += len(data)
+    session.next_index += 1
+    session.last_activity = datetime.now(timezone.utc)
+    return session.received_bytes
+
+
+def complete_upload(upload_id: str) -> Path:
+    session = _upload_sessions.get(upload_id)
+    if session is None:
+        raise ValidationError("Upload session not found or has expired.")
+    if session.received_bytes != session.total_size:
+        raise ValidationError("Upload is incomplete.")
+
+    target = resolve(session.parent / session.final_name)
+    session.part_path.rename(target)
     # Files uploaded through the panel are written by root; without this the
     # site's own user could not modify what it just received.
-    _restore_owner(target, _owner_of(parent))
+    _restore_owner(target, session.owner)
+    _upload_sessions.pop(upload_id, None)
     return target
+
+
+def abort_upload(upload_id: str) -> None:
+    _discard_upload_session(upload_id)
 
 
 # --------------------------------------------------------------------------

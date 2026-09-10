@@ -10,6 +10,7 @@ module refuses to leave the sites root.
 
 import shutil
 import zipfile
+from datetime import timedelta
 
 import pytest
 
@@ -495,3 +496,112 @@ def test_named_file_with_text_extension_is_still_editable():
 
 def test_unknown_extension_is_not_editable():
     assert not _entry("photo.png").editable
+
+
+# --------------------------------------------------------------------------
+# Chunked uploads
+# --------------------------------------------------------------------------
+
+
+def test_chunked_upload_round_trip(sites_root):
+    session = files_service.init_upload(".", "big.bin", 10)
+    files_service.append_chunk(session.id, 0, b"hello")
+    files_service.append_chunk(session.id, 1, b"world")
+
+    saved = files_service.complete_upload(session.id)
+
+    assert saved == sites_root / "big.bin"
+    assert saved.read_bytes() == b"helloworld"
+
+
+def test_chunked_upload_replaying_an_already_applied_chunk_is_a_no_op(sites_root):
+    """A client retrying a chunk after a dropped response must not duplicate
+    the bytes it already wrote."""
+    session = files_service.init_upload(".", "a.bin", 5)
+    files_service.append_chunk(session.id, 0, b"hello")
+    received = files_service.append_chunk(session.id, 0, b"hello")
+    assert received == 5
+
+    saved = files_service.complete_upload(session.id)
+    assert saved.read_bytes() == b"hello"
+
+
+def test_chunked_upload_rejects_an_out_of_order_chunk(sites_root):
+    session = files_service.init_upload(".", "a.bin", 10)
+    with pytest.raises(ValidationError):
+        files_service.append_chunk(session.id, 2, b"oops")
+
+
+def test_chunked_upload_rejects_a_missing_or_expired_session(sites_root):
+    with pytest.raises(ValidationError):
+        files_service.append_chunk("does-not-exist", 0, b"x")
+    with pytest.raises(ValidationError):
+        files_service.complete_upload("does-not-exist")
+
+
+def test_chunked_upload_cannot_complete_before_all_bytes_arrive(sites_root):
+    session = files_service.init_upload(".", "a.bin", 10)
+    files_service.append_chunk(session.id, 0, b"hello")
+    with pytest.raises(ValidationError):
+        files_service.complete_upload(session.id)
+
+
+def test_chunked_upload_enforces_the_size_cap(sites_root, monkeypatch):
+    monkeypatch.setattr(files_service, "MAX_UPLOAD_BYTES", 5)
+    with pytest.raises(ValidationError):
+        files_service.init_upload(".", "a.bin", 10)
+
+
+def test_chunked_upload_refuses_when_disk_does_not_have_room(sites_root, monkeypatch):
+    fake_usage = shutil.disk_usage("/").__class__(total=0, used=0, free=5)
+    monkeypatch.setattr(files_service.shutil, "disk_usage", lambda path: fake_usage)
+    with pytest.raises(ValidationError):
+        files_service.init_upload(".", "a.bin", 1000)
+
+
+def test_chunked_upload_abort_removes_the_partial_file(sites_root):
+    session = files_service.init_upload(".", "a.bin", 10)
+    files_service.append_chunk(session.id, 0, b"hello")
+    assert session.part_path.exists()
+
+    files_service.abort_upload(session.id)
+
+    assert not session.part_path.exists()
+    with pytest.raises(ValidationError):
+        files_service.append_chunk(session.id, 1, b"world")
+
+
+def test_chunked_upload_abort_is_a_safe_no_op_on_an_unknown_id(sites_root):
+    files_service.abort_upload("does-not-exist")  # must not raise
+
+
+def test_partial_uploads_do_not_show_up_in_directory_listings(sites_root):
+    session = files_service.init_upload(".", "a.bin", 5)
+    entries = files_service.list_directory(".")
+    assert all(entry.name != session.part_path.name for entry in entries)
+
+
+def test_chunked_upload_sessions_expire_after_their_ttl(sites_root, monkeypatch):
+    monkeypatch.setattr(files_service, "UPLOAD_SESSION_TTL", timedelta(seconds=0))
+    session = files_service.init_upload(".", "a.bin", 5)
+    part_path = session.part_path
+
+    # init_upload() sweeps expired sessions as a side effect, so starting a
+    # second upload is what triggers the abandoned one to be cleaned up.
+    files_service.init_upload(".", "b.bin", 5)
+
+    assert not part_path.exists()
+    with pytest.raises(ValidationError):
+        files_service.append_chunk(session.id, 0, b"x")
+
+
+def test_chunked_upload_completing_overwrites_a_same_named_file(sites_root):
+    """Matches the old single-shot upload's behavior, which never checked
+    for a collision either."""
+    (sites_root / "a.bin").write_text("old content")
+    session = files_service.init_upload(".", "a.bin", 5)
+    files_service.append_chunk(session.id, 0, b"hello")
+
+    saved = files_service.complete_upload(session.id)
+
+    assert saved.read_bytes() == b"hello"

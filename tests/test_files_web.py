@@ -341,3 +341,76 @@ def test_bulk_archive_bundles_every_selected_item(signed_in, sites_root):
     assert response.status_code == 303
     with zipfile.ZipFile(sites_root / "bundle.zip") as zf:
         assert set(zf.namelist()) == {"a.txt", "b.txt"}
+
+
+# --------------------------------------------------------------------------
+# Chunked upload
+# --------------------------------------------------------------------------
+
+
+def test_chunk_upload_round_trip(signed_in, sites_root):
+    token = _csrf(signed_in)
+
+    init_response = signed_in.post(
+        "/files/chunk-upload/init",
+        json={"path": ".", "filename": "a.txt", "size": 5},
+        headers={"X-CSRF-Token": token},
+    )
+    assert init_response.status_code == 200
+    upload_id = init_response.json()["upload_id"]
+
+    chunk_response = signed_in.post(
+        f"/files/chunk-upload/{upload_id}/chunk",
+        data={"index": "0", "csrf_token": token},
+        files={"chunk": ("chunk", b"hello")},
+    )
+    assert chunk_response.status_code == 200
+    assert chunk_response.json() == {"received_bytes": 5}
+
+    complete_response = signed_in.post(
+        f"/files/chunk-upload/{upload_id}/complete",
+        data={"csrf_token": token},
+    )
+    assert complete_response.status_code == 200
+    assert complete_response.json() == {"name": "a.txt"}
+    assert (sites_root / "a.txt").read_bytes() == b"hello"
+
+
+def test_chunk_upload_init_requires_csrf(signed_in, sites_root):
+    response = signed_in.post(
+        "/files/chunk-upload/init",
+        json={"path": ".", "filename": "a.txt", "size": 5},
+    )
+    assert response.status_code == 400
+
+
+def test_chunk_upload_abort_discards_the_session(signed_in, sites_root):
+    token = _csrf(signed_in)
+    init_response = signed_in.post(
+        "/files/chunk-upload/init",
+        json={"path": ".", "filename": "a.txt", "size": 5},
+        headers={"X-CSRF-Token": token},
+    )
+    upload_id = init_response.json()["upload_id"]
+
+    abort_response = signed_in.post(
+        f"/files/chunk-upload/{upload_id}/abort",
+        data={"csrf_token": token},
+    )
+    assert abort_response.status_code == 200
+
+    complete_response = signed_in.post(
+        f"/files/chunk-upload/{upload_id}/complete",
+        data={"csrf_token": token},
+    )
+    assert complete_response.status_code == 400
+
+
+def test_chunk_upload_rejects_a_traversal_filename(signed_in, sites_root):
+    token = _csrf(signed_in)
+    response = signed_in.post(
+        "/files/chunk-upload/init",
+        json={"path": ".", "filename": "../../etc/evil", "size": 5},
+        headers={"X-CSRF-Token": token},
+    )
+    assert response.status_code == 400

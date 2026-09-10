@@ -12,7 +12,8 @@ from typing import List, Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session as OrmSession
 
 from app.database import get_session
@@ -126,21 +127,63 @@ def download(
     )
 
 
-@router.post("/upload", dependencies=[Depends(csrf_protect)])
-async def upload(
-    path: str = Form(...),
-    upload: UploadFile = File(...),
+class _InitUploadRequest(BaseModel):
+    path: str
+    filename: str
+    size: int
+
+
+@router.post("/chunk-upload/init", dependencies=[Depends(csrf_protect)])
+def init_upload(
+    body: _InitUploadRequest,
+    session=Depends(require_session),
+):
+    try:
+        upload_session = files_service.init_upload(body.path, body.filename, body.size)
+    except (ValidationError, OSError) as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+    return {"upload_id": upload_session.id}
+
+
+@router.post("/chunk-upload/{upload_id}/chunk", dependencies=[Depends(csrf_protect)])
+async def upload_chunk(
+    upload_id: str,
+    index: int = Form(...),
+    chunk: UploadFile = File(...),
+    session=Depends(require_session),
+):
+    try:
+        data = await chunk.read()
+        received_bytes = files_service.append_chunk(upload_id, index, data)
+    except (ValidationError, OSError) as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+    return {"received_bytes": received_bytes}
+
+
+@router.post("/chunk-upload/{upload_id}/complete", dependencies=[Depends(csrf_protect)])
+def complete_upload(
+    upload_id: str,
     session=Depends(require_session),
     db: OrmSession = Depends(get_session),
 ):
     try:
-        data = await upload.read()
-        saved = files_service.save_upload(path, upload.filename or "upload", data)
+        saved = files_service.complete_upload(upload_id)
     except (ValidationError, OSError) as exc:
-        return _back(path, error=str(exc))
+        return JSONResponse(status_code=400, content={"error": str(exc)})
 
     _audit(db, session, "files.upload", str(saved))
-    return _back(path, notice=f"Uploaded {saved.name}")
+    return {"name": saved.name}
+
+
+@router.post("/chunk-upload/{upload_id}/abort", dependencies=[Depends(csrf_protect)])
+def abort_upload(
+    upload_id: str,
+    session=Depends(require_session),
+):
+    files_service.abort_upload(upload_id)
+    return {"ok": True}
 
 
 @router.post("/mkdir", dependencies=[Depends(csrf_protect)])
