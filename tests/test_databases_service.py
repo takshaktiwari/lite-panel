@@ -111,3 +111,55 @@ def test_reassign_database_user_grants_new_and_revokes_old():
     assert any("REVOKE ALL PRIVILEGES" in sql for sql in statements)
     assert any("DELETE FROM mysql.db WHERE user = %s AND db = %s" in sql for sql in statements)
 
+
+def test_export_database_invokes_mysqldump(tmp_path):
+    out_file = tmp_path / "dump.sql.gz"
+    mock_proc = patch("subprocess.Popen").start()
+    try:
+        from unittest.mock import MagicMock
+        proc_instance = MagicMock()
+        proc_instance.stdout.read.side_effect = [b"CREATE TABLE test;", b""]
+        proc_instance.communicate.return_value = (b"", b"")
+        proc_instance.returncode = 0
+        mock_proc.return_value = proc_instance
+
+        with patch.object(db_service, "database_exists", return_value=True), \
+             patch("app.providers.mariadb.MariaDbProvider.socket_path", return_value="/run/mysqld/mysqld.sock"):
+            res = db_service.export_database("app_db", out_file, gzip=True)
+
+        assert res.exists()
+        assert mock_proc.called
+        args = mock_proc.call_args[0][0]
+        assert args[0] == "mysqldump"
+        assert "--socket=/run/mysqld/mysqld.sock" in args
+        assert "app_db" in args
+    finally:
+        patch.stopall()
+
+
+def test_import_database_invokes_mysql(tmp_path):
+    sql_file = tmp_path / "test.sql"
+    sql_file.write_text("CREATE TABLE t (id INT);")
+
+    mock_proc = patch("subprocess.Popen").start()
+    try:
+        from unittest.mock import MagicMock
+        proc_instance = MagicMock()
+        proc_instance.stdin = MagicMock()
+        proc_instance.communicate.return_value = (b"", b"")
+        proc_instance.returncode = 0
+        mock_proc.return_value = proc_instance
+
+        with patch.object(db_service, "database_exists", return_value=True), \
+             patch("app.providers.mariadb.MariaDbProvider.socket_path", return_value="/run/mysqld/mysqld.sock"):
+            db_service.import_database("app_db", sql_file)
+
+        assert mock_proc.called
+        args = mock_proc.call_args[0][0]
+        assert args[0] == "mysql"
+        assert "--socket=/run/mysqld/mysqld.sock" in args
+        assert "app_db" in args
+    finally:
+        patch.stopall()
+
+

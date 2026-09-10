@@ -54,6 +54,7 @@
   const dlgReassign = document.getElementById("dlg-reassign");
   const dlgPassword = document.getElementById("dlg-password");
   const dlgDelete = document.getElementById("dlg-delete");
+  const dlgImport = document.getElementById("dlg-import");
 
   // Close dialog buttons
   document.querySelectorAll("dialog [data-close]").forEach((btn) => {
@@ -141,6 +142,17 @@
       document.getElementById("dlg-new-password").value = "";
 
       dlgPassword?.showModal();
+    } else if (action === "import") {
+      const dbId = btn.getAttribute("data-db-id");
+      const dbName = btn.getAttribute("data-db-name");
+
+      document.getElementById("form-import").action = "/databases/" + dbId + "/import";
+      document.getElementById("dlg-import-title").textContent = "Import into " + dbName;
+      document.getElementById("dlg-import-desc").textContent = "Target database: " + dbName;
+      const fileInput = document.getElementById("import-file");
+      if (fileInput) fileInput.value = "";
+
+      dlgImport?.showModal();
     } else if (action === "delete") {
       const dbId = btn.getAttribute("data-db-id");
       const dbName = btn.getAttribute("data-db-name");

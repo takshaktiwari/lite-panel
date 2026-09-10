@@ -315,6 +315,28 @@ def change_database_password(ctx) -> None:
     ctx.log(f"password changed for {ctx.payload['db_user']}")
 
 
+@register("database.import")
+def import_database_task(ctx) -> None:
+    import os
+    db_name = ctx.payload["db_name"]
+    source_file = ctx.payload["source_file"]
+    cleanup = ctx.payload.get("cleanup", True)
+
+    ctx.log(f"Importing database dump into {db_name}")
+    try:
+        db_service.import_database(db_name, source_file)
+    except (ValidationError, RuntimeError) as exc:
+        raise _fail(exc) from exc
+    finally:
+        if cleanup and os.path.exists(source_file):
+            try:
+                os.unlink(source_file)
+            except OSError:
+                pass
+
+    ctx.log(f"Database dump successfully imported into {db_name}")
+
+
 # --------------------------------------------------------------------------
 # FTP
 # --------------------------------------------------------------------------

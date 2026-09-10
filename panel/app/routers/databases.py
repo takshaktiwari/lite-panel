@@ -7,11 +7,15 @@ than reimplemented -- that delegation is the point of the design.
 from __future__ import annotations
 
 import logging
+import os
+from pathlib import Path
+import shutil
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
+from starlette.background import BackgroundTask
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
@@ -259,7 +263,99 @@ def reset_password(
     )
 
 
-# --------------------------------------------------------------------------
+@router.get("/{database_id}/export")
+def export_database(
+    database_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    from datetime import datetime, timezone
+    from fastapi.responses import FileResponse
+    from starlette.background import BackgroundTask
+    import tempfile
+    import os
+
+    record = db.get(SiteDatabase, database_id)
+    if record is None:
+        return _back(error="That database is no longer managed by the panel.")
+
+    db_name = record.db_name
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"{db_name}_{timestamp}.sql.gz"
+
+    tmp_dir = tempfile.mkdtemp(prefix="lp-db-export-")
+    tmp_path = Path(tmp_dir) / filename
+
+    try:
+        db_service.export_database(db_name, tmp_path, gzip=True)
+    except Exception as exc:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return _back(error=f"Export failed: {exc}")
+
+    _audit(db, session, "database.export", db_name)
+
+    def cleanup():
+        try:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+    return FileResponse(
+        str(tmp_path),
+        media_type="application/gzip",
+        filename=filename,
+        background=BackgroundTask(cleanup),
+    )
+
+
+@router.post("/{database_id}/import", dependencies=[Depends(csrf_protect)])
+async def import_database(
+    database_id: int,
+    file: UploadFile = File(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    record = db.get(SiteDatabase, database_id)
+    if record is None:
+        return _back(error="That database is no longer managed by the panel.")
+
+    if not file.filename:
+        return _back(error="No file uploaded.")
+
+    fname_lower = file.filename.lower()
+    if not (fname_lower.endswith(".sql") or fname_lower.endswith(".sql.gz") or fname_lower.endswith(".gz")):
+        return _back(error="Only .sql and .sql.gz dump files are supported.")
+
+    import tempfile
+    tmp_dir = tempfile.mkdtemp(prefix="lp-db-import-")
+    ext = ".sql.gz" if (fname_lower.endswith(".gz")) else ".sql"
+    tmp_path = Path(tmp_dir) / f"upload_{record.db_name}{ext}"
+
+    try:
+        with open(tmp_path, "wb") as f_out:
+            while True:
+                chunk = await file.read(65536)
+                if not chunk:
+                    break
+                f_out.write(chunk)
+    except Exception as exc:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return _back(error=f"Failed to process upload: {exc}")
+
+    job = enqueue(
+        db,
+        "database.import",
+        f"Import dump into database {record.db_name}",
+        payload={
+            "db_name": record.db_name,
+            "source_file": str(tmp_path),
+            "cleanup": True,
+        },
+        user_id=session.user_id,
+    )
+    _audit(db, session, "database.import", f"{record.db_name} from {file.filename}")
+    return job_redirect(job.id, "/databases", notice=f"Importing {file.filename} into {record.db_name}...")
+
 
 
 def _back(*, error: Optional[str] = None):

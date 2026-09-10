@@ -3,7 +3,11 @@
 {% block title %}Stack · {{ app_name }}{% endblock %}
 
 {% block content %}
-<header class="page-head"><h1>Stack</h1><p class="muted">Install or remove server components. Nothing here is fixed at install time.</p></header>
+<header class="page-head">
+  <h1>Stack</h1>
+  <p class="muted">Install or remove server components. Nothing here is fixed at install time.</p>
+  <p class="muted">Panel runtime: Python {{ python_version }} — installed by the lite-panel setup script itself; not managed from here.</p>
+</header>
 
 <section class="panel">
   <table class="table">

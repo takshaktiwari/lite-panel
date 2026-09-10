@@ -115,3 +115,40 @@ def test_create_database_with_existing_user_enqueues_job(signed_in, db):
     assert response.status_code == 303
     assert "/jobs/" in response.headers["location"]
 
+
+def test_export_database_downloads_file(signed_in, db, monkeypatch, tmp_path):
+    from unittest.mock import patch
+    db_record = SiteDatabase(db_name="test_db", db_user="test_user")
+    db.add(db_record)
+    db.commit()
+
+    def fake_export(name, target, gzip=True):
+        from pathlib import Path
+        Path(target).write_bytes(b"dummy gz content")
+        return Path(target)
+
+    with patch("app.services.databases.export_database", side_effect=fake_export):
+        response = signed_in.get(f"/databases/{db_record.id}/export")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/gzip"
+    assert "test_db_" in response.headers["content-disposition"]
+
+
+def test_import_database_enqueues_job(signed_in, db):
+    db_record = SiteDatabase(db_name="test_db", db_user="test_user")
+    db.add(db_record)
+    db.commit()
+
+    files = {"file": ("backup.sql.gz", b"fake sql dump", "application/gzip")}
+    data = {"csrf_token": _csrf(signed_in)}
+
+    response = signed_in.post(
+        f"/databases/{db_record.id}/import",
+        files=files,
+        data=data,
+    )
+    assert response.status_code == 303
+    assert "/jobs/" in response.headers["location"]
+
+

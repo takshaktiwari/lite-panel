@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import platform
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -43,6 +44,7 @@ def stack_page(
         php_repo=php.repository_status(),
         node_available=[v for v in node.available_versions() if v not in installed_node],
         node_installed=installed_node,
+        python_version=platform.python_version(),
     )
 
 

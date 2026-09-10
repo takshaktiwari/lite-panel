@@ -42,6 +42,7 @@ def dashboard(
         info=info,
         uptime=system.format_uptime(info.uptime_seconds),
         server_time=system.server_time(),
+        server_ip=system.public_ip(),
         services=system.service_states(),
         site_count=db.scalar(select(func.count(Site.id))) or 0,
         database_count=db.scalar(select(func.count(SiteDatabase.id))) or 0,

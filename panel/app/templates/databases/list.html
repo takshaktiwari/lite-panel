@@ -82,6 +82,14 @@
           <details class="dropdown" style="display:inline-block;margin-left:4px;">
             <summary class="button" title="Manage database">⚙</summary>
             <div class="dropdown-menu">
+              <a href="/databases/{{ entry.id }}/export" class="dropdown-item">
+                Export / Dump (.sql.gz)
+              </a>
+              <button type="button" class="dropdown-item" data-action="import"
+                      data-db-id="{{ entry.id }}" data-db-name="{{ entry.db_name }}">
+                Import / Restore (.sql)
+              </button>
+              <div style="border-top:1px solid var(--border);margin:4px 0;"></div>
               <button type="button" class="dropdown-item" data-action="reassign"
                       data-db-id="{{ entry.id }}" data-db-name="{{ entry.db_name }}" data-current-user="{{ entry.db_user }}">
                 Assign / change user
@@ -228,6 +236,26 @@
     <div class="dialog-actions">
       <button type="button" class="button" data-close>Cancel</button>
       <button type="submit" class="button" style="color:var(--danger);">Delete database</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal: Import Database Dump -->
+<dialog id="dlg-import" class="dialog">
+  <form method="post" id="form-import" action="" enctype="multipart/form-data">
+    {{ ui.csrf(session) }}
+    <h2 id="dlg-import-title">Import / Restore database</h2>
+    <p class="muted" id="dlg-import-desc" style="margin-top:-6px;font-size:13px;"></p>
+    <div class="alert alert-notice" style="font-size:12.5px;margin-bottom:12px;">
+      <strong>Notice:</strong> Importing will execute all SQL statements in the dump file into this database. Existing tables with the same names may be overwritten.
+    </div>
+
+    <label for="import-file">SQL dump file (.sql or .sql.gz)</label>
+    <input type="file" id="import-file" name="file" accept=".sql,.gz,.sql.gz" required style="margin-bottom:14px;">
+
+    <div class="dialog-actions">
+      <button type="button" class="button" data-close>Cancel</button>
+      <button type="submit" class="button primary" id="btn-submit-import">Start import</button>
     </div>
   </form>
 </dialog>

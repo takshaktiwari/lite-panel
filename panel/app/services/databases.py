@@ -12,6 +12,7 @@ module exists to avoid.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from app.providers.mariadb import MariaDbProvider
@@ -283,3 +284,136 @@ def ensure_adminer_account() -> None:
         cur.execute("FLUSH PRIVILEGES")
 
     logger.info("Adminer's passwordless login account (%s@%s) is ready", ADMINER_OS_USER, DEFAULT_HOST)
+
+
+def export_database(db_name: str, target_file: str | Path, *, gzip: bool = True) -> Path:
+    """Export a database to a SQL dump file (optionally gzipped) via mysqldump."""
+    import gzip as gzip_lib
+    import subprocess
+    from app.shell import base_env
+
+    db_name = validate_db_identifier(db_name)
+    if not database_exists(db_name):
+        raise ValidationError(f"Database '{db_name}' does not exist.")
+
+    socket_path = MariaDbProvider.socket_path()
+    if not socket_path:
+        raise RuntimeError("Cannot reach MariaDB: no unix socket found.")
+
+    target_path = Path(target_file)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    args = [
+        "mysqldump",
+        f"--socket={socket_path}",
+        "-u", "root",
+        "--single-transaction",
+        "--quick",
+        "--routines",
+        "--events",
+        db_name,
+    ]
+
+    try:
+        proc = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=base_env(),
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("mysqldump utility is not installed on the system.") from exc
+
+    try:
+        if gzip:
+            with gzip_lib.open(target_path, "wb") as f_out:
+                assert proc.stdout is not None
+                while True:
+                    chunk = proc.stdout.read(65536)
+                    if not chunk:
+                        break
+                    f_out.write(chunk)
+        else:
+            with open(target_path, "wb") as f_out:
+                assert proc.stdout is not None
+                while True:
+                    chunk = proc.stdout.read(65536)
+                    if not chunk:
+                        break
+                    f_out.write(chunk)
+
+        _, stderr = proc.communicate()
+        if proc.returncode != 0:
+            err_msg = (stderr or b"").decode("utf-8", errors="replace").strip()
+            if target_path.exists():
+                target_path.unlink(missing_ok=True)
+            raise RuntimeError(f"mysqldump failed (code {proc.returncode}): {err_msg[:400]}")
+    except Exception:
+        if target_path.exists():
+            target_path.unlink(missing_ok=True)
+        raise
+
+    logger.info("exported database %s to %s", db_name, target_path)
+    return target_path
+
+
+def import_database(db_name: str, source_file: str | Path) -> None:
+    """Import a SQL dump file (.sql or .sql.gz) into an existing database."""
+    import gzip as gzip_lib
+    import subprocess
+    from app.shell import base_env
+
+    db_name = validate_db_identifier(db_name)
+    if not database_exists(db_name):
+        raise ValidationError(f"Database '{db_name}' does not exist.")
+
+    source_path = Path(source_file)
+    if not source_path.is_file():
+        raise ValidationError("The database dump file does not exist.")
+
+    socket_path = MariaDbProvider.socket_path()
+    if not socket_path:
+        raise RuntimeError("Cannot reach MariaDB: no unix socket found.")
+
+    is_gz = source_path.suffix.lower() == ".gz" or source_path.name.lower().endswith(".sql.gz")
+
+    args = [
+        "mysql",
+        f"--socket={socket_path}",
+        "-u", "root",
+        db_name,
+    ]
+
+    try:
+        proc = subprocess.Popen(
+            args,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=base_env(),
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("mysql utility is not installed on the system.") from exc
+
+    try:
+        opener = gzip_lib.open if is_gz else open
+        with opener(source_path, "rb") as f_in:
+            assert proc.stdin is not None
+            while True:
+                chunk = f_in.read(65536)
+                if not chunk:
+                    break
+                proc.stdin.write(chunk)
+            proc.stdin.close()
+
+        stdout, stderr = proc.communicate()
+        if proc.returncode != 0:
+            err_msg = (stderr or b"").decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"Database import failed (code {proc.returncode}): {err_msg[:400]}")
+    except Exception:
+        proc.kill()
+        proc.wait()
+        raise
+
+    logger.info("imported dump %s into database %s", source_path, db_name)
+
