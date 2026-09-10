@@ -45,8 +45,8 @@
     const li = document.createElement("li");
     li.className = "upload-row";
 
-    const head = document.createElement("div");
-    head.className = "upload-row-head";
+    const main = document.createElement("div");
+    main.className = "upload-row-main";
 
     const name = document.createElement("span");
     name.className = "upload-row-name";
@@ -56,19 +56,21 @@
     status.className = "upload-row-status";
     status.textContent = "Waiting…";
 
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.className = "link-button";
-    cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => cancelRow(row));
-
-    head.append(name, status, cancel);
-
     const progress = document.createElement("progress");
     progress.max = 100;
     progress.value = 0;
 
-    li.append(head, progress);
+    main.append(name, status, progress);
+
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "upload-row-cancel";
+    cancel.textContent = "✕";
+    cancel.title = "Cancel upload";
+    cancel.setAttribute("aria-label", "Cancel upload");
+    cancel.addEventListener("click", () => cancelRow(row));
+
+    li.append(main, cancel);
     queueList.appendChild(li);
 
     row.statusEl = status;
@@ -123,7 +125,7 @@
 
       row.status = "done";
       setStatus(row, "Done");
-      row.cancelEl.hidden = true;
+      row.cancelEl.disabled = true;
     } catch (err) {
       if (row.cancelled) {
         row.status = "cancelled";
@@ -132,7 +134,7 @@
         row.status = "failed";
         setStatus(row, err.message || "Upload failed.", true);
       }
-      row.cancelEl.hidden = true;
+      row.cancelEl.disabled = true;
       if (row.uploadId) abortUpload(row.uploadId);
     }
   }
@@ -165,7 +167,7 @@
       // Never started -- nothing to abort server-side, just mark it done.
       row.status = "cancelled";
       setStatus(row, "Cancelled");
-      row.cancelEl.hidden = true;
+      row.cancelEl.disabled = true;
     }
     // If it's mid-upload, runUpload()'s own loop notices row.cancelled and
     // unwinds itself (including the abort call) on its next check.

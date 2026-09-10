@@ -218,8 +218,8 @@
    while anything is still in flight. #}
 <dialog id="upload-dialog" class="dialog wide">
   <h2>Upload files</h2>
-  <label for="upload-file-input">Choose file(s) to upload</label>
-  <input type="file" id="upload-file-input" multiple>
+  <label class="button upload-picker" for="upload-file-input">Choose file(s)…</label>
+  <input type="file" id="upload-file-input" multiple hidden>
   <ul id="upload-queue"></ul>
   <div class="dialog-actions">
     <button type="button" class="button" id="upload-dialog-close">Close</button>
