@@ -90,11 +90,24 @@ code, .mono {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.sidebar nav::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar nav::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
 }
 .sidebar nav a {
   padding: 8px 18px;
   color: var(--text);
   border-left: 2px solid transparent;
+  flex-shrink: 0;
 }
 .sidebar nav a:hover { background: var(--bg); text-decoration: none; }
 .sidebar nav a.active {
