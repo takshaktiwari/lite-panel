@@ -23,12 +23,25 @@
     banner.classList.add("visible");
   }
 
+  // A site's "Open terminal" icon links here with ?cd=<document path> so the
+  // shell lands where the user was looking rather than at the login cwd.
+  // Single-quoted (with embedded quotes escaped) since this is typed
+  // straight into the pty as if the user had entered it themselves.
+  const initialCwd = new URLSearchParams(window.location.search).get("cd");
+
+  function shellQuote(value) {
+    return "'" + value.replace(/'/g, "'\\''") + "'";
+  }
+
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const socket = new WebSocket(protocol + "//" + window.location.host + "/terminal/ws");
   socket.binaryType = "arraybuffer";
 
   socket.addEventListener("open", () => {
     sendResize();
+    if (initialCwd) {
+      socket.send(new TextEncoder().encode("cd " + shellQuote(initialCwd) + "\n"));
+    }
   });
 
   socket.addEventListener("message", (event) => {

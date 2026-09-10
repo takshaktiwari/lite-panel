@@ -32,7 +32,7 @@
   </label>
 </div>
 
-<pre class="job-log" id="log" data-job-id="{{ job.id }}" data-live="{{ 'true' if live else 'false' }}" data-return-to="{{ return_to or '' }}" data-notice="{{ notice or '' }}">{{ static_log }}</pre>
+<pre class="job-log" id="log" data-job-id="{{ job.id }}" data-live="{{ 'true' if live else 'false' }}" data-status="{{ job.status.value }}" data-return-to="{{ return_to or '' }}" data-notice="{{ notice or '' }}">{{ static_log }}</pre>
 
 <script src="/static/job-detail.js"></script>
 {% endblock %}

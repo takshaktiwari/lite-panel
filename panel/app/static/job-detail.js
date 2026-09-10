@@ -108,6 +108,13 @@
   }
 
   if (!isLive) {
+    // The job had already finished by the time this page loaded (common for
+    // fast jobs like cron.sync) -- the SSE/poll "done" handlers below never
+    // fire, so hand off to return_to here instead.
+    const initialStatus = logEl.getAttribute("data-status") || "";
+    if (initialStatus === "success" && returnTo) {
+      finish(initialStatus);
+    }
     return;
   }
 

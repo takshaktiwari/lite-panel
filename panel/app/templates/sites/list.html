@@ -28,7 +28,7 @@
              href="{{ 'https' if site.ssl_enabled else 'http' }}://{{ site.domain }}"
              target="_blank" rel="noopener">🌐</a>
           <a class="icon-button" title="Browse files" href="/files?path={{ site.name }}">📁</a>
-          <a class="icon-button" title="Open terminal" href="/terminal">⌨️</a>
+          <a class="icon-button" title="Open terminal" href="/terminal?cd={{ site.webroot | urlencode }}">⌨️</a>
           {% if site.databases %}
           <button type="button" class="icon-button" title="Open in Adminer" data-adminer-db="{{ site.databases[0].db_name }}">🗄️</button>
           {% endif %}
