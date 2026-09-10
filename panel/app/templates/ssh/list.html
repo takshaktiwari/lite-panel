@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}SSH Access · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <h1>SSH Access</h1>
+  <p class="muted">Manage SSH key authentication for server administration and site accounts.</p>
+</header>
+
+{% if not ssh_available %}
+<div class="alert alert-notice">
+  <code>ssh-keygen</code> is not available on this server. Please ensure OpenSSH client tools are installed.
+</div>
+{% endif %}
+
+<section class="panel">
+  <p>
+    <strong>Server Host / IP:</strong> <code>{{ public_ip }}</code> &nbsp;&nbsp;
+    <strong>Default Port:</strong> <code>22</code>
+  </p>
+  <p class="muted" style="margin:4px 0 0;font-size:13px;">
+    Quick connect example: <code>ssh -i /path/to/key.pem user@{{ public_ip }}</code>
+  </p>
+</section>
+
+<div class="columns">
+  <section class="panel">
+    <h2>Generate SSH key pair</h2>
+    <p class="muted" style="margin-bottom:14px;font-size:13px;">
+      Creates a new key pair, registers the public key on this server, and immediately downloads the private <code>.pem</code> file.
+    </p>
+    <form method="post" action="/ssh/generate">
+      {{ ui.csrf(session) }}
+
+      <label for="gen-name">Key name / label</label>
+      <input type="text" id="gen-name" name="name" placeholder="e.g. Alice MacBook Pro" required>
+
+      <label for="gen-target">Account / User</label>
+      <select id="gen-target" name="target_user" required>
+        <option value="root">root (Full server admin)</option>
+        {% if sites %}
+        <optgroup label="Site System Users">
+          {% for site in sites %}
+          <option value="{{ site.id }}">{{ site.domain }} ({{ site.system_user }})</option>
+          {% endfor %}
+        </optgroup>
+        {% endif %}
+      </select>
+
+      <label for="gen-type">Key algorithm</label>
+      <select id="gen-type" name="key_type">
+        <option value="ed25519" selected>Ed25519 (Recommended — modern, fast & secure)</option>
+        <option value="rsa">RSA (4096-bit)</option>
+      </select>
+
+      <button type="submit" class="button primary" style="margin-top:8px;">
+        Generate &amp; Download Private Key
+      </button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Import existing public key</h2>
+    <p class="muted" style="margin-bottom:14px;font-size:13px;">
+      Paste an existing OpenSSH public key (from your computer's <code>~/.ssh/id_ed25519.pub</code> or similar).
+    </p>
+    <form method="post" action="/ssh/import">
+      {{ ui.csrf(session) }}
+
+      <label for="imp-name">Key name / label</label>
+      <input type="text" id="imp-name" name="name" placeholder="e.g. Workstation Public Key" required>
+
+      <label for="imp-target">Account / User</label>
+      <select id="imp-target" name="target_user" required>
+        <option value="root">root (Full server admin)</option>
+        {% if sites %}
+        <optgroup label="Site System Users">
+          {% for site in sites %}
+          <option value="{{ site.id }}">{{ site.domain }} ({{ site.system_user }})</option>
+          {% endfor %}
+        </optgroup>
+        {% endif %}
+      </select>
+
+      <label for="imp-pubkey">Public key</label>
+      <textarea id="imp-pubkey" name="public_key" rows="4" placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... user@host" required style="font-family:monospace;font-size:12px;"></textarea>
+
+      <button type="submit" class="button" style="margin-top:8px;">
+        Import Public Key
+      </button>
+    </form>
+  </section>
+</div>
+
+<section class="panel">
+  <h2>Authorized SSH Keys</h2>
+  {% if keys %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Label</th>
+        <th>User / Target</th>
+        <th>Type</th>
+        <th>Fingerprint</th>
+        <th>Created</th>
+        <th style="text-align:right;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for key in keys %}
+      <tr>
+        <td>
+          <strong>{{ key.name }}</strong>
+        </td>
+        <td>
+          <code>{{ key.system_user }}</code>
+          {% if key.site %}
+          <div class="muted" style="font-size:12px;">site: {{ key.site.domain }}</div>
+          {% elif key.system_user == "root" %}
+          <div class="muted" style="font-size:12px;">server root</div>
+          {% endif %}
+        </td>
+        <td>
+          <span class="muted" style="font-size:12px;">{{ key.key_type }}</span>
+        </td>
+        <td>
+          <code style="font-size:11px;">{{ key.fingerprint }}</code>
+        </td>
+        <td class="muted" style="font-size:13px;white-space:nowrap;">
+          {{ key.created_at.strftime('%Y-%m-%d %H:%M') if key.created_at else '—' }}
+        </td>
+        <td style="text-align:right;white-space:nowrap;">
+          <button type="button" class="button btn-view-pubkey" data-key-id="{{ key.id }}" data-key-name="{{ key.name }}">
+            View Key
+          </button>
+          <form method="post" action="/ssh/{{ key.id }}/delete" style="display:inline;" onsubmit="return confirm('Revoke SSH key &quot;{{ key.name }}&quot; for {{ key.system_user }}?');">
+            {{ ui.csrf(session) }}
+            <button type="submit" class="button" style="color:var(--danger);">Revoke</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No authorized SSH keys configured yet. Generate or import a key above.</p>
+  {% endif %}
+</section>
+
+<!-- View Public Key Modal Dialog -->
+<dialog id="modal-pubkey" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:600px;width:90%;">
+  <h3 id="modal-pubkey-title" style="margin-top:0;">Public Key</h3>
+  <textarea id="modal-pubkey-content" readonly rows="6" style="width:100%;font-family:monospace;font-size:12px;margin-bottom:14px;box-sizing:border-box;"></textarea>
+  <div style="display:flex;justify-content:flex-end;gap:8px;">
+    <button type="button" class="button" id="btn-copy-pubkey">Copy to Clipboard</button>
+    <button type="button" class="button primary" id="btn-close-modal">Close</button>
+  </div>
+</dialog>
+
+<script>
+  (function() {
+    var modal = document.getElementById('modal-pubkey');
+    var title = document.getElementById('modal-pubkey-title');
+    var content = document.getElementById('modal-pubkey-content');
+    var btnCopy = document.getElementById('btn-copy-pubkey');
+    var btnClose = document.getElementById('btn-close-modal');
+
+    document.querySelectorAll('.btn-view-pubkey').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var keyId = btn.getAttribute('data-key-id');
+        var keyName = btn.getAttribute('data-key-name');
+        title.textContent = 'Public Key: ' + keyName;
+        content.value = 'Loading...';
+        if (modal.showModal) {
+          modal.showModal();
+        } else {
+          modal.setAttribute('open', '');
+        }
+
+        fetch('/ssh/' + keyId + '/public-key')
+          .then(function(res) { return res.text(); })
+          .then(function(text) {
+            content.value = text;
+          })
+          .catch(function(err) {
+            content.value = 'Failed to load public key.';
+          });
+      });
+    });
+
+    btnCopy.addEventListener('click', function() {
+      if (navigator.clipboard && content.value) {
+        navigator.clipboard.writeText(content.value).then(function() {
+          btnCopy.textContent = 'Copied!';
+          setTimeout(function() { btnCopy.textContent = 'Copy to Clipboard'; }, 2000);
+        });
+      } else {
+        content.select();
+        document.execCommand('copy');
+        btnCopy.textContent = 'Copied!';
+        setTimeout(function() { btnCopy.textContent = 'Copy to Clipboard'; }, 2000);
+      }
+    });
+
+    btnClose.addEventListener('click', function() {
+      if (modal.close) {
+        modal.close();
+      } else {
+        modal.removeAttribute('open');
+      }
+    });
+
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) {
+        if (modal.close) modal.close();
+        else modal.removeAttribute('open');
+      }
+    });
+  })();
+</script>
+{% endblock %}

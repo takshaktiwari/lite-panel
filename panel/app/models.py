@@ -228,6 +228,9 @@ class Site(TimestampMixin, Base):
     cron_jobs: Mapped[List["CronJob"]] = relationship(
         back_populates="site", cascade="all, delete-orphan"
     )
+    ssh_keys: Mapped[List["SshKey"]] = relationship(
+        back_populates="site", cascade="all, delete-orphan"
+    )
 
 
 class SiteAlias(Base):
@@ -379,4 +382,31 @@ class ServerMetric(Base):
     load_15m: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     net_rx_kb: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     net_tx_kb: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+# --------------------------------------------------------------------------
+# SSH Access Keys
+# --------------------------------------------------------------------------
+
+
+class SshKey(TimestampMixin, Base):
+    """An authorized SSH public key for server access.
+
+    Associated with either root (for server administration) or a site's
+    dedicated system user. The database is the source of truth, and each
+    user's ~/.ssh/authorized_keys file is kept in sync with their active keys.
+    """
+
+    __tablename__ = "ssh_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    system_user: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    site_id: Mapped[Optional[int]] = mapped_column(ForeignKey("sites.id"), nullable=True)
+    public_key: Mapped[str] = mapped_column(Text, nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(100), nullable=False)
+    key_type: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    site: Mapped[Optional[Site]] = relationship(back_populates="ssh_keys")
+
 

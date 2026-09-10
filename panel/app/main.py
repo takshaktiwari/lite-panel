@@ -29,6 +29,7 @@ from app.routers import (
     monitor,
     setup,
     sites,
+    ssh_keys,
     stack,
     terminal,
 )
@@ -103,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(stack.router)
     app.include_router(config.router)
     app.include_router(cron.router)
+    app.include_router(ssh_keys.router)
     app.include_router(logs.router)
     app.include_router(monitor.router)
     app.include_router(jobs_router.router)

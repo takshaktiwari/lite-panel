@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import sessionmaker
 
 from app.config import get_settings
-from app.models import Base, CronJob, FtpAccount
+from app.models import Base, CronJob, FtpAccount, SshKey
 
 logger = logging.getLogger(__name__)
 
