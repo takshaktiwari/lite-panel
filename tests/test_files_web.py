@@ -6,12 +6,14 @@ auth required, CSRF enforced, and a real round trip through each new
 endpoint.
 """
 
+import time
 import zipfile
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
+from app.models import Job
 from app.services import files as files_service
 
 
@@ -42,6 +44,25 @@ def _csrf(client) -> str:
     marker = 'name="csrf_token" value="'
     start = page.text.index(marker) + len(marker)
     return page.text[start : page.text.index('"', start)]
+
+
+def _job_id_from_location(location: str) -> int:
+    # e.g. "/jobs/3?return_to=..."
+    path = location.split("?", 1)[0]
+    return int(path.rsplit("/", 1)[-1])
+
+
+def _wait_for_job(db, job_id: int, timeout: float = 10):
+    """Extraction now runs on the background job worker (see app.tasks) so
+    the route returns before the file is on disk -- poll until it's done."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        db.expire_all()
+        job = db.get(Job, job_id)
+        if job and job.is_terminal:
+            return job
+        time.sleep(0.05)
+    pytest.fail(f"job {job_id} did not finish within {timeout}s")
 
 
 # --------------------------------------------------------------------------
@@ -86,7 +107,7 @@ def test_archive_one_creates_a_zip(signed_in, sites_root):
     assert (sites_root / "a.txt.zip").exists()
 
 
-def test_extract_recreates_the_archived_file(signed_in, sites_root):
+def test_extract_recreates_the_archived_file(signed_in, sites_root, db):
     with zipfile.ZipFile(sites_root / "bundle.zip", "w") as zf:
         zf.writestr("hello.txt", "hi")
     token = _csrf(signed_in)
@@ -95,11 +116,38 @@ def test_extract_recreates_the_archived_file(signed_in, sites_root):
         "/files/extract", data={"path": ".", "target": "bundle.zip", "csrf_token": token}
     )
     assert response.status_code == 303
+    location = response.headers["location"]
+    assert location.startswith("/jobs/")
+
+    job = _wait_for_job(db, _job_id_from_location(location))
+    assert job.status.value == "success"
     assert (sites_root / "bundle" / "hello.txt").read_text() == "hi"
 
 
-def test_extract_rejects_zip_slip_end_to_end(signed_in, sites_root):
-    """The full route, not just the service function, must refuse this."""
+def test_extract_reports_progress_on_the_job(signed_in, sites_root, db):
+    with zipfile.ZipFile(sites_root / "bundle.zip", "w") as zf:
+        zf.writestr("a.txt", "a")
+        zf.writestr("b.txt", "b")
+    token = _csrf(signed_in)
+
+    response = signed_in.post(
+        "/files/extract", data={"path": ".", "target": "bundle.zip", "csrf_token": token}
+    )
+    job = _wait_for_job(db, _job_id_from_location(response.headers["location"]))
+
+    assert job.progress_current == 2
+    assert job.progress_total == 2
+
+
+def test_extract_rejects_zip_slip_end_to_end(signed_in, sites_root, db):
+    """The full route, not just the service function, must refuse this.
+
+    ``evil.zip`` is a perfectly valid zip file -- only a member path inside
+    it is malicious -- so the router's own pre-check (real file, .zip name)
+    passes and a job is enqueued; the containment check that actually
+    catches this lives in extract_archive() and fails the job instead of
+    the request.
+    """
     with zipfile.ZipFile(sites_root / "evil.zip", "w") as zf:
         zf.writestr("../../../etc/evil", "pwned")
     token = _csrf(signed_in)
@@ -108,7 +156,9 @@ def test_extract_rejects_zip_slip_end_to_end(signed_in, sites_root):
         "/files/extract", data={"path": ".", "target": "evil.zip", "csrf_token": token}
     )
     assert response.status_code == 303
-    assert "error=" in response.headers["location"]
+    job = _wait_for_job(db, _job_id_from_location(response.headers["location"]))
+
+    assert job.status.value == "failed"
     assert not (sites_root.parent / "etc").exists()
 
 

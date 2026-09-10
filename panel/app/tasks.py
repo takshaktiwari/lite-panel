@@ -18,6 +18,7 @@ from app.models import CronJob, FtpAccount, InstalledProvider, Site
 from app.providers import get_provider
 from app.services import cron as cron_service
 from app.services import databases as db_service
+from app.services import files as files_service
 from app.services import ftp as ftp_service
 from app.services import renderer
 from app.services import sites as sites_service
@@ -353,6 +354,25 @@ def change_ftp_password(ctx) -> None:
             ftp_service.set_ftp_password(ctx, account, ctx.payload["password"])
         except ValidationError as exc:
             raise _fail(exc) from exc
+
+
+# --------------------------------------------------------------------------
+# Files
+# --------------------------------------------------------------------------
+
+
+@register("files.extract")
+def extract_archive(ctx) -> None:
+    """Unpack a zip in the file manager.
+
+    Routed through a job rather than done inline in the request because a
+    large archive can take long enough that a synchronous POST would time
+    out -- and it lets the browser show a progress bar via ctx.progress().
+    """
+    try:
+        files_service.extract_archive(ctx.payload["target"], ctx)
+    except ValidationError as exc:
+        raise _fail(exc) from exc
 
 
 # --------------------------------------------------------------------------

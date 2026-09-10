@@ -46,7 +46,6 @@ MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 # panel click can trigger -- not a security control by themselves, but the
 # zip-slip check below is, and it is not optional.
 MAX_ARCHIVE_INPUT_BYTES = 1024 * 1024 * 1024  # 1 GB of source data per archive
-MAX_EXTRACT_ENTRIES = 50_000
 # A fixed uncompressed-size cap has no good value -- one server has 20GB
 # free, another has 2TB. Instead extraction is only refused when it would
 # leave less than this much space on the actual destination filesystem, so
@@ -531,7 +530,7 @@ def create_archive(candidates: List[str], parent_candidate, archive_name: str) -
     return destination
 
 
-def extract_archive(candidate) -> Path:
+def extract_archive(candidate, ctx=None) -> Path:
     """Extract a .zip into a new sibling folder named after it.
 
     Every member's destination is resolved through the same containment
@@ -540,6 +539,10 @@ def extract_archive(candidate) -> Path:
     and zip-slip: a crafted member path like "../../etc/cron.d/x" inside the
     archive must never be allowed to land outside the folder being extracted
     into, and a naive ``ZipFile.extractall()`` does not check for that at all.
+
+    ``ctx`` is the job's :class:`~app.jobs.JobContext` when this runs as a
+    background job (the normal case -- see ``tasks.extract_archive_job``);
+    it is optional so the function stays directly callable from tests.
     """
     source = resolve(candidate)
     if not source.is_file() or not is_archive_name(source.name):
@@ -557,8 +560,7 @@ def extract_archive(candidate) -> Path:
     try:
         with zipfile.ZipFile(source) as zf:
             infos = zf.infolist()
-            if len(infos) > MAX_EXTRACT_ENTRIES:
-                raise ValidationError("Archive has too many entries to extract here.")
+            total = len(infos)
 
             extracted_size = sum(info.file_size for info in infos)
             free_bytes = shutil.disk_usage(parent).free
@@ -569,8 +571,12 @@ def extract_archive(candidate) -> Path:
                     f"but only {format_size(headroom)} is free on disk."
                 )
 
+            if ctx is not None:
+                ctx.log(f"Extracting {total} entries from {source.name}...")
+                ctx.progress(0, total)
+
             destination.mkdir(parents=True, exist_ok=False)
-            for info in infos:
+            for index, info in enumerate(infos, start=1):
                 member_path = resolve_within(destination, info.filename)
                 if info.is_dir():
                     member_path.mkdir(parents=True, exist_ok=True)
@@ -578,6 +584,11 @@ def extract_archive(candidate) -> Path:
                     member_path.parent.mkdir(parents=True, exist_ok=True)
                     with zf.open(info) as src, open(member_path, "wb") as dst:
                         shutil.copyfileobj(src, dst)
+                if ctx is not None:
+                    ctx.progress(index, total)
+
+            if ctx is not None:
+                ctx.log(f"Extracted {total} entries.")
     except zipfile.BadZipFile:
         raise ValidationError("That file is not a valid zip archive.") from None
 

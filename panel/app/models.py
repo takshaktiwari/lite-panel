@@ -136,6 +136,11 @@ class Job(TimestampMixin, Base):
     payload: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     log: Mapped[str] = mapped_column(Text, default="", nullable=False)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Set by handlers that know a unit count up front (e.g. zip entries), so
+    # the job page can render a progress bar instead of just a scrolling log.
+    # Most job kinds never call ctx.progress() and leave these null.
+    progress_current: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    progress_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     started_by: Mapped[Optional[int]] = mapped_column(

@@ -23,6 +23,10 @@
     </span>
     <span id="job-error-msg" class="alert-error" style="display: {{ 'inline-block' if job.error else 'none' }}; margin-left: 4px; padding: 2px 8px; border-radius: 4px;">{{ job.error or '' }}</span>
   </div>
+  <div class="job-progress-wrap" id="job-progress-wrap" {% if not progress_total %}hidden{% endif %}>
+    <div class="bar"><span id="job-progress-fill" style="width: {{ ((progress_current or 0) / progress_total * 100) if progress_total else 0 }}%;"></span></div>
+    <span class="muted" id="job-progress-text">{{ progress_current or 0 }} / {{ progress_total or 0 }}</span>
+  </div>
 </header>
 
 <div class="job-log-toolbar">

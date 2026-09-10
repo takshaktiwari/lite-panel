@@ -22,9 +22,20 @@
   const errorEl = document.getElementById("job-error-msg");
   const statsEl = document.getElementById("log-stats");
   const autoscrollToggle = document.getElementById("autoscroll-toggle");
+  const progressWrap = document.getElementById("job-progress-wrap");
+  const progressFill = document.getElementById("job-progress-fill");
+  const progressText = document.getElementById("job-progress-text");
 
   let isTerminal = !isLive;
   let sseDoneReceived = false;
+
+  function updateProgress(current, total) {
+    if (!progressWrap || !total) return;
+    progressWrap.hidden = false;
+    const pct = Math.max(0, Math.min(100, (current / total) * 100));
+    if (progressFill) progressFill.style.width = pct + "%";
+    if (progressText) progressText.textContent = current + " / " + total;
+  }
 
   // Track lines in the log viewer
   let initialText = logEl.textContent || "";
@@ -130,6 +141,9 @@
           appendLines(data.lines);
           nextOffset += data.lines.length;
         }
+        if (data.progress_total) {
+          updateProgress(data.progress_current, data.progress_total);
+        }
       } catch (err) {
         console.error("SSE parse error", err);
       }
@@ -174,6 +188,10 @@
         nextOffset = data.next_offset || (nextOffset + data.lines.length);
       } else if (data.is_terminal && data.log && lineCount === 0) {
         setFullLog(data.log);
+      }
+
+      if (data.progress_total) {
+        updateProgress(data.progress_current, data.progress_total);
       }
 
       if (data.is_terminal) {

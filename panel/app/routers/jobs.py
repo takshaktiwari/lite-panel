@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session as OrmSession
 
 from app.database import SessionLocal, get_session
 from app.deps import render, require_session, safe_return_to
-from app.jobs import log_buffer
+from app.jobs import log_buffer, progress_tracker
 from app.models import Job
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,11 @@ def job_detail(
     raw_return_to = request.query_params.get("return_to")
     return_to = safe_return_to(raw_return_to, default="") or None
 
+    if job.is_terminal:
+        progress = (job.progress_current, job.progress_total)
+    else:
+        progress = progress_tracker.get(job_id) or (job.progress_current, job.progress_total)
+
     return render(
         request,
         "jobs/detail.html",
@@ -74,6 +79,8 @@ def job_detail(
         static_log=static_log,
         live=not job.is_terminal,
         return_to=return_to,
+        progress_current=progress[0],
+        progress_total=progress[1],
     )
 
 
@@ -98,6 +105,11 @@ def job_poll(
     # fall back to persisted log on the job row.
     log_text = job.log if job.is_terminal and not lines else None
 
+    if job.is_terminal:
+        progress = (job.progress_current, job.progress_total)
+    else:
+        progress = progress_tracker.get(job_id) or (job.progress_current, job.progress_total)
+
     return {
         "id": job.id,
         "status": job.status.value,
@@ -108,6 +120,8 @@ def job_poll(
         "lines": lines,
         "next_offset": offset + len(lines),
         "log": log_text,
+        "progress_current": progress[0],
+        "progress_total": progress[1],
     }
 
 
@@ -122,12 +136,23 @@ async def job_stream(job_id: int, session=Depends(require_session)):
     async def events():
         cursor = 0
         waited = 0.0
+        last_progress = None
 
         while waited < STREAM_TIMEOUT:
+            payload: dict = {}
+
             lines = log_buffer.since(job_id, cursor)
             if lines:
                 cursor += len(lines)
-                yield f"data: {json.dumps({'lines': lines})}\n\n"
+                payload["lines"] = lines
+
+            progress = progress_tracker.get(job_id)
+            if progress is not None and progress != last_progress:
+                last_progress = progress
+                payload["progress_current"], payload["progress_total"] = progress
+
+            if payload:
+                yield f"data: {json.dumps(payload)}\n\n"
 
             status = _job_status(job_id)
             if status in ("success", "failed"):

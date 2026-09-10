@@ -534,6 +534,20 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   font-size: 13px;
 }
 
+.job-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.job-progress-wrap .bar { flex: 1; margin-bottom: 0; }
+.job-progress-wrap .bar span { transition: width 0.2s ease; }
+#job-progress-text {
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .job-pulse {
   display: inline-block;
   width: 8px;

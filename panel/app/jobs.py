@@ -16,8 +16,9 @@ import json
 import logging
 import queue
 import threading
+import time
 from collections import defaultdict, deque
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from app.database import session_scope
 from app.models import Job, JobStatus, utcnow
@@ -77,6 +78,35 @@ class JobLogBuffer:
 log_buffer = JobLogBuffer()
 
 
+class JobProgress:
+    """Current/total unit counts for jobs that know their size up front.
+
+    Kept in memory rather than written to the job row on every call: a zip
+    with 50,000 entries would otherwise mean 50,000 SQLite commits on the
+    single worker thread. The row is updated at a throttled cadence instead
+    (see ``JobContext.progress``), which is enough for a browser polling
+    every couple of seconds and for a page reloaded mid-job.
+    """
+
+    def __init__(self) -> None:
+        self._values: Dict[int, Tuple[int, int]] = {}
+        self._lock = threading.Lock()
+
+    def set(self, job_id: int, current: int, total: int) -> None:
+        with self._lock:
+            self._values[job_id] = (current, total)
+
+    def get(self, job_id: int) -> Optional[Tuple[int, int]]:
+        with self._lock:
+            return self._values.get(job_id)
+
+
+progress_tracker = JobProgress()
+
+# Minimum time between progress writes to the job row for one job.
+PROGRESS_FLUSH_INTERVAL = 0.5
+
+
 class JobContext:
     """Handed to a job handler: how it logs and how it runs commands."""
 
@@ -84,6 +114,8 @@ class JobContext:
         self.job_id = job_id
         self.payload = payload
         self._pending: List[str] = []
+        self._progress: Optional[Tuple[int, int]] = None
+        self._progress_flushed_at: float = 0.0
 
     def log(self, line: str) -> None:
         """Record one line of progress, visible to the browser immediately."""
@@ -92,6 +124,32 @@ class JobContext:
         self._pending.append(text)
         if len(self._pending) >= 20:
             self.flush()
+
+    def progress(self, current: int, total: int) -> None:
+        """Update this job's progress bar.
+
+        Cheap enough to call on every unit of work -- the in-memory tracker
+        is what the browser actually polls. The job row itself is only
+        written at most every ``PROGRESS_FLUSH_INTERVAL`` seconds, plus
+        always on the final call (``current >= total``), so the finished
+        value is never stale.
+        """
+        progress_tracker.set(self.job_id, current, total)
+        self._progress = (current, total)
+        now = time.monotonic()
+        if current >= total or now - self._progress_flushed_at >= PROGRESS_FLUSH_INTERVAL:
+            self._progress_flushed_at = now
+            self._flush_progress()
+
+    def _flush_progress(self) -> None:
+        if self._progress is None:
+            return
+        current, total = self._progress
+        with session_scope() as db:
+            job = db.get(Job, self.job_id)
+            if job is not None:
+                job.progress_current = current
+                job.progress_total = total
 
     def run(self, args, **kwargs) -> int:
         """Run a command, streaming its output into the job log."""

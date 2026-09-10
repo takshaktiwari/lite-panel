@@ -432,15 +432,39 @@ def test_extract_archive_blocks_zip_slip_via_absolute_path(sites_root):
         files_service.extract_archive("evil.zip")
 
 
-def test_extract_archive_enforces_an_entry_count_cap(sites_root, monkeypatch):
-    monkeypatch.setattr(files_service, "MAX_EXTRACT_ENTRIES", 2)
+def test_extract_archive_has_no_entry_count_cap(sites_root):
+    """There is no fixed limit on the number of entries -- only the real
+    disk-space check below bounds an extraction. A prior fixed cap rejected
+    legitimate large archives (e.g. node_modules-style trees) for no reason
+    tied to any actual resource constraint."""
+    with zipfile.ZipFile(sites_root / "bundle.zip", "w") as zf:
+        for i in range(120):
+            zf.writestr(f"file-{i}.txt", "x")
+
+    destination = files_service.extract_archive("bundle.zip")
+    assert len(list(destination.iterdir())) == 120
+
+
+def test_extract_archive_reports_progress_via_ctx(sites_root):
     with zipfile.ZipFile(sites_root / "bundle.zip", "w") as zf:
         zf.writestr("a.txt", "a")
         zf.writestr("b.txt", "b")
-        zf.writestr("c.txt", "c")
+        zf.writestr("nested/c.txt", "c")
 
-    with pytest.raises(ValidationError):
-        files_service.extract_archive("bundle.zip")
+    calls = []
+
+    class _FakeCtx:
+        def log(self, line):
+            pass
+
+        def progress(self, current, total):
+            calls.append((current, total))
+
+    files_service.extract_archive("bundle.zip", _FakeCtx())
+
+    assert calls[0] == (0, 3)
+    assert calls[-1] == (3, 3)
+    assert all(total == 3 for _, total in calls)
 
 
 def test_extract_archive_refuses_when_disk_does_not_have_room(sites_root, monkeypatch):

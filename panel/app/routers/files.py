@@ -17,7 +17,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session as OrmSession
 
 from app.database import get_session
-from app.deps import csrf_protect, render, require_session
+from app.deps import csrf_protect, job_redirect, render, require_session
+from app.jobs import enqueue
 from app.models import AuditLog
 from app.services import files as files_service
 from app.validators import ValidationError
@@ -352,13 +353,27 @@ def extract(
     session=Depends(require_session),
     db: OrmSession = Depends(get_session),
 ):
+    """Kick off extraction as a job rather than doing it inline: a large
+    archive can take long enough that the browser gets a progress bar
+    instead of a hung POST (see app.tasks.extract_archive)."""
     try:
-        destination = files_service.extract_archive(target)
-    except (ValidationError, OSError) as exc:
+        source = files_service.resolve(target)
+    except ValidationError as exc:
         return _back(path, error=str(exc))
+    if not source.is_file() or not files_service.is_archive_name(source.name):
+        return _back(path, error="That is not a .zip archive.")
 
-    _audit(db, session, "files.extract", f"{target} -> {destination.name}")
-    return _back(path, notice=f"Extracted to {destination.name}")
+    job = enqueue(
+        db,
+        "files.extract",
+        f"Extract {source.name}",
+        payload={"target": target},
+        user_id=session.user_id,
+    )
+    _audit(db, session, "files.extract", target)
+    # job_redirect quotes the whole return_to itself -- quoting the path here
+    # too would double-encode it (unlike _back, which builds a URL directly).
+    return job_redirect(job.id, f"/files?path={path or '.'}")
 
 
 # --------------------------------------------------------------------------
