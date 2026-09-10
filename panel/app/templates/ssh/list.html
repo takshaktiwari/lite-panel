@@ -57,6 +57,14 @@
       <button type="submit" class="button primary" style="margin-top:8px;">
         Generate &amp; Download Private Key
       </button>
+
+      <div class="alert" style="margin-top:16px;margin-bottom:0;padding:10px 12px;font-size:12px;line-height:1.45;background:var(--bg);border:1px solid var(--border);border-radius:6px;">
+        <strong>When to use Generate:</strong> Use this if you want Lite-Panel to create a brand-new SSH key pair for you.
+        <ul style="margin:6px 0 0 16px;padding:0;">
+          <li><strong>How it works:</strong> The server keeps the public key and automatically initiates a one-time download of the private <code>.pem</code> file to your browser.</li>
+          <li><strong>How to connect:</strong> Save the downloaded <code>.pem</code> key locally, run <code>chmod 600 key.pem</code>, then connect using <code>ssh -i key.pem user@{{ public_ip }}</code>.</li>
+        </ul>
+      </div>
     </form>
   </section>
 
@@ -84,11 +92,19 @@
       </select>
 
       <label for="imp-pubkey">Public key</label>
-      <textarea id="imp-pubkey" name="public_key" rows="4" placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... user@host" required style="font-family:monospace;font-size:12px;"></textarea>
+      <textarea id="imp-pubkey" name="public_key" rows="4" placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... user@host" required style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px;line-height:1.4;resize:vertical;"></textarea>
 
       <button type="submit" class="button" style="margin-top:8px;">
         Import Public Key
       </button>
+
+      <div class="alert" style="margin-top:16px;margin-bottom:0;padding:10px 12px;font-size:12px;line-height:1.45;background:var(--bg);border:1px solid var(--border);border-radius:6px;">
+        <strong>When to use Import:</strong> Use this if you or a team member already have an existing SSH key pair on your computer.
+        <ul style="margin:6px 0 0 16px;padding:0;">
+          <li><strong>How it works:</strong> You only paste your <em>public</em> key (e.g. <code>cat ~/.ssh/id_ed25519.pub</code>). Your private key never leaves your computer.</li>
+          <li><strong>How to connect:</strong> Connect directly from your computer terminal without extra parameters: <code>ssh user@{{ public_ip }}</code>.</li>
+        </ul>
+      </div>
     </form>
   </section>
 </div>

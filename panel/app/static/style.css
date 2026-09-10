@@ -348,7 +348,7 @@ dialog.dialog.wide { max-width: 520px; }
 
 label { display: block; font-size: 13px; margin-bottom: 4px; font-weight: 500; }
 
-input[type="text"], input[type="password"], input[type="number"], select {
+input[type="text"], input[type="password"], input[type="number"], select, textarea {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -358,7 +358,7 @@ input[type="text"], input[type="password"], input[type="number"], select {
   font: inherit;
   margin-bottom: 14px;
 }
-input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 /* Bootstrap-style input group: a fixed, non-editable prefix flush against an
    editable field, sharing one border line where they meet -- used to show a
