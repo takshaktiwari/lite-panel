@@ -29,14 +29,17 @@
   <p class="muted">You can install multiple and assign one per site. These are the versions
     genuinely installable on this machine right now — nothing here is a guess.</p>
   {% if php_available %}
-    {% for version in php_available %}
-    <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:8px;">
-      <input type="checkbox" name="php_versions" value="{{ version }}"
-             style="width:auto;margin:0;" {{ 'checked' if version == suggested_php }}>
-      PHP {{ version }}{% if version == suggested_php %} <span class="muted">(latest)</span>{% endif %}
-    </label>
-    {% endfor %}
-    <p class="muted" style="margin-top:8px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));gap:8px;margin:12px 0;">
+      {% for version in php_available %}
+      <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin:0;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;">
+        <input type="checkbox" name="php_versions" value="{{ version }}"
+               style="width:auto;margin:0;cursor:pointer;" {{ 'checked' if version in (php_installed or []) }}>
+        <span style="font-weight:500;">PHP {{ version }}</span>
+        {% if version in (php_installed or []) %}<span class="badge success" style="font-size:10px;padding:1px 6px;">installed</span>{% elif version == suggested_php %}<span class="muted" style="font-size:11px;">(latest)</span>{% endif %}
+      </label>
+      {% endfor %}
+    </div>
+    <p class="muted" style="margin-top:4px;">
       Only one version yet? Finish setup, then visit
       <a href="/stack">Stack</a> to add the PHP repository and unlock more.
     </p>
