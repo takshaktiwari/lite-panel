@@ -58,6 +58,30 @@
     closer.closest("dialog")?.close();
   });
 
+  // A folder row's "Get size" button walks that folder's files on the
+  // server -- never done for every folder up front, since a directory full
+  // of subfolders would turn a cheap listing into a slow recursive walk of
+  // everything on the page. Fetched only for the one folder clicked.
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-get-folder-size]");
+    if (!button) return;
+
+    const target = button.closest(".folder-size").getAttribute("data-target");
+    button.disabled = true;
+    button.textContent = "Calculating…";
+
+    fetch(`/files/size?path=${encodeURIComponent(target)}`, {
+      headers: { "Accept": "application/json" },
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        button.replaceWith(document.createTextNode(ok ? data.human : (data.error || "Unavailable")));
+      })
+      .catch(() => {
+        button.replaceWith(document.createTextNode("Unavailable"));
+      });
+  });
+
   // A submit button marked data-prompt-field="foo" asks for a value via
   // prompt() and fills it into the form's "foo" field before submitting --
   // renaming, the bulk copy destination, and the archive name all use this

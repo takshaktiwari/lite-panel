@@ -65,6 +65,25 @@ def browse(
     )
 
 
+@router.get("/size")
+def folder_size(
+    path: str,
+    session=Depends(require_session),
+):
+    """One folder's size, fetched lazily by a click in the listing.
+
+    Never computed while rendering the listing itself -- a directory can
+    contain many subfolders, and walking every one of them on every page
+    load would turn a cheap listing into a slow one.
+    """
+    try:
+        total = files_service.folder_size(path)
+    except ValidationError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    return JSONResponse({"bytes": total, "human": files_service.format_size(total)})
+
+
 @router.get("/edit")
 def edit_form(
     request: Request,

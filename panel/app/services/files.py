@@ -208,6 +208,40 @@ def parent_of(candidate) -> str:
     return relative_to_root(target.parent)
 
 
+def directory_size_bytes(path: Path) -> int:
+    """Total apparent size of every file under ``path``, symlinks skipped.
+
+    ``path`` must already be a trusted, resolved location -- this walks
+    without validating it, so a candidate from user input must go through
+    :func:`folder_size` instead. Walked in Python rather than shelled out to
+    ``du`` (a plain byte-sum needs no platform-specific flags, and GNU
+    ``du -sb`` isn't there on a developer's Mac). Symlinks are skipped so a
+    link pointing outside the folder -- or back into itself -- can't inflate
+    the total or loop forever.
+    """
+    total = 0
+    for dirpath, dirnames, filenames in os.walk(path, onerror=lambda e: None):
+        for filename in filenames:
+            entry_path = os.path.join(dirpath, filename)
+            try:
+                if not os.path.islink(entry_path):
+                    total += os.path.getsize(entry_path)
+            except OSError:
+                continue
+    return total
+
+
+def folder_size(candidate) -> int:
+    """Size of one folder in the file manager, fetched lazily on click --
+    never computed while rendering the listing, since a directory full of
+    subfolders would turn a cheap ``stat()`` pass into a recursive walk of
+    everything shown on the page."""
+    target = resolve(candidate)
+    if not target.is_dir():
+        raise ValidationError("That path is not a directory.")
+    return directory_size_bytes(target)
+
+
 # --------------------------------------------------------------------------
 # Reads and writes
 # --------------------------------------------------------------------------

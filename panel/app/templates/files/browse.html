@@ -98,7 +98,15 @@
           {% endif %}
           {% if entry.is_symlink %}<span class="muted"> (link)</span>{% endif %}
         </td>
-        <td class="muted">{{ entry.size_display }}</td>
+        <td class="muted">
+          {% if entry.is_dir %}
+          <span class="folder-size" data-target="{{ entry.relative }}">
+            <button type="button" class="button link-button" data-get-folder-size>Get size</button>
+          </span>
+          {% else %}
+          {{ entry.size_display }}
+          {% endif %}
+        </td>
         <td class="muted">{{ entry.modified.strftime('%Y-%m-%d %H:%M') if entry.modified else '—' }}</td>
         <td class="muted">{{ entry.owner }}</td>
         <td class="muted" style="font-family:monospace;">{{ entry.permissions }}</td>

@@ -11,6 +11,7 @@
     <dl class="stats">
       <div><dt>System user</dt><dd>{{ site.system_user }}</dd></div>
       <div><dt>Home directory</dt><dd>{{ site.root_dir }}</dd></div>
+      <div><dt>Disk usage</dt><dd id="disk-usage-value" data-site-id="{{ site.id }}">Calculating…</dd></div>
       <div>
         <dt>Webroot</dt>
         <dd style="display:flex;align-items:center;gap:8px;">
@@ -155,4 +156,5 @@
 
 <script src="/static/dns-check.js"></script>
 <script src="/static/webroot-edit.js"></script>
+<script src="/static/disk-usage.js"></script>
 {% endblock %}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
@@ -17,6 +18,7 @@ from app.jobs import enqueue
 from app.models import AuditLog, FtpAccount, Site, SiteDatabase, SshKey
 from app.providers import get_provider
 from app.services import dns_check as dns_check_service
+from app.services import files as files_service
 from app.services import sites as sites_service
 from app.services import system as system_service
 from app.validators import ValidationError, validate_domain, validate_site_name
@@ -178,6 +180,26 @@ def dns_check(
             for r in results
         ],
     })
+
+
+@router.get("/{site_id}/disk-usage")
+def disk_usage(
+    site_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """On-demand directory walk, fetched by the detail page on load.
+
+    Not part of site_detail's own render -- walking a large site's files can
+    take a couple of seconds, and there's no reason the rest of the page
+    (which needs none of this) should wait on it.
+    """
+    site = db.get(Site, site_id)
+    if site is None:
+        return JSONResponse({"error": "That site no longer exists."}, status_code=404)
+
+    total = files_service.directory_size_bytes(Path(site.root_dir))
+    return JSONResponse({"bytes": total, "human": files_service.format_size(total)})
 
 
 @router.post("/{site_id}/php", dependencies=[Depends(csrf_protect)])
