@@ -73,27 +73,37 @@
     Quick reference for services running on this server. Click <strong>"Add rule"</strong> to quickly allow a port.
   </p>
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;margin-bottom:10px;">
-    {% for p in presets %}
-    <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-          <strong style="font-size:14px;">{{ p.name }}</strong>
+  <table class="table" style="margin-bottom:8px;">
+    <thead>
+      <tr>
+        <th style="width:140px;">Service</th>
+        <th style="width:140px;">Port / Proto</th>
+        <th>Description</th>
+        <th style="text-align:right;width:100px;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in presets %}
+      <tr>
+        <td>
+          <strong>{{ p.name }}</strong>
+        </td>
+        <td>
           <span class="badge {{ 'failed' if p.level == 'critical' else ('running' if p.level == 'essential' else '') }}" style="font-size:11px;">
-            Port {{ p.port }}/{{ p.proto }}
+            {{ p.port }}/{{ p.proto }}
           </span>
-        </div>
-        <p class="muted" style="font-size:12.5px;margin:0;">{{ p.desc }}</p>
-      </div>
-      <div>
-        <button type="button" class="button button-sm btn-preset"
-                data-port="{{ p.port }}" data-proto="{{ p.proto }}" data-comment="{{ p.name }}">
-          + Add rule
-        </button>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
+        </td>
+        <td class="muted" style="font-size:13px;">{{ p.desc }}</td>
+        <td style="text-align:right;">
+          <button type="button" class="button button-sm btn-preset"
+                  data-port="{{ p.port }}" data-proto="{{ p.proto }}" data-comment="{{ p.name }}">
+            + Add rule
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 
   <details style="margin-top:14px;font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;">
     <summary style="cursor:pointer;font-weight:500;">🔒 Ports that should remain closed to the public</summary>

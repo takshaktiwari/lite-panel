@@ -62,13 +62,19 @@
   // server -- never done for every folder up front, since a directory full
   // of subfolders would turn a cheap listing into a slow recursive walk of
   // everything on the page. Fetched only for the one folder clicked.
+  //
+  // Disabled immediately so a second click mid-request can't fire a
+  // duplicate walk of the same folder, and given the same pulsing-dot
+  // "something is happening" treatment the job log uses (.job-pulse) --
+  // a plain text swap to "Calculating…" is easy to miss on a folder small
+  // enough to resolve in well under a second.
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-get-folder-size]");
-    if (!button) return;
+    if (!button || button.disabled) return;
 
     const target = button.closest(".folder-size").getAttribute("data-target");
     button.disabled = true;
-    button.textContent = "Calculating…";
+    button.innerHTML = '<span class="job-pulse"></span>Calculating…';
 
     fetch(`/files/size?path=${encodeURIComponent(target)}`, {
       headers: { "Accept": "application/json" },
