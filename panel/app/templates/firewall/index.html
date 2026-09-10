@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Firewall · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+  <div>
+    <h1>Firewall (UFW)</h1>
+    <p class="muted">Manage open ports, rules, and protect server services from public exposure.</p>
+  </div>
+  {% if status.available %}
+  <div>
+    <form method="post" action="/firewall/toggle" style="margin:0;">
+      {{ ui.csrf(session) }}
+      {% if status.enabled %}
+      <input type="hidden" name="enable" value="0">
+      <button type="submit" class="button" data-confirm="Disable UFW firewall? This removes all active packet filtering." style="color:var(--danger);">
+        Disable firewall
+      </button>
+      {% else %}
+      <input type="hidden" name="enable" value="1">
+      <button type="submit" class="button primary">
+        Enable firewall
+      </button>
+      {% endif %}
+    </form>
+  </div>
+  {% endif %}
+</header>
+
+{% if not status.available %}
+<div class="alert alert-notice">
+  <strong>UFW is not installed.</strong> On Ubuntu / Debian servers, UFW can be installed with <code>apt install ufw</code>.
+</div>
+{% else %}
+
+<div class="metrics">
+  <div class="metric">
+    <div class="metric-label">Status</div>
+    <div class="metric-value" style="display:flex;align-items:center;gap:8px;">
+      <span class="dot {{ 'ok' if status.enabled else 'off' }}"></span>
+      <span style="font-size:20px;">{{ 'Active' if status.enabled else 'Inactive' }}</span>
+    </div>
+    <div class="metric-detail muted">{{ 'Filtering traffic' if status.enabled else 'No active rules enforced' }}</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Default Incoming</div>
+    <div class="metric-value" style="font-size:20px;text-transform:uppercase;">{{ status.default_incoming }}</div>
+    <div class="metric-detail muted">Unmatched inbound packets</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Default Outgoing</div>
+    <div class="metric-value" style="font-size:20px;text-transform:uppercase;">{{ status.default_outgoing }}</div>
+    <div class="metric-detail muted">Unmatched outbound packets</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Active Rules</div>
+    <div class="metric-value" style="font-size:20px;">{{ status.rules|length }}</div>
+    <div class="metric-detail muted">Custom firewall entries</div>
+  </div>
+</div>
+
+{% if not status.enabled %}
+<div class="alert alert-notice">
+  The firewall is currently <strong>disabled</strong>. When enabled, SSH (port 22) is automatically ensured to prevent lockout.
+</div>
+{% endif %}
+
+<!-- Essential Ports & Rules Reference -->
+<section class="panel">
+  <h2>Common & Essential Server Ports</h2>
+  <p class="muted" style="margin-top:-6px;font-size:13px;margin-bottom:14px;">
+    Quick reference for services running on this server. Click <strong>"Add rule"</strong> to quickly allow a port.
+  </p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;margin-bottom:10px;">
+    {% for p in presets %}
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <strong style="font-size:14px;">{{ p.name }}</strong>
+          <span class="badge {{ 'failed' if p.level == 'critical' else ('running' if p.level == 'essential' else '') }}" style="font-size:11px;">
+            Port {{ p.port }}/{{ p.proto }}
+          </span>
+        </div>
+        <p class="muted" style="font-size:12.5px;margin:0;">{{ p.desc }}</p>
+      </div>
+      <div>
+        <button type="button" class="button button-sm btn-preset"
+                data-port="{{ p.port }}" data-proto="{{ p.proto }}" data-comment="{{ p.name }}">
+          + Add rule
+        </button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <details style="margin-top:14px;font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;">
+    <summary style="cursor:pointer;font-weight:500;">🔒 Ports that should remain closed to the public</summary>
+    <ul style="margin:8px 0 0;padding-left:20px;line-height:1.6;" class="muted">
+      <li><strong>Port 3306 (MariaDB/MySQL):</strong> Keep closed. Lite-Panel connects via local unix socket. If remote database access is needed, allow only specific client IPs.</li>
+      <li><strong>Port 8765 (Lite-Panel daemon) & 8766 (Adminer):</strong> Bound to 127.0.0.1. Nginx terminates TLS on 443 and proxies internally.</li>
+      <li><strong>Port 6379 (Redis) / 11211 (Memcached):</strong> Internal cache services should only bind to localhost.</li>
+    </ul>
+  </details>
+</section>
+
+<!-- Add New Rule -->
+<section class="panel">
+  <h2>Add firewall rule</h2>
+  <form method="post" action="/firewall/rules/add" id="form-add-rule" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:12px;align-items:end;">
+    {{ ui.csrf(session) }}
+
+    <div>
+      <label for="fw-port">Port or Range</label>
+      <input type="text" id="fw-port" name="port" placeholder="e.g. 80 or 40000:40100" required style="margin-bottom:0;">
+    </div>
+
+    <div>
+      <label for="fw-proto">Protocol</label>
+      <select id="fw-proto" name="proto" style="margin-bottom:0;">
+        <option value="tcp">TCP</option>
+        <option value="udp">UDP</option>
+        <option value="any">TCP / UDP (Any)</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="fw-action">Action</label>
+      <select id="fw-action" name="action" style="margin-bottom:0;">
+        <option value="allow" selected>ALLOW</option>
+        <option value="deny">DENY</option>
+        <option value="limit">LIMIT (rate-limited)</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="fw-from">From IP / Subnet</label>
+      <input type="text" id="fw-from" name="from_ip" placeholder="Anywhere or IP" value="any" style="margin-bottom:0;">
+    </div>
+
+    <div>
+      <label for="fw-comment">Comment (optional)</label>
+      <input type="text" id="fw-comment" name="comment" placeholder="e.g. Web traffic" style="margin-bottom:0;">
+    </div>
+
+    <div>
+      <button type="submit" class="button primary" style="width:100%;">Add rule</button>
+    </div>
+  </form>
+</section>
+
+<!-- Active Firewall Rules Table -->
+<section class="panel">
+  <h2>Active Rules</h2>
+  {% if status.rules %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th style="width:50px;">#</th>
+        <th>To Port</th>
+        <th>Action</th>
+        <th>From</th>
+        <th>Comment</th>
+        <th style="text-align:right;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in status.rules %}
+      <tr>
+        <td class="muted">{{ r.number }}</td>
+        <td><code>{{ r.to_port }}</code></td>
+        <td>
+          <span class="badge {{ 'success' if r.action == 'ALLOW' else ('failed' if r.action == 'DENY' else 'running') }}" style="font-size:11px;">
+            {{ r.action }}
+          </span>
+        </td>
+        <td><code>{{ r.from_ip }}</code></td>
+        <td class="muted">{{ r.comment if r.comment else '—' }}</td>
+        <td style="text-align:right;">
+          <form method="post" action="/firewall/rules/delete" style="display:inline;margin:0;">
+            {{ ui.csrf(session) }}
+            <input type="hidden" name="rule_number" value="{{ r.number }}">
+            <input type="hidden" name="rule_summary" value="{{ r.to_port }} ({{ r.action }})">
+            <button type="submit" class="button button-sm" data-confirm="Remove rule #{{ r.number }} ({{ r.to_port }} {{ r.action }})?" style="color:var(--danger);">
+              Delete
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted empty">No firewall rules defined yet.</p>
+  {% endif %}
+</section>
+
+{% endif %}
+
+<script src="/static/firewall.js"></script>
+{% endblock %}

@@ -22,6 +22,7 @@ from app.routers import (
     dashboard,
     databases,
     files,
+    firewall,
     ftp,
     internal,
     jobs as jobs_router,
@@ -103,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(files.router)
     app.include_router(stack.router)
     app.include_router(config.router)
+    app.include_router(firewall.router)
     app.include_router(cron.router)
     app.include_router(ssh_keys.router)
     app.include_router(logs.router)
