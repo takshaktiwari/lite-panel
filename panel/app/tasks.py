@@ -190,6 +190,18 @@ def change_site_php(ctx) -> None:
             raise _fail(exc) from exc
 
 
+@register("site.webroot")
+def change_site_webroot(ctx) -> None:
+    with session_scope() as db:
+        site = db.get(Site, ctx.payload["site_id"])
+        if site is None:
+            raise JobFailed("That site no longer exists.")
+        try:
+            sites_service.set_webroot(db, ctx, site, ctx.payload.get("subfolder", ""))
+        except (ValidationError, RuntimeError) as exc:
+            raise _fail(exc) from exc
+
+
 @register("site.ssl_enable")
 def enable_site_ssl(ctx) -> None:
     with session_scope() as db:

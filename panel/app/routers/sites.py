@@ -147,6 +147,7 @@ def site_detail(
         certbot_ready=certbot.is_installed(),
         has_certificate=certbot.has_certificate(site.domain) if certbot.is_installed() else False,
         socket=str(sites_service.socket_for(site.name)) if site.php_version else None,
+        webroot_subfolder=sites_service.relative_webroot(site),
     )
 
 
@@ -199,6 +200,33 @@ def change_php(
         user_id=session.user_id,
     )
     _audit(db, session, "site.php_version", f"{site.domain} -> {php_version or 'none'}")
+    return job_redirect(job.id, f"/sites/{site.id}")
+
+
+@router.post("/{site_id}/webroot", dependencies=[Depends(csrf_protect)])
+def change_webroot(
+    site_id: int,
+    webroot: str = Form(""),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+
+    try:
+        subfolder = _clean_subfolder(webroot)
+    except ValidationError as exc:
+        return RedirectResponse(f"/sites/{site.id}?error={quote(str(exc))}", status_code=303)
+
+    job = enqueue(
+        db,
+        "site.webroot",
+        f"Change document path for {site.domain}",
+        payload={"site_id": site.id, "subfolder": subfolder},
+        user_id=session.user_id,
+    )
+    _audit(db, session, "site.webroot", f"{site.domain} -> /{subfolder}" if subfolder else f"{site.domain} -> (site root)")
     return job_redirect(job.id, f"/sites/{site.id}")
 
 
@@ -302,23 +330,30 @@ def _split_folder(folder: str, domain: str) -> tuple:
     /var/www/blog. Left blank entirely, the name falls back to one derived
     from the domain and there is no subfolder -- most sites don't need one.
     """
-    from app.validators import validate_filename
-
     cleaned = folder.strip().strip("/")
     if not cleaned:
         return validate_site_name(_name_from_domain(domain)), ""
 
     first, _, rest = cleaned.partition("/")
     name = validate_site_name(first)
+    return name, _clean_subfolder(rest)
 
-    subfolder = ""
-    if rest:
-        segments = [s for s in rest.split("/") if s]
-        for segment in segments:
-            validate_filename(segment)
-        subfolder = "/".join(segments)
 
-    return name, subfolder
+def _clean_subfolder(value: str) -> str:
+    """Validate a webroot path typed relative to a site's home directory.
+
+    Segment-by-segment, like the file manager's containment check, so the
+    result can never climb outside root_dir via "..".
+    """
+    from app.validators import validate_filename
+
+    cleaned = value.strip().strip("/")
+    if not cleaned:
+        return ""
+    segments = [s for s in cleaned.split("/") if s]
+    for segment in segments:
+        validate_filename(segment)
+    return "/".join(segments)
 
 
 def _back(*, error: Optional[str] = None):

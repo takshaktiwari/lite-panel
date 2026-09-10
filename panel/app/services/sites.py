@@ -77,6 +77,20 @@ def socket_for(name: str) -> Path:
     return FPM_SOCKET_DIR / f"lite-panel-{validate_site_name(name)}.sock"
 
 
+def relative_webroot(site: Site) -> str:
+    """The subfolder ``site.webroot`` sits under ``site.root_dir``, or "" when
+    they're the same directory -- what the "Document path" field on the site
+    detail page shows and edits, mirroring the subfolder typed at creation."""
+    root = Path(site.root_dir)
+    webroot = Path(site.webroot)
+    if webroot == root:
+        return ""
+    try:
+        return str(webroot.relative_to(root))
+    except ValueError:
+        return str(webroot)
+
+
 # --------------------------------------------------------------------------
 # Creation
 # --------------------------------------------------------------------------
@@ -332,6 +346,35 @@ def set_php_version(db: OrmSession, ctx, site: Site, version: Optional[str]) -> 
     get_provider("nginx").reload(ctx)
     db.commit()
     ctx.log(f"{site.domain} now runs PHP {version or 'no PHP'}")
+
+
+def set_webroot(db: OrmSession, ctx, site: Site, subfolder: str) -> None:
+    """Point nginx at a different folder inside the site's home directory.
+
+    ``subfolder`` is validated segment-by-segment by the router before this
+    is called (the same way the optional nesting typed at creation is), so
+    it can never climb outside ``root_dir`` via "..". The folder is created
+    and handed to the site's own user if it doesn't already exist -- a
+    document path change is often exactly how an operator points nginx at a
+    "public" folder that a deploy just created.
+    """
+    new_webroot = webroot_for(site.name, subfolder)
+
+    if str(new_webroot) == site.webroot:
+        ctx.log(f"{site.domain} already serves from {new_webroot}")
+        return
+
+    new_webroot.mkdir(parents=True, exist_ok=True)
+    run(["chown", "-R", f"{site.system_user}:{site.system_user}", str(new_webroot)])
+
+    ctx.log(f"Moving {site.domain}'s document path to {new_webroot}")
+    site.webroot = str(new_webroot)
+    db.flush()
+    render_site(site)
+
+    get_provider("nginx").reload(ctx)
+    db.commit()
+    ctx.log(f"{site.domain} now serves from {new_webroot}")
 
 
 def enable_ssl(db: OrmSession, ctx, site: Site, *, email: Optional[str] = None,

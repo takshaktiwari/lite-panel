@@ -10,7 +10,7 @@ the site itself still lives at /var/www/blog.
 
 import pytest
 
-from app.routers.sites import _split_folder
+from app.routers.sites import _clean_subfolder, _split_folder
 from app.validators import ValidationError
 
 
@@ -71,3 +71,20 @@ def test_traversal_in_the_subfolder_is_rejected():
 def test_traversal_as_the_whole_subfolder_is_rejected():
     with pytest.raises(ValidationError):
         _split_folder("myblog/..", "example.com")
+
+
+def test_clean_subfolder_blank_is_the_site_root():
+    assert _clean_subfolder("") == ""
+    assert _clean_subfolder("   ") == ""
+
+
+def test_clean_subfolder_normalises_slashes():
+    assert _clean_subfolder("/public/") == "public"
+    assert _clean_subfolder("current//public") == "current/public"
+
+
+def test_clean_subfolder_rejects_traversal():
+    with pytest.raises(ValidationError):
+        _clean_subfolder("../etc")
+    with pytest.raises(ValidationError):
+        _clean_subfolder("public/../../etc")

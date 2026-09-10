@@ -39,6 +39,20 @@
     </section>
 
     <section class="panel">
+      <h2>Document path</h2>
+      <p class="muted">The folder inside <code>{{ site.root_dir }}</code> that nginx serves from. Leave blank to serve from the site's home directory.</p>
+      <form method="post" action="/sites/{{ site.id }}/webroot" style="display:flex;gap:10px;align-items:flex-end;">
+        {{ ui.csrf(session) }}
+        <div style="flex:1;">
+          <label for="webroot">Subfolder</label>
+          <input type="text" id="webroot" name="webroot" value="{{ webroot_subfolder }}" placeholder="e.g. public">
+        </div>
+        <button class="button primary" type="submit" style="margin-bottom:14px;">Apply</button>
+      </form>
+      <p class="muted" style="margin-top:-8px;font-size:13px;">Currently serving from <code>{{ site.webroot }}</code>.</p>
+    </section>
+
+    <section class="panel">
       <h2>SSL</h2>
       {% if not certbot_ready %}
       <p class="muted">Install SSL support from the <a href="/stack">Stack page</a> first.</p>
