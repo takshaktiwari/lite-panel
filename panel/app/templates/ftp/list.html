@@ -3,7 +3,13 @@
 {% block title %}FTP · {{ app_name }}{% endblock %}
 
 {% block content %}
-<header class="page-head"><h1>FTP</h1><p class="muted">Any number of accounts, each scoped to its own folder.</p></header>
+<header class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end;">
+  <div><h1>FTP</h1><p class="muted">Any number of accounts, each scoped to its own folder.</p></div>
+  {% if vsftpd_ready %}
+  <button type="button" class="button primary" data-toggle-target="create-ftp-section"
+          data-toggle-label-show="+ New FTP account" data-toggle-label-hide="Cancel">{{ 'Cancel' if error else '+ New FTP account' }}</button>
+  {% endif %}
+</header>
 
 {% if not vsftpd_ready %}
 <div class="alert alert-notice">vsftpd isn't installed yet. <a href="/setup">Run setup</a> first.</div>
@@ -14,7 +20,9 @@
      <span class="muted">— make sure these are open in your firewall / security group.</span></p>
 </section>
 
-<section class="panel">
+{# Reopened automatically on a failed submit (error is set) so the message
+   above isn't left pointing at a form the user can't see. #}
+<section class="panel" id="create-ftp-section" {% if not error %}hidden{% endif %}>
   <h2>Create FTP account</h2>
   <form method="post" action="/ftp/create" style="max-width:520px;">
     {{ ui.csrf(session) }}

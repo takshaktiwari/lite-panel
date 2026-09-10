@@ -3,13 +3,21 @@
 {% block title %}Databases · {{ app_name }}{% endblock %}
 
 {% block content %}
-<header class="page-head"><h1>Databases</h1><p class="muted">Row and table browsing is delegated to Adminer.</p></header>
+<header class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end;">
+  <div><h1>Databases</h1><p class="muted">Row and table browsing is delegated to Adminer.</p></div>
+  {% if mariadb_ready %}
+  <button type="button" class="button primary" data-toggle-target="create-database-section"
+          data-toggle-label-show="+ New database" data-toggle-label-hide="Cancel">{{ 'Cancel' if error else '+ New database' }}</button>
+  {% endif %}
+</header>
 
 {% if not mariadb_ready %}
 <div class="alert alert-notice">MariaDB isn't installed yet. <a href="/setup">Run setup</a> first.</div>
 {% else %}
 
-<section class="panel">
+{# Reopened automatically on a failed submit (error is set) so the message
+   above isn't left pointing at a form the user can't see. #}
+<section class="panel" id="create-database-section" {% if not error %}hidden{% endif %}>
   <h2>Create a database</h2>
   <form method="post" action="/databases/new" style="max-width:480px;">
     {{ ui.csrf(session) }}
