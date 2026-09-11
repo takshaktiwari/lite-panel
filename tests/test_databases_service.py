@@ -4,7 +4,11 @@ _connect() is mocked throughout -- these check the SQL issued, not a real
 MariaDB connection.
 """
 
+import gzip
+import subprocess
 from unittest.mock import patch
+
+import pytest
 
 from app.services import databases as db_service
 
@@ -161,5 +165,133 @@ def test_import_database_invokes_mysql(tmp_path):
         assert "app_db" in args
     finally:
         patch.stopall()
+
+
+# --------------------------------------------------------------------------
+# Import: the pipe plumbing itself
+# --------------------------------------------------------------------------
+#
+# The mocked test above cannot see any of this: a MagicMock stdin accepts
+# writes, closes and flushes that a real pipe rejects, which is how a
+# close()-then-communicate() sequence that raises "flush of closed file" on
+# the Python the panel actually runs under shipped green. These drive a real
+# child process instead -- a stand-in for `mysql` that just drains stdin --
+# so the streaming, the stdin close and the exit-code handling all run
+# against real file descriptors.
+
+
+def _run_import_against(shell_command, source_file, ctx=None):
+    """Run import_database() with `shell_command` standing in for mysql."""
+    real_popen = subprocess.Popen
+
+    def fake_popen(args, **kwargs):
+        assert args[0] == "mysql"
+        return real_popen(["sh", "-c", shell_command], **kwargs)
+
+    with patch("subprocess.Popen", side_effect=fake_popen), \
+         patch.object(db_service, "database_exists", return_value=True), \
+         patch("app.providers.mariadb.MariaDbProvider.socket_path",
+               return_value="/run/mysqld/mysqld.sock"):
+        db_service.import_database("app_db", source_file, ctx=ctx)
+
+
+class _RecordingCtx:
+    """Stands in for a JobContext, keeping what it was told."""
+
+    def __init__(self):
+        self.progress_calls = []
+        self.lines = []
+
+    def progress(self, current, total):
+        self.progress_calls.append((current, total))
+
+    def log(self, line):
+        self.lines.append(line)
+
+
+def test_import_database_streams_a_large_dump_through_a_real_pipe(tmp_path):
+    # Comfortably past a pipe buffer, so the write loop really does block and
+    # resume rather than fitting in one go.
+    payload = b"SELECT 1;\n" * 100_000
+    sql_file = tmp_path / "dump.sql"
+    sql_file.write_bytes(payload)
+    received = tmp_path / "received.sql"
+
+    _run_import_against(f"cat > {received}", sql_file)
+
+    assert received.read_bytes() == payload
+
+
+def test_import_database_reports_progress_over_the_dump_size(tmp_path):
+    sql_file = tmp_path / "dump.sql"
+    sql_file.write_bytes(b"SELECT 1;\n" * 100_000)
+    total = sql_file.stat().st_size
+    ctx = _RecordingCtx()
+
+    _run_import_against("cat > /dev/null", sql_file, ctx=ctx)
+
+    assert ctx.progress_calls[0] == (0, total)
+    assert ctx.progress_calls[-1] == (total, total)
+    # Never overshoots the total it reports against.
+    assert all(current <= total for current, _ in ctx.progress_calls)
+
+
+def test_import_database_decompresses_a_gzipped_dump(tmp_path):
+    payload = b"SELECT 1;\n" * 10_000
+    gz_file = tmp_path / "dump.sql.gz"
+    with gzip.open(gz_file, "wb") as fh:
+        fh.write(payload)
+    received = tmp_path / "received.sql"
+
+    _run_import_against(f"cat > {received}", gz_file)
+
+    # mysql must get plain SQL, not the compressed bytes.
+    assert received.read_bytes() == payload
+
+
+class _OldPythonPopen(subprocess.Popen):
+    """A Popen whose communicate() behaves the way older CPython's does.
+
+    Its _communicate() flushes self.stdin unconditionally; when the caller
+    has already closed it that raises ValueError("flush of closed file").
+    Python 3.12+ swallows it, which is why the bug shipped green from a dev
+    machine and failed every import on the server. Reproducing the older
+    behaviour here keeps the regression pinned whatever Python runs the
+    tests.
+    """
+
+    def communicate(self, input=None, timeout=None):
+        if self.stdin is not None and self.stdin.closed:
+            raise ValueError("flush of closed file")
+        return super().communicate(input, timeout)
+
+
+def test_import_database_does_not_communicate_over_a_closed_stdin(tmp_path):
+    payload = b"SELECT 1;\n" * 100_000
+    sql_file = tmp_path / "dump.sql"
+    sql_file.write_bytes(payload)
+    received = tmp_path / "received.sql"
+
+    def fake_popen(args, **kwargs):
+        return _OldPythonPopen(["sh", "-c", f"cat > {received}"], **kwargs)
+
+    with patch("subprocess.Popen", side_effect=fake_popen), \
+         patch.object(db_service, "database_exists", return_value=True), \
+         patch("app.providers.mariadb.MariaDbProvider.socket_path",
+               return_value="/run/mysqld/mysqld.sock"):
+        db_service.import_database("app_db", sql_file)
+
+    assert received.read_bytes() == payload
+
+
+def test_import_database_surfaces_a_failing_mysql(tmp_path):
+    sql_file = tmp_path / "dump.sql"
+    sql_file.write_bytes(b"SELECT 1;\n" * 100_000)
+
+    with pytest.raises(RuntimeError, match="ERROR 1064"):
+        _run_import_against(
+            "cat > /dev/null; echo 'ERROR 1064 (42000) at line 1' >&2; exit 1",
+            sql_file,
+        )
 
 

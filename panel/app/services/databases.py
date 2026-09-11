@@ -409,7 +409,11 @@ def import_database(db_name: str, source_file: str | Path, ctx=None) -> None:
         proc = subprocess.Popen(
             args,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            # A dump's own stdout is never shown anywhere, and leaving it as a
+            # pipe nobody drains is a way to deadlock a big import: mysql
+            # blocks once the pipe buffer fills while this side is still
+            # busy writing stdin.
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             env=base_env(),
         )
@@ -438,7 +442,12 @@ def import_database(db_name: str, source_file: str | Path, ctx=None) -> None:
                     ctx.progress(min(raw.tell(), total_bytes), total_bytes)
             proc.stdin.close()
 
-        stdout, stderr = proc.communicate()
+        # Deliberately not communicate(): it wants to close stdin itself, and
+        # closing a BufferedWriter flushes it first -- on a pipe this side has
+        # already closed that raises "flush of closed file" and fails every
+        # import, however cleanly mysql actually finished.
+        stderr = proc.stderr.read() if proc.stderr else b""
+        proc.wait()
         if proc.returncode != 0:
             err_msg = (stderr or b"").decode("utf-8", errors="replace").strip()
             raise RuntimeError(f"Database import failed (code {proc.returncode}): {err_msg[:400]}")
