@@ -105,6 +105,52 @@ class TestFirewallService(unittest.TestCase):
         cmd = mock_run.call_args[0][0]
         self.assertEqual(cmd, ["ufw", "--force", "delete", "2"])
 
+    @patch("app.services.firewall.which", return_value="/usr/sbin/ufw")
+    @patch("app.services.firewall.run")
+    def test_set_default_policy_deny_incoming_auto_allows_ssh(self, mock_run, mock_which):
+        def fake_run(cmd, **kwargs):
+            res = MagicMock()
+            if "verbose" in cmd:
+                res.stdout = "Status: active\nDefault: allow (incoming), allow (outgoing), disabled (routed)\n"
+            elif "numbered" in cmd:
+                res.stdout = "Status: active\n"
+            return res
+
+        mock_run.side_effect = fake_run
+
+        fw_service.set_default_policy(direction="incoming", policy="deny")
+        calls = [c[0][0] for c in mock_run.call_args_list]
+        self.assertIn(["ufw", "allow", "22/tcp"], calls)
+        self.assertIn(["ufw", "default", "deny", "incoming"], calls)
+
+    @patch("app.services.firewall.which", return_value="/usr/sbin/ufw")
+    @patch("app.services.firewall.run")
+    def test_set_default_policy_deny_incoming_skips_ssh_if_present(self, mock_run, mock_which):
+        def fake_run(cmd, **kwargs):
+            res = MagicMock()
+            if "verbose" in cmd:
+                res.stdout = "Status: active\nDefault: allow (incoming), allow (outgoing), disabled (routed)\n"
+            elif "numbered" in cmd:
+                res.stdout = SAMPLE_UFW_NUMBERED
+            return res
+
+        mock_run.side_effect = fake_run
+
+        fw_service.set_default_policy(direction="incoming", policy="deny")
+        calls = [c[0][0] for c in mock_run.call_args_list]
+        self.assertNotIn(["ufw", "allow", "22/tcp"], calls)
+        self.assertIn(["ufw", "default", "deny", "incoming"], calls)
+
+    @patch("app.services.firewall.which", return_value="/usr/sbin/ufw")
+    def test_set_default_policy_invalid_direction(self, mock_which):
+        with self.assertRaises(ValidationError):
+            fw_service.set_default_policy(direction="sideways", policy="deny")
+
+    @patch("app.services.firewall.which", return_value="/usr/sbin/ufw")
+    def test_set_default_policy_invalid_policy(self, mock_which):
+        with self.assertRaises(ValidationError):
+            fw_service.set_default_policy(direction="incoming", policy="maybe")
+
     def test_parse_user_rules_file(self):
         import tempfile
         from pathlib import Path

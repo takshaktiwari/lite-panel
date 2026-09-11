@@ -73,7 +73,41 @@
     Quick reference for services running on this server. Click <strong>"Add rule"</strong> to quickly allow a port.
   </p>
 
-  <table class="table" style="margin-bottom:8px;">
+  <div class="alert alert-notice" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+    <div>
+      <strong>Default incoming policy: {{ status.default_incoming|upper }}</strong>
+      <p class="muted" style="margin:4px 0 0;font-size:13px;">
+        {% if status.default_incoming == 'deny' %}
+        All other ports are blocked by default. Only the rules you allow (below, or in Active Rules) let traffic through.
+        {% else %}
+        All ports are open by default. Switch to "deny" to close everything except the rules you explicitly allow.
+        {% endif %}
+      </p>
+    </div>
+    {% if status.default_incoming != 'deny' %}
+    <form method="post" action="/firewall/default-policy" style="margin:0;">
+      {{ ui.csrf(session) }}
+      <input type="hidden" name="direction" value="incoming">
+      <input type="hidden" name="policy" value="deny">
+      <button type="submit" class="button button-sm primary"
+              data-confirm="Deny all incoming traffic by default? Only rules you've explicitly allowed (e.g. SSH, HTTP, HTTPS) will keep working. SSH (port 22) will be auto-allowed first if it isn't already.">
+        + Deny all other ports
+      </button>
+    </form>
+    {% else %}
+    <form method="post" action="/firewall/default-policy" style="margin:0;">
+      {{ ui.csrf(session) }}
+      <input type="hidden" name="direction" value="incoming">
+      <input type="hidden" name="policy" value="allow">
+      <button type="submit" class="button button-sm"
+              data-confirm="Allow all incoming traffic by default? This opens every port that isn't explicitly denied.">
+        Revert to allow all
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  <table class="table" style="margin-bottom:8px;margin-top:14px;">
     <thead>
       <tr>
         <th style="width:140px;">Service</th>

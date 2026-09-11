@@ -255,6 +255,35 @@ def disable_firewall() -> None:
     logger.info("UFW disabled")
 
 
+def set_default_policy(direction: str, policy: str) -> None:
+    """Set UFW's default policy for incoming/outgoing traffic.
+
+    Switching incoming to deny/reject blocks everything not explicitly
+    allowed, so SSH is auto-allowed first (if not already) to avoid
+    locking out the current session — mirrors enable_firewall().
+    """
+    if not is_installed():
+        raise RuntimeError("UFW is not installed.")
+
+    direction = direction.lower()
+    if direction not in ("incoming", "outgoing"):
+        raise ValidationError(f"Invalid direction: {direction}")
+
+    policy = policy.lower()
+    if policy not in ("allow", "deny", "reject"):
+        raise ValidationError(f"Invalid policy: {policy}")
+
+    if direction == "incoming" and policy in ("deny", "reject"):
+        status = get_status()
+        has_ssh = any("22" in r.to_port or "ssh" in r.to_port.lower() for r in status.rules)
+        if not has_ssh:
+            logger.info("Automatically allowing SSH (port 22) before switching default incoming policy to %s", policy)
+            run(["ufw", "allow", "22/tcp"], check=True, timeout=15)
+
+    run(["ufw", "default", policy, direction], check=True, timeout=15)
+    logger.info("UFW default %s policy set to %s", direction, policy)
+
+
 def validate_port_specification(port: str) -> str:
     """Validate port or port range (e.g. '80', '40000:40100', '22')."""
     port = port.strip()

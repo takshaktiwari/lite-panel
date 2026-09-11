@@ -61,6 +61,22 @@ def toggle_firewall(
     return _back(notice=msg)
 
 
+@router.post("/default-policy", dependencies=[Depends(csrf_protect)])
+def update_default_policy(
+    direction: str = Form(...),
+    policy: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    try:
+        fw_service.set_default_policy(direction=direction.strip(), policy=policy.strip())
+    except (ValidationError, RuntimeError) as exc:
+        return _back(error=str(exc))
+
+    _audit(db, session, "firewall.default_policy", f"{direction}={policy}")
+    return _back(notice=f"Default {direction} policy set to {policy.upper()}.")
+
+
 @router.post("/rules/add", dependencies=[Depends(csrf_protect)])
 def add_rule(
     port: str = Form(...),
