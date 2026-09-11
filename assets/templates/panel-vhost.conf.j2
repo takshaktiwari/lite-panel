@@ -160,6 +160,24 @@ server {
     }
 
     # -----------------------------------------------------------------------
+    # Chunked database-dump imports
+    # -----------------------------------------------------------------------
+    # Same reasoning as the file-manager chunk uploads above: each request
+    # here is one chunk of a SQL dump, not the whole file. The path has a
+    # numeric database id in the middle, so this needs a regex location
+    # rather than the ^~ prefix match used above.
+    location ~ ^/databases/[0-9]+/import/chunk-upload/ {
+        proxy_pass          http://127.0.0.1:8765;
+        proxy_set_header     Host              $http_host;
+        proxy_set_header     X-Real-IP         $remote_addr;
+        proxy_set_header     X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header     X-Forwarded-Proto $scheme;
+        proxy_set_header     Cookie            $http_cookie;
+        client_max_body_size 20M;
+        proxy_read_timeout   120s;
+    }
+
+    # -----------------------------------------------------------------------
     # Everything else → the FastAPI panel app
     # -----------------------------------------------------------------------
     location / {

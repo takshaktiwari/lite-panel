@@ -324,7 +324,7 @@ def import_database_task(ctx) -> None:
 
     ctx.log(f"Importing database dump into {db_name}")
     try:
-        db_service.import_database(db_name, source_file)
+        db_service.import_database(db_name, source_file, ctx=ctx)
     except (ValidationError, RuntimeError) as exc:
         raise _fail(exc) from exc
     finally:

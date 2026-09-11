@@ -12,8 +12,13 @@ module exists to avoid.
 from __future__ import annotations
 
 import logging
+import shutil
+import tempfile
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+from uuid import uuid4
 
 from app.providers.mariadb import MariaDbProvider
 from app.validators import ValidationError, quote_identifier, validate_db_identifier
@@ -90,6 +95,12 @@ def list_databases() -> List[Dict]:
         {"name": name, "size_bytes": sizes.get(name, 0), "size_mb": round(sizes.get(name, 0) / 1048576, 1)}
         for name in sorted(names)
     ]
+
+
+def size_map() -> Dict[str, float]:
+    """Convenience wrapper around :func:`list_databases` for callers that only
+    want a ``{name: size_mb}`` lookup (e.g. rendering a table)."""
+    return {entry["name"]: entry["size_mb"] for entry in list_databases()}
 
 
 def database_exists(name: str) -> bool:
@@ -357,8 +368,17 @@ def export_database(db_name: str, target_file: str | Path, *, gzip: bool = True)
     return target_path
 
 
-def import_database(db_name: str, source_file: str | Path) -> None:
-    """Import a SQL dump file (.sql or .sql.gz) into an existing database."""
+def import_database(db_name: str, source_file: str | Path, ctx=None) -> None:
+    """Import a SQL dump file (.sql or .sql.gz) into an existing database.
+
+    ``ctx`` is the job's :class:`~app.jobs.JobContext` when this runs as a
+    background job (the normal case -- see ``tasks.import_database_task``);
+    it is optional so the function stays directly callable from tests. When
+    given, progress is reported as bytes of the *dump file* streamed into
+    ``mysql``'s stdin, not rows applied -- mysql gives no way to observe the
+    latter, but for a multi-gigabyte dump, bytes streamed is still the
+    difference between "frozen" and "working" in the UI.
+    """
     import gzip as gzip_lib
     import subprocess
     from app.shell import base_env
@@ -376,6 +396,7 @@ def import_database(db_name: str, source_file: str | Path) -> None:
         raise RuntimeError("Cannot reach MariaDB: no unix socket found.")
 
     is_gz = source_path.suffix.lower() == ".gz" or source_path.name.lower().endswith(".sql.gz")
+    total_bytes = source_path.stat().st_size
 
     args = [
         "mysql",
@@ -395,15 +416,26 @@ def import_database(db_name: str, source_file: str | Path) -> None:
     except FileNotFoundError as exc:
         raise RuntimeError("mysql utility is not installed on the system.") from exc
 
+    if ctx is not None:
+        ctx.progress(0, total_bytes)
+
     try:
-        opener = gzip_lib.open if is_gz else open
-        with opener(source_path, "rb") as f_in:
-            assert proc.stdin is not None
+        assert proc.stdin is not None
+        with open(source_path, "rb") as raw:
+            # Read via `raw` directly so progress can track its own .tell() --
+            # the file's position on disk -- rather than bytes handed to
+            # mysql's stdin. For a .sql.gz those diverge (the pipe carries
+            # the *decompressed* stream, which runs larger than the file on
+            # disk), and the file's on-disk size is the only total available
+            # to report progress against.
+            f_in = gzip_lib.GzipFile(fileobj=raw) if is_gz else raw
             while True:
                 chunk = f_in.read(65536)
                 if not chunk:
                     break
                 proc.stdin.write(chunk)
+                if ctx is not None:
+                    ctx.progress(min(raw.tell(), total_bytes), total_bytes)
             proc.stdin.close()
 
         stdout, stderr = proc.communicate()
@@ -415,5 +447,142 @@ def import_database(db_name: str, source_file: str | Path) -> None:
         proc.wait()
         raise
 
+    if ctx is not None:
+        ctx.progress(total_bytes, total_bytes)
+
     logger.info("imported dump %s into database %s", source_path, db_name)
+
+
+# --------------------------------------------------------------------------
+# Chunked dump uploads (import modal)
+# --------------------------------------------------------------------------
+#
+# Same strategy as the file manager's chunked uploads
+# (app.services.files: init_upload / append_chunk / complete_upload), just
+# targeting a fresh temp directory instead of a path inside the sites root --
+# a dump is never written under a site's own files, so there is no
+# resolve_within() to reuse here, only the session bookkeeping. Sessions live
+# in this same process-local dict for the same reason: the panel runs a
+# single Uvicorn worker, and an upload is not meant to survive a restart,
+# only the browser tab that started it.
+
+MAX_IMPORT_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024  # 5 GB -- dumps run larger than site files
+IMPORT_UPLOAD_FREE_SPACE_MARGIN_BYTES = 512 * 1024 * 1024
+IMPORT_UPLOAD_SESSION_TTL = timedelta(hours=2)
+IMPORT_DUMP_SUFFIXES = (".sql.gz", ".sql", ".gz")
+
+
+@dataclass
+class _ImportUploadSession:
+    id: str
+    tmp_dir: Path
+    part_path: Path
+    final_path: Path
+    total_size: int
+    original_filename: str
+    received_bytes: int = 0
+    next_index: int = 0
+    last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+_import_upload_sessions: Dict[str, "_ImportUploadSession"] = {}
+
+
+def _discard_import_upload_session(upload_id: str) -> None:
+    session = _import_upload_sessions.pop(upload_id, None)
+    if session is None:
+        return
+    shutil.rmtree(session.tmp_dir, ignore_errors=True)
+
+
+def _sweep_expired_import_upload_sessions() -> None:
+    now = datetime.now(timezone.utc)
+    expired = [
+        upload_id
+        for upload_id, session in _import_upload_sessions.items()
+        if now - session.last_activity > IMPORT_UPLOAD_SESSION_TTL
+    ]
+    for upload_id in expired:
+        _discard_import_upload_session(upload_id)
+
+
+def init_import_upload(db_name: str, filename: str, total_size: int) -> _ImportUploadSession:
+    # Same reasoning as files_service.init_upload: called on every new
+    # upload, so this doubles as the cleanup point for sessions abandoned by
+    # a closed tab, without needing a background sweep thread.
+    _sweep_expired_import_upload_sessions()
+
+    fname_lower = (filename or "").lower()
+    if not fname_lower.endswith(IMPORT_DUMP_SUFFIXES):
+        raise ValidationError("Only .sql and .sql.gz dump files are supported.")
+
+    if total_size <= 0 or total_size > MAX_IMPORT_UPLOAD_BYTES:
+        limit_gb = MAX_IMPORT_UPLOAD_BYTES // (1024 * 1024 * 1024)
+        raise ValidationError(f"Dump files are limited to {limit_gb} GB.")
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="lp-db-import-"))
+
+    free_bytes = shutil.disk_usage(tmp_dir).free
+    if total_size > free_bytes - IMPORT_UPLOAD_FREE_SPACE_MARGIN_BYTES:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        headroom_mb = max(free_bytes - IMPORT_UPLOAD_FREE_SPACE_MARGIN_BYTES, 0) // (1024 * 1024)
+        raise ValidationError(
+            f"That dump is larger than the {headroom_mb} MB currently free on disk."
+        )
+
+    ext = ".sql.gz" if fname_lower.endswith(".gz") else ".sql"
+    upload_id = uuid4().hex
+    part_path = tmp_dir / f"upload{ext}.part"
+    part_path.write_bytes(b"")
+
+    session = _ImportUploadSession(
+        id=upload_id,
+        tmp_dir=tmp_dir,
+        part_path=part_path,
+        final_path=tmp_dir / f"upload_{db_name}{ext}",
+        total_size=total_size,
+        original_filename=filename,
+    )
+    _import_upload_sessions[upload_id] = session
+    return session
+
+
+def append_import_chunk(upload_id: str, index: int, data: bytes) -> int:
+    session = _import_upload_sessions.get(upload_id)
+    if session is None:
+        raise ValidationError("Upload session not found or has expired.")
+
+    if index < session.next_index:
+        # A client retry after a dropped response -- already applied, so
+        # report success without writing it twice.
+        return session.received_bytes
+    if index != session.next_index:
+        raise ValidationError("Upload chunks arrived out of order.")
+    if session.received_bytes + len(data) > session.total_size:
+        raise ValidationError("Upload received more data than expected.")
+
+    with open(session.part_path, "ab") as fh:
+        fh.write(data)
+
+    session.received_bytes += len(data)
+    session.next_index += 1
+    session.last_activity = datetime.now(timezone.utc)
+    return session.received_bytes
+
+
+def complete_import_upload(upload_id: str) -> Tuple[Path, str]:
+    """Finish an upload session, returning ``(assembled_path, original_filename)``."""
+    session = _import_upload_sessions.get(upload_id)
+    if session is None:
+        raise ValidationError("Upload session not found or has expired.")
+    if session.received_bytes != session.total_size:
+        raise ValidationError("Upload is incomplete.")
+
+    session.part_path.rename(session.final_path)
+    _import_upload_sessions.pop(upload_id, None)
+    return session.final_path, session.original_filename
+
+
+def abort_import_upload(upload_id: str) -> None:
+    _discard_import_upload_session(upload_id)
 

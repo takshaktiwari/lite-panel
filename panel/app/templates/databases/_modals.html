@@ -1,0 +1,113 @@
+{% import "_macros.html" as ui %}
+{# The database action modals (reassign user, reset password, delete, import).
+   Shared between the Databases page and a site's own detail page -- both
+   include this once and wire it up with the same databases.js /
+   db-import-upload.js, so there is one copy of this markup to keep in sync
+   with the actions menu in _macros.html's database_table. #}
+
+<!-- Modal: Reassign Database User -->
+<dialog id="dlg-reassign" class="dialog">
+  <form method="post" id="form-reassign" action="">
+    {{ ui.csrf(session) }}
+    <h2 id="dlg-reassign-title">Change assigned user</h2>
+    <p class="muted" id="dlg-reassign-desc" style="margin-top:-6px;font-size:13px;"></p>
+
+    <label>User option</label>
+    <div style="display:flex;gap:14px;margin-bottom:10px;font-size:13px;">
+      <label style="font-weight:normal;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="radio" name="user_mode" value="existing" checked style="margin:0;" id="reassign_mode_existing"> Existing user
+      </label>
+      <label style="font-weight:normal;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="radio" name="user_mode" value="new" style="margin:0;" id="reassign_mode_new"> Create new user
+      </label>
+    </div>
+
+    <div id="reassign-existing-wrap">
+      <label for="reassign-existing-user">Select database user</label>
+      <select id="reassign-existing-user" name="existing_user">
+        {% for u in existing_users %}
+        <option value="{{ u }}">{{ u }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div id="reassign-new-wrap" style="display:none;">
+      <label for="reassign-new-user">New username</label>
+      <input type="text" id="reassign-new-user" name="db_user" placeholder="username">
+    </div>
+
+    <div id="reassign-password-wrap" style="display:none;">
+      <label for="reassign-password">Password for new user</label>
+      <input type="text" id="reassign-password" name="password" placeholder="Enter password for new user">
+    </div>
+
+    <div class="dialog-actions">
+      <button type="button" class="button" data-close>Cancel</button>
+      <button type="submit" class="button primary">Save changes</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal: Reset User Password -->
+<dialog id="dlg-password" class="dialog">
+  <form method="post" id="form-password" action="">
+    {{ ui.csrf(session) }}
+    <input type="hidden" name="db_user" id="pwd-db-user">
+    <h2 id="dlg-password-title">Change user password</h2>
+    <p class="muted" id="dlg-password-desc" style="margin-top:-6px;font-size:13px;"></p>
+
+    <label for="dlg-new-password">New password</label>
+    <input type="text" id="dlg-new-password" name="password" required>
+
+    <div class="dialog-actions">
+      <button type="button" class="button" data-close>Cancel</button>
+      <button type="submit" class="button primary">Update password</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal: Delete Database -->
+<dialog id="dlg-delete" class="dialog">
+  <form method="post" id="form-delete" action="">
+    {{ ui.csrf(session) }}
+    <h2>Delete database</h2>
+    <p class="muted" style="margin-top:-6px;font-size:13px;">This permanently drops the database. Type <strong id="del-confirm-target"></strong> to confirm.</p>
+    <label for="del-confirm">Database name</label>
+    <input type="text" id="del-confirm" name="confirm" required>
+
+    <div class="dialog-actions">
+      <button type="button" class="button" data-close>Cancel</button>
+      <button type="submit" class="button" style="color:var(--danger);">Delete database</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal: Import Database Dump -->
+{# db-import-upload.js drives this one: the dump is sent in chunks (same
+   strategy as the file manager's upload dialog) with a progress bar, then
+   the browser is handed off to the import job's own page for the
+   "importing into MySQL" phase -- same job-detail.js progress bar every
+   other long-running panel action already uses. #}
+<dialog id="dlg-import" class="dialog">
+  <form id="form-import" novalidate>
+    {{ ui.csrf(session) }}
+    <h2 id="dlg-import-title">Import / Restore database</h2>
+    <p class="muted" id="dlg-import-desc" style="margin-top:-6px;font-size:13px;"></p>
+    <div class="alert alert-notice" style="font-size:12.5px;margin-bottom:12px;">
+      <strong>Notice:</strong> Importing will execute all SQL statements in the dump file into this database. Existing tables with the same names may be overwritten.
+    </div>
+
+    <div id="import-picker-wrap">
+      <label for="import-file">SQL dump file (.sql or .sql.gz)</label>
+      <input type="file" id="import-file" name="file" accept=".sql,.gz,.sql.gz" required style="margin-bottom:14px;">
+    </div>
+
+    <ul id="import-upload-queue" class="upload-row-list" hidden></ul>
+    <p class="muted" id="import-error" style="display:none;color:var(--danger);font-size:13px;"></p>
+
+    <div class="dialog-actions">
+      <button type="button" class="button" data-close id="btn-cancel-import">Cancel</button>
+      <button type="button" class="button primary" id="btn-submit-import">Start import</button>
+    </div>
+  </form>
+</dialog>

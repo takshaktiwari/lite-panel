@@ -83,14 +83,7 @@
 <section class="panel">
   <h2>Databases</h2>
   {% if databases %}
-  <table class="table">
-    <thead><tr><th>Database</th><th>User</th></tr></thead>
-    <tbody>
-      {% for entry in databases %}
-      <tr><td>{{ entry.db_name }}</td><td>{{ entry.db_user }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  {{ ui.database_table(databases, sizes) }}
   {% else %}
   <p class="muted">No databases linked to this site yet. <a href="/databases">Create one</a>.</p>
   {% endif %}
@@ -154,7 +147,12 @@
   </form>
 </dialog>
 
+{% include "databases/_modals.html" %}
+
 <script src="/static/dns-check.js"></script>
 <script src="/static/webroot-edit.js"></script>
 <script src="/static/disk-usage.js"></script>
+<script src="/static/adminer.js"></script>
+<script src="/static/databases.js"></script>
+<script src="/static/db-import-upload.js"></script>
 {% endblock %}

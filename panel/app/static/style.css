@@ -319,8 +319,8 @@ dialog.dialog.wide { max-width: 520px; }
 
 .upload-picker { display: inline-block; margin-bottom: 16px; }
 
-#upload-queue { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; }
-#upload-queue:not(:empty) { border-top: 1px solid var(--border); }
+#upload-queue, .upload-row-list { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; }
+#upload-queue:not(:empty), .upload-row-list:not(:empty) { border-top: 1px solid var(--border); }
 
 .upload-row {
   display: flex;

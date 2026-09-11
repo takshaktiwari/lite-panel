@@ -146,11 +146,17 @@
       const dbId = btn.getAttribute("data-db-id");
       const dbName = btn.getAttribute("data-db-name");
 
-      document.getElementById("form-import").action = "/databases/" + dbId + "/import";
+      if (dlgImport) {
+        dlgImport.dataset.dbId = dbId;
+        dlgImport.dataset.dbName = dbName;
+      }
       document.getElementById("dlg-import-title").textContent = "Import into " + dbName;
       document.getElementById("dlg-import-desc").textContent = "Target database: " + dbName;
-      const fileInput = document.getElementById("import-file");
-      if (fileInput) fileInput.value = "";
+
+      // db-import-upload.js owns resetting the file input / progress row
+      // to a clean state -- it also has to undo anything left over from a
+      // previous upload (disabled controls, a stale progress bar).
+      window.dispatchEvent(new CustomEvent("db-import:open"));
 
       dlgImport?.showModal();
     } else if (action === "delete") {

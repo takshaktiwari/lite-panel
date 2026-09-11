@@ -17,6 +17,7 @@ from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
 from app.models import AuditLog, FtpAccount, Site, SiteDatabase, SshKey
 from app.providers import get_provider
+from app.services import databases as db_service
 from app.services import dns_check as dns_check_service
 from app.services import files as files_service
 from app.services import sites as sites_service
@@ -136,6 +137,21 @@ def site_detail(
         return _not_found(request, session)
 
     certbot = get_provider("certbot")
+    site_databases = db.scalars(select(SiteDatabase).where(SiteDatabase.site_id == site.id)).all()
+
+    # Same actions menu as the Databases page (_macros.html's database_table)
+    # needs sizes for every database and the full known-user list for its
+    # "assign / change user" modal, not just this site's own databases.
+    sizes = {}
+    existing_users = {
+        record.db_user
+        for record in db.scalars(select(SiteDatabase)).all()
+        if record.db_user
+    }
+    if get_provider("mariadb").is_installed() and db_service.is_available():
+        sizes = db_service.size_map()
+        existing_users.update(db_service.list_database_users())
+
     return render(
         request,
         "sites/detail.html",
@@ -143,7 +159,9 @@ def site_detail(
         user=session.user,
         site=site,
         php_versions=get_provider("php").installed_versions(),
-        databases=db.scalars(select(SiteDatabase).where(SiteDatabase.site_id == site.id)).all(),
+        databases=site_databases,
+        sizes=sizes,
+        existing_users=sorted(existing_users),
         ftp_account=db.scalar(select(FtpAccount).where(FtpAccount.site_id == site.id)),
         ssh_keys=db.scalars(select(SshKey).where(SshKey.site_id == site.id)).all(),
         certbot_ready=certbot.is_installed(),

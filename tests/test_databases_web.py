@@ -135,20 +135,85 @@ def test_export_database_downloads_file(signed_in, db, monkeypatch, tmp_path):
     assert "test_db_" in response.headers["content-disposition"]
 
 
-def test_import_database_enqueues_job(signed_in, db):
+def test_import_chunk_upload_round_trip_enqueues_job(signed_in, db):
+    db_record = SiteDatabase(db_name="test_db", db_user="test_user")
+    db.add(db_record)
+    db.commit()
+    token = _csrf(signed_in)
+
+    init_response = signed_in.post(
+        f"/databases/{db_record.id}/import/chunk-upload/init",
+        json={"filename": "backup.sql.gz", "size": 5},
+        headers={"X-CSRF-Token": token},
+    )
+    assert init_response.status_code == 200
+    upload_id = init_response.json()["upload_id"]
+
+    chunk_response = signed_in.post(
+        f"/databases/{db_record.id}/import/chunk-upload/{upload_id}/chunk",
+        data={"index": "0", "csrf_token": token},
+        files={"chunk": ("chunk", b"hello")},
+    )
+    assert chunk_response.status_code == 200
+    assert chunk_response.json() == {"received_bytes": 5}
+
+    complete_response = signed_in.post(
+        f"/databases/{db_record.id}/import/chunk-upload/{upload_id}/complete",
+        data={"csrf_token": token},
+    )
+    assert complete_response.status_code == 200
+    assert "job_id" in complete_response.json()
+
+
+def test_import_chunk_upload_rejects_bad_extension(signed_in, db):
+    db_record = SiteDatabase(db_name="test_db", db_user="test_user")
+    db.add(db_record)
+    db.commit()
+    token = _csrf(signed_in)
+
+    response = signed_in.post(
+        f"/databases/{db_record.id}/import/chunk-upload/init",
+        json={"filename": "backup.txt", "size": 5},
+        headers={"X-CSRF-Token": token},
+    )
+    assert response.status_code == 400
+
+
+def test_import_chunk_upload_init_requires_csrf(signed_in, db):
     db_record = SiteDatabase(db_name="test_db", db_user="test_user")
     db.add(db_record)
     db.commit()
 
-    files = {"file": ("backup.sql.gz", b"fake sql dump", "application/gzip")}
-    data = {"csrf_token": _csrf(signed_in)}
-
     response = signed_in.post(
-        f"/databases/{db_record.id}/import",
-        files=files,
-        data=data,
+        f"/databases/{db_record.id}/import/chunk-upload/init",
+        json={"filename": "backup.sql", "size": 5},
     )
-    assert response.status_code == 303
-    assert "/jobs/" in response.headers["location"]
+    assert response.status_code == 400
+
+
+def test_import_chunk_upload_abort_discards_the_session(signed_in, db):
+    db_record = SiteDatabase(db_name="test_db", db_user="test_user")
+    db.add(db_record)
+    db.commit()
+    token = _csrf(signed_in)
+
+    init_response = signed_in.post(
+        f"/databases/{db_record.id}/import/chunk-upload/init",
+        json={"filename": "backup.sql", "size": 5},
+        headers={"X-CSRF-Token": token},
+    )
+    upload_id = init_response.json()["upload_id"]
+
+    abort_response = signed_in.post(
+        f"/databases/{db_record.id}/import/chunk-upload/{upload_id}/abort",
+        data={"csrf_token": token},
+    )
+    assert abort_response.status_code == 200
+
+    complete_response = signed_in.post(
+        f"/databases/{db_record.id}/import/chunk-upload/{upload_id}/complete",
+        data={"csrf_token": token},
+    )
+    assert complete_response.status_code == 400
 
 
