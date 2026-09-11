@@ -295,3 +295,23 @@ def test_import_database_surfaces_a_failing_mysql(tmp_path):
         )
 
 
+def test_import_database_reports_why_mysql_quit_before_reading_the_dump(tmp_path):
+    """The reason, not the symptom.
+
+    mysql refuses the dump's first statement and exits while most of it is
+    still unwritten, so this side hits a broken pipe. What reaches the job
+    must be mysql's own complaint -- reporting "[Errno 32] Broken pipe"
+    leaves someone staring at a failed import with no idea why.
+    """
+    # Well past a pipe buffer, so the write really does fail mid-dump rather
+    # than fitting into the kernel's buffer and going unnoticed.
+    sql_file = tmp_path / "dump.sql"
+    sql_file.write_bytes(b"SELECT 1;\n" * 200_000)
+
+    with pytest.raises(RuntimeError, match="Table 'migrations' already exists"):
+        _run_import_against(
+            "echo \"ERROR 1050 (42S01) at line 1: Table 'migrations' already exists\" >&2; exit 1",
+            sql_file,
+        )
+
+

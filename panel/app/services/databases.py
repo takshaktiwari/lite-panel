@@ -433,14 +433,24 @@ def import_database(db_name: str, source_file: str | Path, ctx=None) -> None:
             # disk), and the file's on-disk size is the only total available
             # to report progress against.
             f_in = gzip_lib.GzipFile(fileobj=raw) if is_gz else raw
-            while True:
-                chunk = f_in.read(65536)
-                if not chunk:
-                    break
-                proc.stdin.write(chunk)
-                if ctx is not None:
-                    ctx.progress(min(raw.tell(), total_bytes), total_bytes)
-            proc.stdin.close()
+            quit_early = False
+            try:
+                while True:
+                    chunk = f_in.read(65536)
+                    if not chunk:
+                        break
+                    proc.stdin.write(chunk)
+                    if ctx is not None:
+                        ctx.progress(min(raw.tell(), total_bytes), total_bytes)
+                proc.stdin.close()
+            except BrokenPipeError:
+                # mysql is already gone, so there is nobody left to read the
+                # rest of the dump. It quit because it refused a statement --
+                # a table that already exists, a syntax error -- and said so
+                # on stderr. Swallowing that and reporting the broken pipe
+                # instead leaves the job showing the symptom and hiding the
+                # reason, so fall through and read stderr below.
+                quit_early = True
 
         # Deliberately not communicate(): it wants to close stdin itself, and
         # closing a BufferedWriter flushes it first -- on a pipe this side has
@@ -448,9 +458,12 @@ def import_database(db_name: str, source_file: str | Path, ctx=None) -> None:
         # import, however cleanly mysql actually finished.
         stderr = proc.stderr.read() if proc.stderr else b""
         proc.wait()
-        if proc.returncode != 0:
+        if proc.returncode != 0 or quit_early:
             err_msg = (stderr or b"").decode("utf-8", errors="replace").strip()
-            raise RuntimeError(f"Database import failed (code {proc.returncode}): {err_msg[:400]}")
+            raise RuntimeError(
+                f"Database import failed (code {proc.returncode}): "
+                f"{err_msg[:400] or 'mysql stopped early without reporting a reason.'}"
+            )
     except Exception:
         proc.kill()
         proc.wait()
