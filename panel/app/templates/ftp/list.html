@@ -27,8 +27,16 @@
   <form method="post" action="/ftp/create" style="max-width:520px;">
     {{ ui.csrf(session) }}
 
-    <label for="username">Username</label>
-    <input type="text" id="username" name="username" placeholder="e.g. bob or client-acme" data-ftp-username>
+    <div class="field-row">
+      <div class="field-input">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" placeholder="e.g. bob or client-acme" data-ftp-username>
+      </div>
+      <p class="field-note">
+        Only used for a <strong>custom path</strong> below. If the path is an existing site's own folder, that
+        site's account is used instead and this field auto-fills (read-only) to show it.
+      </p>
+    </div>
 
     <label for="password">Password</label>
     <input type="text" id="password" name="password" value="{{ suggested_password }}" required>
@@ -44,9 +52,9 @@
     <label for="path">Path</label>
     <input type="text" id="path" name="path" required placeholder="{{ sites_root }}/somesite" data-ftp-path>
     <p class="muted" id="ftp-site-hint" hidden style="margin-top:-8px;">
-      This is <strong id="ftp-site-hint-domain"></strong>'s own folder — the account will be that site's own login
-      (<code id="ftp-site-hint-user"></code>), not a new one, so the username above is ignored.
-      Edit the path to create a separate, dedicated account instead.
+      This is <strong id="ftp-site-hint-domain"></strong>'s own folder — the account above is that site's existing
+      login (<code id="ftp-site-hint-user"></code>), not a new one. Edit the path to create a separate, dedicated
+      account instead.
     </p>
 
     <button type="submit" class="button primary" style="margin-top:6px;">Create FTP account</button>
