@@ -129,17 +129,21 @@ def relative_to_root(path: Path) -> str:
         return "."
 
 
-def list_directory(candidate) -> List[Entry]:
+SORT_KEYS = {
+    "name": lambda e: e.name.lower(),
+    "size": lambda e: e.size,
+    "modified": lambda e: e.modified or datetime.min,
+}
+
+
+def list_directory(candidate, sort: str = "name", order: str = "asc") -> List[Entry]:
     target = resolve(candidate)
     if not target.is_dir():
         raise ValidationError("That path is not a directory.")
 
     entries: List[Entry] = []
     try:
-        children = sorted(
-            target.iterdir(),
-            key=lambda p: (not p.is_dir(), p.name.lower()),
-        )
+        children = list(target.iterdir())
     except PermissionError:
         raise ValidationError("Permission denied reading that directory.") from None
 
@@ -147,6 +151,10 @@ def list_directory(candidate) -> List[Entry]:
         if _is_partial_upload_name(child.name):
             continue
         entries.append(_describe(child))
+
+    key = SORT_KEYS.get(sort, SORT_KEYS["name"])
+    entries.sort(key=key, reverse=order == "desc")
+    entries.sort(key=lambda e: not e.is_dir)
     return entries
 
 

@@ -12,6 +12,11 @@
 
 {% set current_abs = root if current == '.' else root ~ '/' ~ current %}
 
+{% macro sort_header(key, label) %}
+{% set next_order = 'desc' if sort == key and order == 'asc' else 'asc' %}
+<a href="/files?path={{ current }}&amp;sort={{ key }}&amp;order={{ next_order }}" class="sort-header">{{ label }}{% if sort == key %} <span class="sort-arrow">{{ '▲' if order == 'asc' else '▼' }}</span>{% endif %}</a>
+{% endmacro %}
+
 {# The bulk-selection form is deliberately empty here -- the checkboxes that
    belong to it live scattered through the table below, each pointing back
    at it via form="bulk-form" (valid HTML, and the only way to let a table
@@ -78,7 +83,7 @@
     <thead>
       <tr>
         <th class="checkbox-cell"><input type="checkbox" id="select-all" style="width:auto;margin:0;"></th>
-        <th>Name</th><th>Size</th><th>Modified</th><th>Owner</th><th>Perms</th><th></th>
+        <th>{{ sort_header('name', 'Name') }}</th><th>{{ sort_header('size', 'Size') }}</th><th>{{ sort_header('modified', 'Modified') }}</th><th>Owner</th><th>Perms</th><th></th>
       </tr>
     </thead>
     <tbody>

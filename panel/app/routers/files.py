@@ -31,10 +31,17 @@ router = APIRouter(prefix="/files")
 def browse(
     request: Request,
     path: str = ".",
+    sort: str = "name",
+    order: str = "asc",
     session=Depends(require_session),
 ):
+    if sort not in files_service.SORT_KEYS:
+        sort = "name"
+    if order not in ("asc", "desc"):
+        order = "asc"
+
     try:
-        entries = files_service.list_directory(path)
+        entries = files_service.list_directory(path, sort=sort, order=order)
         crumbs = files_service.breadcrumbs(path)
         current = files_service.relative_to_root(files_service.resolve(path))
     except ValidationError as exc:
@@ -49,6 +56,8 @@ def browse(
             parent=".",
             root=str(files_service.root()),
             error=str(exc),
+            sort=sort,
+            order=order,
             status_code=400,
         )
 
@@ -62,6 +71,8 @@ def browse(
         current=current,
         parent=files_service.parent_of(path),
         root=str(files_service.root()),
+        sort=sort,
+        order=order,
     )
 
 
