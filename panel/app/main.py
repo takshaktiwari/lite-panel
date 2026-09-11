@@ -132,6 +132,13 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            # Static files carry no Cache-Control by default (Starlette only sets
+            # ETag/Last-Modified), so browsers apply heuristic caching and can keep
+            # serving an edited CSS/JS file from disk cache for a long time with no
+            # revalidation request at all. Force a conditional GET on every load so
+            # panel updates are visible immediately; ETag still makes that cheap.
+            response.headers.setdefault("Cache-Control", "no-cache")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "same-origin")

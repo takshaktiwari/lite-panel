@@ -394,16 +394,25 @@ input[type="text"], input[type="password"], input[type="number"], select, textar
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 input[readonly] { background: var(--border); color: var(--muted); cursor: not-allowed; }
 
-/* A form field on the left with a short explanatory note beside it on the
-   right -- used where an input's behavior isn't self-evident from its label
-   alone (e.g. it gets auto-filled/ignored under some condition). */
-.field-row { display: flex; align-items: flex-start; gap: 16px; }
-.field-row > .field-input { flex: 1 1 auto; min-width: 0; }
-.field-row > .field-note { flex: 0 1 240px; font-size: 12.5px; color: var(--muted); padding-top: 26px; }
-@media (max-width: 520px) {
-  .field-row { flex-direction: column; gap: 4px; }
-  .field-row > .field-note { padding-top: 0; margin: -10px 0 14px; }
+/* A form on the left with all its explanatory notes collected into one info
+   panel on the right, rather than scattered below individual fields -- used
+   where a field's behavior isn't self-evident from its label alone (e.g. it
+   gets auto-filled/ignored under some condition). */
+.form-with-sidebar { display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
+.form-with-sidebar > .form-with-sidebar-main { flex: 1 1 320px; min-width: 0; max-width: 480px; }
+.form-with-sidebar > .form-with-sidebar-info {
+  flex: 1 1 240px;
+  max-width: 300px;
+  font-size: 12.5px;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
 }
+.form-with-sidebar > .form-with-sidebar-info p { margin: 0 0 10px; }
+.form-with-sidebar > .form-with-sidebar-info p:last-child { margin-bottom: 0; }
+.form-with-sidebar > .form-with-sidebar-info strong { color: var(--text); }
 
 /* Bootstrap-style input group: a fixed, non-editable prefix flush against an
    editable field, sharing one border line where they meet -- used to show a

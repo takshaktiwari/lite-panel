@@ -24,41 +24,42 @@
    above isn't left pointing at a form the user can't see. #}
 <section class="panel" id="create-ftp-section" {% if not error %}hidden{% endif %}>
   <h2>Create FTP account</h2>
-  <form method="post" action="/ftp/create" style="max-width:520px;">
-    {{ ui.csrf(session) }}
+  <div class="form-with-sidebar">
+    <form method="post" action="/ftp/create" class="form-with-sidebar-main">
+      {{ ui.csrf(session) }}
 
-    <div class="field-row">
-      <div class="field-input">
-        <label for="username">Username</label>
-        <input type="text" id="username" name="username" placeholder="e.g. bob or client-acme" data-ftp-username>
-      </div>
-      <p class="field-note">
-        Only used for a <strong>custom path</strong> below. If the path is an existing site's own folder, that
-        site's account is used instead and this field auto-fills (read-only) to show it.
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" placeholder="e.g. bob or client-acme" data-ftp-username>
+
+      <label for="password">Password</label>
+      <input type="text" id="password" name="password" value="{{ suggested_password }}" required>
+
+      <label for="site-picker">Site <span class="muted">(optional — fills in the path below)</span></label>
+      <select id="site-picker" data-ftp-site-picker>
+        <option value="">— custom path —</option>
+        {% for site in sites %}
+        <option value="{{ site.id }}" data-root="{{ site.root_dir }}" data-user="{{ site.system_user }}" data-domain="{{ site.domain }}">{{ site.domain }} ({{ site.system_user }})</option>
+        {% endfor %}
+      </select>
+
+      <label for="path">Path</label>
+      <input type="text" id="path" name="path" required placeholder="{{ sites_root }}/somesite" data-ftp-path>
+
+      <button type="submit" class="button primary" style="margin-top:6px;">Create FTP account</button>
+    </form>
+
+    <div class="form-with-sidebar-info">
+      <p>
+        <strong>Username</strong> is only used for a custom path. If the path is an existing site's own folder,
+        that site's account is used instead and the field auto-fills (read-only) to show it.
+      </p>
+      <p id="ftp-site-hint" hidden>
+        This is <strong id="ftp-site-hint-domain"></strong>'s own folder — the account above is that site's existing
+        login (<code id="ftp-site-hint-user"></code>), not a new one. Edit the path to create a separate, dedicated
+        account instead.
       </p>
     </div>
-
-    <label for="password">Password</label>
-    <input type="text" id="password" name="password" value="{{ suggested_password }}" required>
-
-    <label for="site-picker">Site <span class="muted">(optional — fills in the path below)</span></label>
-    <select id="site-picker" data-ftp-site-picker>
-      <option value="">— custom path —</option>
-      {% for site in sites %}
-      <option value="{{ site.id }}" data-root="{{ site.root_dir }}" data-user="{{ site.system_user }}" data-domain="{{ site.domain }}">{{ site.domain }} ({{ site.system_user }})</option>
-      {% endfor %}
-    </select>
-
-    <label for="path">Path</label>
-    <input type="text" id="path" name="path" required placeholder="{{ sites_root }}/somesite" data-ftp-path>
-    <p class="muted" id="ftp-site-hint" hidden style="margin-top:-8px;">
-      This is <strong id="ftp-site-hint-domain"></strong>'s own folder — the account above is that site's existing
-      login (<code id="ftp-site-hint-user"></code>), not a new one. Edit the path to create a separate, dedicated
-      account instead.
-    </p>
-
-    <button type="submit" class="button primary" style="margin-top:6px;">Create FTP account</button>
-  </form>
+  </div>
 </section>
 
 <section class="panel">
