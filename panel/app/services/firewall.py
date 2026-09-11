@@ -99,24 +99,26 @@ def get_status() -> FirewallStatus:
     stdout = res.stdout.strip()
     is_active = "Status: active" in stdout
 
-    # Parse defaults e.g. "Default: deny (incoming), allow (outgoing), disabled (routed)"
-    default_in = "deny"
-    default_out = "allow"
-    default_match = re.search(r"Default:\s*(\w+)\s*\(incoming\),\s*(\w+)\s*\(outgoing\)", stdout)
-    if default_match:
-        default_in = default_match.group(1)
-        default_out = default_match.group(2)
-
     rules: List[FirewallRule] = []
     if is_active:
+        # Parse defaults e.g. "Default: deny (incoming), allow (outgoing), disabled (routed)"
+        default_in = "deny"
+        default_out = "allow"
+        default_match = re.search(r"Default:\s*(\w+)\s*\(incoming\),\s*(\w+)\s*\(outgoing\)", stdout)
+        if default_match:
+            default_in = default_match.group(1)
+            default_out = default_match.group(2)
         try:
             num_res = run(["ufw", "status", "numbered"], check=False, timeout=10)
             rules = parse_numbered_rules(num_res.stdout)
         except Exception as exc:
             logger.debug("error parsing numbered rules: %s", exc)
     else:
-        # UFW is disabled: `ufw status numbered` returns "Status: inactive" and omits rules.
-        # Parse persisted rules from /etc/ufw/user.rules so the user can inspect/manage configured rules.
+        # UFW is disabled: `ufw status verbose` prints only "Status: inactive" with
+        # no Default: line at all, and `ufw status numbered` omits rules entirely.
+        # Parse the persisted config/rules files directly so the panel reflects
+        # changes made while disabled (e.g. `ufw default deny incoming`).
+        default_in, default_out = parse_default_policy_file()
         try:
             rules = parse_user_rules_file()
         except Exception as exc:
@@ -129,6 +131,37 @@ def get_status() -> FirewallStatus:
         default_outgoing=default_out,
         rules=rules,
     )
+
+
+def parse_default_policy_file(filepath: str = "/etc/default/ufw") -> tuple:
+    """Parse DEFAULT_INPUT_POLICY / DEFAULT_OUTPUT_POLICY from /etc/default/ufw.
+
+    `ufw status verbose` only prints the Default: line while active, so this is
+    how the panel reads the configured policy while UFW is disabled -- notably,
+    right after `set_default_policy()` changes it via `ufw default ...`.
+    """
+    from pathlib import Path
+
+    default_in = "deny"
+    default_out = "allow"
+
+    p = Path(filepath)
+    if not p.is_file():
+        return default_in, default_out
+    try:
+        content = p.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        logger.debug("could not read %s: %s", filepath, exc)
+        return default_in, default_out
+
+    policy_map = {"accept": "allow", "drop": "deny", "reject": "reject"}
+    in_match = re.search(r'^\s*DEFAULT_INPUT_POLICY\s*=\s*"?(\w+)"?', content, re.MULTILINE | re.IGNORECASE)
+    out_match = re.search(r'^\s*DEFAULT_OUTPUT_POLICY\s*=\s*"?(\w+)"?', content, re.MULTILINE | re.IGNORECASE)
+    if in_match:
+        default_in = policy_map.get(in_match.group(1).lower(), default_in)
+    if out_match:
+        default_out = policy_map.get(out_match.group(1).lower(), default_out)
+    return default_in, default_out
 
 
 def parse_user_rules_file(filepath: str = "/etc/ufw/user.rules") -> List[FirewallRule]:

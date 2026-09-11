@@ -151,6 +151,70 @@ class TestFirewallService(unittest.TestCase):
         with self.assertRaises(ValidationError):
             fw_service.set_default_policy(direction="incoming", policy="maybe")
 
+    def test_parse_default_policy_file(self):
+        import tempfile
+
+        sample_file = """
+# /etc/default/ufw
+#
+IPV6=yes
+DEFAULT_INPUT_POLICY="DROP"
+DEFAULT_OUTPUT_POLICY="ACCEPT"
+DEFAULT_FORWARD_POLICY="DROP"
+DEFAULT_APPLICATION_POLICY="SKIP"
+"""
+        with tempfile.NamedTemporaryFile("w+", delete=False) as f:
+            f.write(sample_file)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            default_in, default_out = fw_service.parse_default_policy_file(temp_path)
+            self.assertEqual(default_in, "deny")
+            self.assertEqual(default_out, "allow")
+        finally:
+            import os
+            os.unlink(temp_path)
+
+    def test_parse_default_policy_file_allow_incoming(self):
+        import tempfile
+
+        sample_file = 'DEFAULT_INPUT_POLICY="ACCEPT"\nDEFAULT_OUTPUT_POLICY="ACCEPT"\n'
+        with tempfile.NamedTemporaryFile("w+", delete=False) as f:
+            f.write(sample_file)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            default_in, default_out = fw_service.parse_default_policy_file(temp_path)
+            self.assertEqual(default_in, "allow")
+            self.assertEqual(default_out, "allow")
+        finally:
+            import os
+            os.unlink(temp_path)
+
+    def test_parse_default_policy_file_missing(self):
+        default_in, default_out = fw_service.parse_default_policy_file("/nonexistent/path/ufw")
+        self.assertEqual(default_in, "deny")
+        self.assertEqual(default_out, "allow")
+
+    @patch("app.services.firewall.which", return_value="/usr/sbin/ufw")
+    @patch("app.services.firewall.run")
+    @patch("app.services.firewall.parse_default_policy_file", return_value=("allow", "allow"))
+    def test_get_status_inactive_uses_default_policy_file(self, mock_parse_default, mock_run, mock_which):
+        def fake_run(cmd, **kwargs):
+            res = MagicMock()
+            res.stdout = "Status: inactive\n"
+            return res
+
+        mock_run.side_effect = fake_run
+
+        status = fw_service.get_status()
+        self.assertFalse(status.enabled)
+        self.assertEqual(status.default_incoming, "allow")
+        self.assertEqual(status.default_outgoing, "allow")
+        mock_parse_default.assert_called_once()
+
     def test_parse_user_rules_file(self):
         import tempfile
         from pathlib import Path
