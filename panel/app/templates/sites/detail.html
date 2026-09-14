@@ -29,7 +29,7 @@
             <span style="color:{{ color }};font-weight:600;">
               {{ 'Expired' if days < 0 else (days|string + ' days left') }}
             </span>
-            <span class="muted" style="font-size:12px;"> · expires {{ cert_expiry.strftime('%b %d, %Y') }}</span>
+            <span class="muted" style="font-size:12px;"> · expires {{ cert_expiry.strftime('%b %d, %Y') }} · <span title="certbot renews automatically when under 30 days remaining">auto-renews ✓</span></span>
           {% else %}
             Enabled
           {% endif %}
