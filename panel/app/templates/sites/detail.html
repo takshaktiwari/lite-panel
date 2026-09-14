@@ -24,9 +24,9 @@
       <div><dt>SSL</dt><dd>{{ 'Enabled' if site.ssl_enabled else 'Disabled' }}</dd></div>
     </dl>
     <p style="margin-top:12px;display:flex;gap:8px;">
-      <a class="button" href="/files?path={{ site.name }}" style="font-size:12px;padding:3px 10px;">Browse files</a>
-      <a class="button" href="/logs?source=site&name={{ site.name }}" style="font-size:12px;padding:3px 10px;">View logs</a>
-      <a class="button" href="/terminal?cd={{ site.root_dir | urlencode }}" style="font-size:12px;padding:3px 10px;">Terminal</a>
+      <a class="button" href="/files?path={{ site.name }}" style="font-size:12px;padding:3px 10px;" target="_blank" rel="noopener">Browse files</a>
+      <a class="button" href="/logs?source=site&name={{ site.name }}" style="font-size:12px;padding:3px 10px;" target="_blank" rel="noopener">View logs</a>
+      <a class="button" href="/terminal?cd={{ site.root_dir | urlencode }}" style="font-size:12px;padding:3px 10px;" target="_blank" rel="noopener">Terminal</a>
     </p>
   </section>
 
