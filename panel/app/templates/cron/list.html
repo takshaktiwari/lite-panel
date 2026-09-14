@@ -3,16 +3,17 @@
 {% block title %}Cron · {{ app_name }}{% endblock %}
 
 {% block content %}
-<header class="page-head">
-  <h1>Cron</h1>
-  <p class="muted">Scheduled commands. Per-site jobs run as that site's own system user; a server job (no site) runs as root.</p>
+<header class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end;">
+  <div><h1>Cron</h1><p class="muted">Scheduled commands. Per-site jobs run as that site's own system user; a server job (no site) runs as root.</p></div>
+  <button type="button" class="button primary" data-toggle-target="create-cron-section"
+          data-toggle-label-show="+ New cron job" data-toggle-label-hide="Cancel">{{ 'Cancel' if error else '+ New cron job' }}</button>
 </header>
 
 {% if not cron_available %}
 <div class="alert alert-error">cron does not appear to be installed on this server. Jobs can be saved here but won't run until it is.</div>
 {% endif %}
 
-<section class="panel">
+<section class="panel" id="create-cron-section" {% if not error %}hidden{% endif %}>
   <h2>New cron job</h2>
   <form method="post" action="/cron/new">
     {{ ui.csrf(session) }}

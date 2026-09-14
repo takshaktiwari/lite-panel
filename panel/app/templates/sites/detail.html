@@ -3,7 +3,7 @@
 {% block title %}{{ site.domain }} · {{ app_name }}{% endblock %}
 
 {% block content %}
-<header class="page-head"><p class="muted"><a href="/sites">← Sites</a></p><h1>{{ site.domain }}</h1></header>
+<header class="page-head"><p class="muted"><a href="/sites">← Sites</a></p><h1>{{ site.domain }}<a href="{{ 'https' if site.ssl_enabled else 'http' }}://{{ site.domain }}" target="_blank" rel="noopener" title="Open site in new tab" style="font-size:0.5em;vertical-align:middle;margin-left:10px;opacity:0.6;text-decoration:none;">↗</a></h1></header>
 
 <div class="columns">
   <section class="panel">
@@ -24,8 +24,9 @@
       <div><dt>SSL</dt><dd>{{ 'Enabled' if site.ssl_enabled else 'Disabled' }}</dd></div>
     </dl>
     <p style="margin-top:12px;display:flex;gap:8px;">
-      <a class="button" href="/files?path={{ site.name }}">Browse files</a>
-      <a class="button" href="/logs?source=site&name={{ site.name }}">View logs</a>
+      <a class="button" href="/files?path={{ site.name }}" style="font-size:12px;padding:3px 10px;">Browse files</a>
+      <a class="button" href="/logs?source=site&name={{ site.name }}" style="font-size:12px;padding:3px 10px;">View logs</a>
+      <a class="button" href="/terminal?cd={{ site.root_dir | urlencode }}" style="font-size:12px;padding:3px 10px;">Terminal</a>
     </p>
   </section>
 
