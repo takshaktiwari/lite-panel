@@ -47,7 +47,16 @@
   // SVG Sparkline / Area Chart Rendering
   // -------------------------------------------------------------------------
 
-  function renderSvgChart(svgId, dataKey, colorStroke, colorFill) {
+  function formatTs(ts) {
+    if (!ts) return "";
+    // ts is "YYYY-MM-DDTHH:MM:SS" (UTC from server)
+    const d = new Date(ts + "Z"); // treat as UTC
+    const pad = (n) => String(n).padStart(2, "0");
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}  ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function renderSvgChart(svgId, dataKey, colorStroke, colorFill, label) {
     const svg = document.getElementById(svgId);
     if (!svg) return;
 
@@ -63,6 +72,7 @@
     const innerH = height - padding * 2;
 
     const values = historyData.map((d) => d[dataKey] || 0);
+    const timestamps = historyData.map((d) => d.ts || "");
     const maxVal = Math.max(100, Math.max(...values));
     const minVal = 0;
 
@@ -75,6 +85,14 @@
     const pathD = points.map((pt, idx) => (idx === 0 ? `M ${pt[0]} ${pt[1]}` : `L ${pt[0]} ${pt[1]}`)).join(" ");
     const areaD = `${pathD} L ${points[points.length - 1][0]} ${height} L ${points[0][0]} ${height} Z`;
 
+    // Build hit rects + crosshair elements per point
+    const hitWidth = Math.max(8, innerW / Math.max(values.length - 1, 1));
+    const hitRects = points.map((pt, idx) => {
+      const x = Math.max(padding, pt[0] - hitWidth / 2);
+      return `<rect class="chart-hit" x="${x}" y="${padding}" width="${hitWidth}" height="${innerH}"
+                fill="transparent" data-idx="${idx}" style="cursor:crosshair;"/>`;
+    }).join("");
+
     svg.innerHTML = `
       <defs>
         <linearGradient id="grad-${dataKey}" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -86,12 +104,79 @@
       <line x1="${padding}" y1="${height / 2}" x2="${width - padding}" y2="${height / 2}" stroke="#23272e" stroke-dasharray="3,3" stroke-width="1"/>
       <path d="${areaD}" fill="url(#grad-${dataKey})"/>
       <path d="${pathD}" fill="none" stroke="${colorStroke}" stroke-width="2"/>
+      ${hitRects}
+      <line id="crosshair-${dataKey}" x1="0" y1="${padding}" x2="0" y2="${height - padding}"
+            stroke="${colorStroke}" stroke-width="1" stroke-dasharray="4,3" opacity="0" pointer-events="none"/>
+      <circle id="dot-${dataKey}" cx="0" cy="0" r="4" fill="${colorStroke}" stroke="var(--bg)" stroke-width="2"
+              opacity="0" pointer-events="none"/>
+      <g id="tip-${dataKey}" opacity="0" pointer-events="none">
+        <rect id="tip-bg-${dataKey}" rx="5" ry="5" fill="#1a1d23" stroke="${colorStroke}" stroke-width="1" opacity="0.95"/>
+        <text id="tip-val-${dataKey}" fill="${colorStroke}" font-size="13" font-weight="700" font-family="var(--mono,monospace)"></text>
+        <text id="tip-ts-${dataKey}" fill="#9ca3af" font-size="10" font-family="var(--sans,sans-serif)"></text>
+      </g>
     `;
+
+    // Wire up hover events
+    svg.querySelectorAll(".chart-hit").forEach((rect) => {
+      rect.addEventListener("mouseenter", () => {
+        const idx = parseInt(rect.getAttribute("data-idx"), 10);
+        const pt = points[idx];
+        const val = values[idx];
+        const ts = timestamps[idx];
+
+        // Crosshair
+        const ch = document.getElementById(`crosshair-${dataKey}`);
+        if (ch) { ch.setAttribute("x1", pt[0]); ch.setAttribute("x2", pt[0]); ch.setAttribute("opacity", "1"); }
+
+        // Dot
+        const dot = document.getElementById(`dot-${dataKey}`);
+        if (dot) { dot.setAttribute("cx", pt[0]); dot.setAttribute("cy", pt[1]); dot.setAttribute("opacity", "1"); }
+
+        // Tooltip
+        const tip = document.getElementById(`tip-${dataKey}`);
+        const tipBg = document.getElementById(`tip-bg-${dataKey}`);
+        const tipVal = document.getElementById(`tip-val-${dataKey}`);
+        const tipTs = document.getElementById(`tip-ts-${dataKey}`);
+        if (!tip || !tipBg || !tipVal || !tipTs) return;
+
+        const valLabel = `${label}: ${val}%`;
+        const tsLabel = formatTs(ts);
+        tipVal.textContent = valLabel;
+        tipTs.textContent = tsLabel;
+
+        // Measure text widths roughly (chars * px)
+        const valW = valLabel.length * 8.5;
+        const tsW = tsLabel.length * 6.2;
+        const boxW = Math.max(valW, tsW) + 16;
+        const boxH = 38;
+
+        // Position: above the dot, flip left if near right edge
+        let tx = pt[0] - boxW / 2;
+        if (tx + boxW > width - 4) tx = width - boxW - 4;
+        if (tx < 4) tx = 4;
+        const ty = Math.max(padding + 2, pt[1] - boxH - 10);
+
+        tipBg.setAttribute("x", tx); tipBg.setAttribute("y", ty);
+        tipBg.setAttribute("width", boxW); tipBg.setAttribute("height", boxH);
+
+        tipVal.setAttribute("x", tx + 8); tipVal.setAttribute("y", ty + 16);
+        tipTs.setAttribute("x", tx + 8); tipTs.setAttribute("y", ty + 30);
+
+        tip.setAttribute("opacity", "1");
+      });
+
+      rect.addEventListener("mouseleave", () => {
+        document.getElementById(`crosshair-${dataKey}`)?.setAttribute("opacity", "0");
+        document.getElementById(`dot-${dataKey}`)?.setAttribute("opacity", "0");
+        document.getElementById(`tip-${dataKey}`)?.setAttribute("opacity", "0");
+      });
+    });
   }
 
+
   function renderAllCharts() {
-    renderSvgChart("svg-cpu", "cpu", "var(--accent)", "#2563eb");
-    renderSvgChart("svg-mem", "memory", "var(--warn, #eab308)", "#eab308");
+    renderSvgChart("svg-cpu", "cpu", "var(--accent)", "#2563eb", "CPU");
+    renderSvgChart("svg-mem", "memory", "var(--warn, #eab308)", "#eab308", "Memory");
   }
 
   renderAllCharts();

@@ -173,6 +173,7 @@ def get_history(db: OrmSession, hours: int = 24, max_points: int = 60) -> List[D
 
     return [
         {
+            "ts": r.created_at.strftime("%Y-%m-%dT%H:%M:%S"),
             "time": r.created_at.strftime("%H:%M" if hours <= 24 else "%m-%d %H:%M"),
             "cpu": round(r.cpu_percent, 1),
             "memory": round(r.memory_percent, 1),
