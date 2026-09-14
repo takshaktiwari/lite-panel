@@ -3,7 +3,7 @@
 {% block title %}{{ site.domain }} · {{ app_name }}{% endblock %}
 
 {% block content %}
-<header class="page-head"><p class="muted"><a href="/sites">← Sites</a></p><h1>{{ site.domain }}<a href="{{ 'https' if site.ssl_enabled else 'http' }}://{{ site.domain }}" target="_blank" rel="noopener" title="Open site in new tab" style="font-size:0.5em;vertical-align:middle;margin-left:10px;opacity:0.55;text-decoration:none;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="0.9em" height="0.9em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></h1></header>
+<header class="page-head"><p class="muted"><a href="/sites">← Sites</a></p><h1>{{ site.domain }}<a href="{{ 'https' if site.ssl_enabled else 'http' }}://{{ site.domain }}" target="_blank" rel="noopener" title="Open site in new tab" style="font-size:1em;vertical-align:middle;margin-left:12px;opacity:0.55;text-decoration:none;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="0.75em" height="0.75em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></h1></header>
 
 <div class="columns">
   <section class="panel">
@@ -21,22 +21,7 @@
         </dd>
       </div>
       <div><dt>FPM socket</dt><dd>{{ socket or '—' }}</dd></div>
-      <div><dt>SSL</dt><dd>
-        {% if site.ssl_enabled %}
-          {% if cert_expiry %}
-            {% set days = ((cert_expiry - now) .days) %}
-            {% set color = 'var(--ok, #10b981)' if days > 30 else ('var(--warn, #eab308)' if days > 7 else 'var(--danger, #ef4444)') %}
-            <span style="color:{{ color }};font-weight:600;">
-              {{ 'Expired' if days < 0 else (days|string + ' days left') }}
-            </span>
-            <span class="muted" style="font-size:12px;"> · expires {{ cert_expiry.strftime('%b %d, %Y') }} · <span title="certbot renews automatically when under 30 days remaining">auto-renews ✓</span></span>
-          {% else %}
-            Enabled
-          {% endif %}
-        {% else %}
-          Disabled
-        {% endif %}
-      </dd></div>
+      <div><dt>SSL</dt><dd>{{ 'Enabled' if site.ssl_enabled else 'Disabled' }}</dd></div>
     </dl>
     <p style="margin-top:12px;display:flex;gap:8px;">
       <a class="button" href="/files?path={{ site.name }}" style="font-size:12px;padding:3px 10px;" target="_blank" rel="noopener">Browse files</a>
@@ -67,7 +52,18 @@
       {% if not certbot_ready %}
       <p class="muted">Install SSL support from the <a href="/stack">Stack page</a> first.</p>
       {% elif site.ssl_enabled %}
+      {% if cert_expiry %}
+        {% set days = ((cert_expiry - now).days) %}
+        {% set color = 'var(--ok, #10b981)' if days > 30 else ('var(--warn, #eab308)' if days > 7 else 'var(--danger, #ef4444)') %}
+      <p>
+        HTTPS is active for this site. Certificate expires
+        <strong style="color:{{ color }};">{{ cert_expiry.strftime('%b %d, %Y') }}</strong>
+        <span class="muted">({{ 'expired' if days < 0 else (days|string + ' days left') }})</span>
+        · <span class="muted" title="certbot renews automatically when under 30 days remaining">auto-renews ✓</span>
+      </p>
+      {% else %}
       <p>HTTPS is active for this site.</p>
+      {% endif %}
       <form method="post" action="/sites/{{ site.id }}/ssl">
         {{ ui.csrf(session) }}
         <input type="hidden" name="action" value="disable">
