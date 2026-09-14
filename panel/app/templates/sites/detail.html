@@ -21,7 +21,22 @@
         </dd>
       </div>
       <div><dt>FPM socket</dt><dd>{{ socket or '—' }}</dd></div>
-      <div><dt>SSL</dt><dd>{{ 'Enabled' if site.ssl_enabled else 'Disabled' }}</dd></div>
+      <div><dt>SSL</dt><dd>
+        {% if site.ssl_enabled %}
+          {% if cert_expiry %}
+            {% set days = ((cert_expiry - now) .days) %}
+            {% set color = 'var(--ok, #10b981)' if days > 30 else ('var(--warn, #eab308)' if days > 7 else 'var(--danger, #ef4444)') %}
+            <span style="color:{{ color }};font-weight:600;">
+              {{ 'Expired' if days < 0 else (days|string + ' days left') }}
+            </span>
+            <span class="muted" style="font-size:12px;"> · expires {{ cert_expiry.strftime('%b %d, %Y') }}</span>
+          {% else %}
+            Enabled
+          {% endif %}
+        {% else %}
+          Disabled
+        {% endif %}
+      </dd></div>
     </dl>
     <p style="margin-top:12px;display:flex;gap:8px;">
       <a class="button" href="/files?path={{ site.name }}" style="font-size:12px;padding:3px 10px;" target="_blank" rel="noopener">Browse files</a>

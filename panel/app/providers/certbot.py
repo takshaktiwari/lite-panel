@@ -306,3 +306,23 @@ class CertbotProvider(Provider):
         if not LIVE_DIR.is_dir():
             return []
         return sorted(p.name for p in LIVE_DIR.iterdir() if (p / "fullchain.pem").exists())
+
+    def cert_expiry(self, domain: str) -> Optional["datetime"]:
+        """Return the expiry datetime of the live cert for *domain*, or None."""
+        from datetime import datetime, timezone
+        cert = LIVE_DIR / domain / "cert.pem"
+        if not cert.exists():
+            return None
+        try:
+            result = shell_run(
+                ["openssl", "x509", "-in", str(cert), "-noout", "-enddate"],
+                check=False,
+                timeout=10,
+            )
+            # output: "notAfter=Sep 14 12:34:56 2026 GMT"
+            line = result.stdout.strip()
+            value = line.split("=", 1)[-1].strip()
+            return datetime.strptime(value, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+

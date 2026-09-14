@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -166,6 +167,8 @@ def site_detail(
         ssh_keys=db.scalars(select(SshKey).where(SshKey.site_id == site.id)).all(),
         certbot_ready=certbot.is_installed(),
         has_certificate=certbot.has_certificate(site.domain) if certbot.is_installed() else False,
+        cert_expiry=certbot.cert_expiry(site.domain) if certbot.is_installed() and site.ssl_enabled else None,
+        now=datetime.now(timezone.utc),
         socket=str(sites_service.socket_for(site.name)) if site.php_version else None,
     )
 
