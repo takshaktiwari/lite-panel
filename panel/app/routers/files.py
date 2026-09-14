@@ -95,6 +95,32 @@ def folder_size(
     return JSONResponse({"bytes": total, "human": files_service.format_size(total)})
 
 
+@router.get("/view")
+def view_form(
+    request: Request,
+    path: str,
+    session=Depends(require_session),
+):
+    try:
+        content, truncated = files_service.read_text_tail(path)
+    except ValidationError as exc:
+        return _back(".", error=str(exc))
+
+    resolved = files_service.resolve(path)
+    return render(
+        request,
+        "files/view.html",
+        session=session,
+        user=session.user,
+        path=files_service.relative_to_root(resolved),
+        name=resolved.name,
+        parent=files_service.parent_of(path),
+        content=content,
+        truncated=truncated,
+        tail_size=files_service.format_size(files_service.VIEW_TAIL_BYTES),
+    )
+
+
 @router.get("/edit")
 def edit_form(
     request: Request,

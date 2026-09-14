@@ -42,6 +42,12 @@ settings = get_settings()
 MAX_EDIT_BYTES = 1024 * 1024
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 
+# Logs and other append-only text files routinely blow past MAX_EDIT_BYTES,
+# but the fix for those isn't a bigger edit cap -- nobody should save a
+# multi-MB file back from a browser textarea. Instead they get a read-only
+# tail, the same thing you'd reach for on the command line.
+VIEW_TAIL_BYTES = 2 * 1024 * 1024
+
 # Guardrails for archive creation/extraction. These bound how much work one
 # panel click can trigger -- not a security control by themselves, but the
 # zip-slip check below is, and it is not optional.
@@ -107,10 +113,14 @@ class Entry:
         return format_size(self.size) if not self.is_dir else "—"
 
     @property
-    def editable(self) -> bool:
-        if self.is_dir or self.size > MAX_EDIT_BYTES:
+    def viewable(self) -> bool:
+        if self.is_dir:
             return False
         return _suffix(self.name).lower() in TEXT_EXTENSIONS or "." not in self.name
+
+    @property
+    def editable(self) -> bool:
+        return self.viewable and self.size <= MAX_EDIT_BYTES
 
     @property
     def is_archive(self) -> bool:
@@ -267,6 +277,35 @@ def read_text(candidate) -> str:
         return target.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         raise ValidationError("This looks like a binary file, so it cannot be edited.") from None
+
+
+def read_text_tail(candidate, max_bytes: int = VIEW_TAIL_BYTES) -> Tuple[str, bool]:
+    """Read a text file for read-only viewing, capped to its last
+    ``max_bytes`` instead of ``read_text``'s hard refusal above
+    ``MAX_EDIT_BYTES``. Returns ``(content, truncated)``."""
+    target = resolve(candidate)
+    if not target.is_file():
+        raise ValidationError("That file does not exist.")
+
+    truncated = target.stat().st_size > max_bytes
+    with target.open("rb") as handle:
+        if truncated:
+            handle.seek(-max_bytes, os.SEEK_END)
+        data = handle.read()
+
+    try:
+        text = data.decode("utf-8", errors="replace" if truncated else "strict")
+    except UnicodeDecodeError:
+        raise ValidationError("This looks like a binary file, so it cannot be viewed.") from None
+
+    if truncated:
+        # The seek almost certainly landed mid-line (or mid multi-byte
+        # character) -- drop the ragged first line so the view starts clean.
+        newline = text.find("\n")
+        if newline != -1:
+            text = text[newline + 1 :]
+
+    return text, truncated
 
 
 def write_text(candidate, content: str) -> None:

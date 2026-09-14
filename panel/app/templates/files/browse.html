@@ -98,6 +98,8 @@
           <a href="/files?path={{ entry.relative }}">📁 {{ entry.name }}</a>
           {% elif entry.editable %}
           <a href="/files/edit?path={{ entry.relative }}">{{ entry.name }}</a>
+          {% elif entry.viewable %}
+          <a href="/files/view?path={{ entry.relative }}">{{ entry.name }}</a>
           {% else %}
           {{ entry.name }}
           {% endif %}
@@ -121,6 +123,8 @@
             <div class="dropdown-menu">
               {% if entry.editable %}
               <a class="dropdown-item" href="/files/edit?path={{ entry.relative }}"><span class="icon">✎</span> Edit</a>
+              {% elif entry.viewable %}
+              <a class="dropdown-item" href="/files/view?path={{ entry.relative }}"><span class="icon">👁</span> View</a>
               {% endif %}
               {% if not entry.is_dir %}
               <a class="dropdown-item" href="/files/download?path={{ entry.relative }}"><span class="icon">⬇</span> Download</a>

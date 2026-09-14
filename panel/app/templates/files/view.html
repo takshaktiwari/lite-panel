@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}{{ name }} · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head"><p class="muted"><a href="/files?path={{ parent }}">← {{ parent }}</a></p><h1>{{ name }}</h1></header>
+
+{% if truncated %}
+<div class="alert alert-notice">This file is too large to edit here, so it's shown read-only, limited to its last {{ tail_size }}.
+  <a href="/files/download?path={{ path }}">Download the full file</a> to see everything.</div>
+{% endif %}
+
+<div class="panel">
+  <textarea id="viewer" rows="28" spellcheck="false" readonly
+    style="width:100%;font-family:var(--mono);font-size:13px;line-height:1.5;padding:12px;
+           border:1px solid var(--border);border-radius:6px;background:var(--bg);
+           color:var(--text);tab-size:4;">{{ content }}</textarea>
+  <div style="display:flex;gap:8px;margin-top:14px;">
+    <a class="button" href="/files?path={{ parent }}">Back</a>
+    <a class="button" href="/files/download?path={{ path }}">Download</a>
+  </div>
+</div>
+{% endblock %}
