@@ -3,7 +3,7 @@
 {% block title %}{{ site.domain }} · {{ app_name }}{% endblock %}
 
 {% block content %}
-<header class="page-head"><p class="muted"><a href="/sites">← Sites</a></p><h1>{{ site.domain }}<a href="{{ 'https' if site.ssl_enabled else 'http' }}://{{ site.domain }}" target="_blank" rel="noopener" title="Open site in new tab" style="font-size:0.5em;vertical-align:middle;margin-left:10px;opacity:0.6;text-decoration:none;">↗</a></h1></header>
+<header class="page-head"><p class="muted"><a href="/sites">← Sites</a></p><h1>{{ site.domain }}<a href="{{ 'https' if site.ssl_enabled else 'http' }}://{{ site.domain }}" target="_blank" rel="noopener" title="Open site in new tab" style="font-size:0.5em;vertical-align:middle;margin-left:10px;opacity:0.55;text-decoration:none;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="0.9em" height="0.9em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></h1></header>
 
 <div class="columns">
   <section class="panel">
