@@ -22,6 +22,7 @@ from app.services import files as files_service
 from app.services import ftp as ftp_service
 from app.services import renderer
 from app.services import sites as sites_service
+from app.services import backup as backup_service
 from app.validators import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -589,3 +590,30 @@ def update_panel(ctx) -> None:
     except Exception as exc:  # noqa: BLE001
         ctx.log(f"Note: Could not automatically restart service: {exc}")
 
+
+# --------------------------------------------------------------------------
+# Backup
+# --------------------------------------------------------------------------
+
+
+@register("backup.create")
+def create_site_backup(ctx) -> None:
+    site_id = ctx.payload["site_id"]
+
+    with session_scope() as db:
+        site = db.get(Site, site_id)
+        if site is None:
+            raise JobFailed(f"Site {site_id} not found")
+        from app.models import SiteDatabase
+        from sqlalchemy import select as _select
+        db_records = db.scalars(
+            _select(SiteDatabase).where(SiteDatabase.site_id == site_id)
+        ).all()
+        site_name = site.name
+        root_dir = site.root_dir
+        db_names = [r.db_name for r in db_records if r.db_name]
+
+    try:
+        backup_service.create_backup(site_name, root_dir, db_names, ctx=ctx)
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc

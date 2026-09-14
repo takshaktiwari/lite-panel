@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Backups · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1>Backups</h1>
+    <p class="muted">Full site backups — files + database in one archive. Stored at <code>/var/backups/lite-panel/</code>.</p>
+  </div>
+</header>
+
+{% if not sites %}
+<div class="alert alert-notice">No sites yet. <a href="/sites/new">Create a site</a> first.</div>
+{% else %}
+
+{# ---- Per-site backup sections ------------------------------------------ #}
+{% for site in sites %}
+{% set site_backups = backups_by_site.get(site.name, []) %}
+<section class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+    <div>
+      <h2 style="margin:0;">{{ site.domain }}</h2>
+      <p class="muted" style="margin:2px 0 0;font-size:13px;">{{ site.name }} · {{ site_backups|length }} backup{{ 's' if site_backups|length != 1 }}</p>
+    </div>
+    <form method="post" action="/backup/{{ site.id }}/create" style="margin:0;">
+      {{ ui.csrf(session) }}
+      <button type="submit" class="button primary"
+              data-confirm="Create a full backup of {{ site.domain }}? This may take a few minutes for large sites.">
+        + New backup
+      </button>
+    </form>
+  </div>
+
+  {% if site_backups %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Filename</th>
+        <th>Size</th>
+        <th>Created</th>
+        <th style="text-align:right;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in site_backups %}
+      <tr>
+        <td><code style="font-size:12px;">{{ b.name }}</code></td>
+        <td class="muted">{{ b.size_mb }} MB</td>
+        <td class="muted">{{ b.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <a class="button" href="/backup/download/{{ b.site }}/{{ b.name }}"
+             style="font-size:12px;padding:3px 10px;">↓ Download</a>
+          <form method="post" action="/backup/delete/{{ b.site }}/{{ b.name }}" style="display:inline;">
+            {{ ui.csrf(session) }}
+            <button class="button" type="submit" style="font-size:12px;padding:3px 10px;color:var(--danger);"
+                    data-confirm="Delete backup {{ b.name }}? This cannot be undone.">
+              Delete
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted empty">No backups yet for this site.</p>
+  {% endif %}
+</section>
+{% endfor %}
+
+{% endif %}
+{% endblock %}

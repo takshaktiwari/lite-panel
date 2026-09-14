@@ -17,6 +17,7 @@ from app.jobs import worker
 from app.models import Job, JobStatus
 from app.routers import (
     auth,
+    backup,
     config,
     cron,
     dashboard,
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(jobs_router.router)
     app.include_router(internal.router)
     app.include_router(terminal.router)
+    app.include_router(backup.router)
 
     @app.exception_handler(NotAuthenticated)
     async def _needs_login(request: Request, _exc: NotAuthenticated):
