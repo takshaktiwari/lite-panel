@@ -16,6 +16,12 @@
   const closeButton = document.getElementById("upload-dialog-close");
   const bulkForm = document.getElementById("bulk-form");
 
+  const conflictDialog = document.getElementById("upload-conflict-dialog");
+  const conflictNameEl = document.getElementById("upload-conflict-name");
+  const conflictCancelBtn = document.getElementById("upload-conflict-cancel");
+  const conflictRenameBtn = document.getElementById("upload-conflict-rename");
+  const conflictReplaceBtn = document.getElementById("upload-conflict-replace");
+
   if (!dialog || !fileInput || !queueList || !openButton || !closeButton || !bulkForm) return;
 
   const csrfToken = () => bulkForm.elements.csrf_token.value;
@@ -25,6 +31,51 @@
   const rows = [];
   const pending = [];
   let activeCount = 0;
+
+  async function nameExists(filename) {
+    const res = await fetch(
+      `/files/upload-check?path=${encodeURIComponent(currentPath())}&filename=${encodeURIComponent(filename)}`,
+      { headers: { "Accept": "application/json" } }
+    );
+    if (!res.ok) return false; // let init_upload surface the real error instead
+    const body = await res.json();
+    return !!body.exists;
+  }
+
+  // Two uploads can run at once (MAX_CONCURRENT_UPLOADS), but the conflict
+  // dialog is a single shared element -- this chain makes a second row's
+  // prompt wait for the first one's to be dismissed instead of clobbering it.
+  let conflictQueue = Promise.resolve();
+
+  function askConflict(filename) {
+    const run = () =>
+      new Promise((resolve) => {
+        conflictNameEl.textContent = filename;
+        let settled = false;
+        const finish = (choice) => {
+          if (settled) return;
+          settled = true;
+          conflictDialog.removeEventListener("close", onClose);
+          conflictReplaceBtn.removeEventListener("click", onReplace);
+          conflictRenameBtn.removeEventListener("click", onRename);
+          conflictCancelBtn.removeEventListener("click", onCancel);
+          conflictDialog.close();
+          resolve(choice);
+        };
+        const onClose = () => finish("cancel");
+        const onReplace = () => finish("replace");
+        const onRename = () => finish("rename");
+        const onCancel = () => finish("cancel");
+        conflictDialog.addEventListener("close", onClose);
+        conflictReplaceBtn.addEventListener("click", onReplace);
+        conflictRenameBtn.addEventListener("click", onRename);
+        conflictCancelBtn.addEventListener("click", onCancel);
+        conflictDialog.showModal();
+      });
+    const result = conflictQueue.then(run);
+    conflictQueue = result.catch(() => {});
+    return result;
+  }
 
   openButton.addEventListener("click", () => dialog.showModal());
 
@@ -73,6 +124,7 @@
     li.append(main, cancel);
     queueList.appendChild(li);
 
+    row.nameEl = name;
     row.statusEl = status;
     row.progressEl = progress;
     row.cancelEl = cancel;
@@ -93,16 +145,38 @@
 
   async function runUpload(row) {
     row.status = "uploading";
-    setStatus(row, "Starting…");
+    setStatus(row, "Checking…");
     try {
+      let overwrite = true;
+      if (await nameExists(row.file.name)) {
+        const choice = await askConflict(row.file.name);
+        if (row.cancelled) throw new Error("cancelled");
+        if (choice === "cancel") {
+          row.status = "cancelled";
+          setStatus(row, "Skipped");
+          row.cancelEl.disabled = true;
+          return;
+        }
+        overwrite = choice === "replace";
+      }
+
+      setStatus(row, "Starting…");
       const initRes = await fetch("/files/chunk-upload/init", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
-        body: JSON.stringify({ path: currentPath(), filename: row.file.name, size: row.file.size }),
+        body: JSON.stringify({
+          path: currentPath(),
+          filename: row.file.name,
+          size: row.file.size,
+          overwrite,
+        }),
       });
       const initBody = await initRes.json();
       if (!initRes.ok) throw new Error(initBody.error || "Could not start upload.");
       row.uploadId = initBody.upload_id;
+      if (initBody.final_name && initBody.final_name !== row.file.name) {
+        row.nameEl.textContent = initBody.final_name;
+      }
 
       const totalChunks = Math.max(1, Math.ceil(row.file.size / CHUNK_SIZE));
       for (let index = 0; index < totalChunks; index++) {

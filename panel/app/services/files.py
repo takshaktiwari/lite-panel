@@ -371,14 +371,18 @@ def delete(candidate) -> str:
     return name
 
 
-def _unique_name(parent: Path, original_name: str, *, tag: str = "copy") -> str:
+def _unique_name(parent: Path, original_name: str, *, tag: Optional[str] = "copy") -> str:
     """A name like "config-copy.php" that doesn't collide in ``parent``,
-    trying "-copy-2", "-copy-3", ... if it does."""
+    trying "-copy-2", "-copy-3", ... if it does. With ``tag=None``, skips
+    straight to the plain numeric form ("laravel-2.log") -- used when an
+    upload keeps both files instead of replacing, where "-copy" would be
+    misleading since the new file isn't a copy of the old one."""
     stem, suffix = Path(original_name).stem, Path(original_name).suffix
-    candidate = f"{stem}-{tag}{suffix}"
+    base = f"{stem}-{tag}" if tag else stem
+    candidate = f"{base}{suffix}"
     counter = 2
     while (parent / candidate).exists():
-        candidate = f"{stem}-{tag}-{counter}{suffix}"
+        candidate = f"{base}-{counter}{suffix}"
         counter += 1
     return candidate
 
@@ -723,7 +727,21 @@ def _sweep_expired_upload_sessions() -> None:
         _discard_upload_session(upload_id)
 
 
-def init_upload(parent_candidate, filename: str, total_size: int) -> _UploadSession:
+def upload_target_exists(parent_candidate, filename: str) -> bool:
+    """Whether an upload of ``filename`` into ``parent_candidate`` would land
+    on top of an existing file -- checked by the browser before the upload
+    starts, so it can ask the user to replace/keep both/cancel instead of
+    silently overwriting."""
+    filename = validate_filename(filename)
+    parent = resolve(parent_candidate)
+    if not parent.is_dir():
+        raise ValidationError("Upload target is not a directory.")
+    return (parent / filename).exists()
+
+
+def init_upload(
+    parent_candidate, filename: str, total_size: int, *, overwrite: bool = True
+) -> _UploadSession:
     # Called on every new upload, so this is also where abandoned sessions
     # (tab closed mid-upload with no explicit cancel) get cleaned up, without
     # needing a background thread.
@@ -736,6 +754,13 @@ def init_upload(parent_candidate, filename: str, total_size: int) -> _UploadSess
     parent = resolve(parent_candidate)
     if not parent.is_dir():
         raise ValidationError("Upload target is not a directory.")
+
+    # ``overwrite`` reflects a choice the user already made (or the caller's
+    # default): when they chose to keep both instead of replacing, pick a
+    # name that doesn't collide rather than clobbering the existing file.
+    final_name = filename
+    if not overwrite and (parent / filename).exists():
+        final_name = _unique_name(parent, filename, tag=None)
 
     free_bytes = shutil.disk_usage(parent).free
     if total_size > free_bytes - UPLOAD_FREE_SPACE_MARGIN_BYTES:
@@ -752,7 +777,7 @@ def init_upload(parent_candidate, filename: str, total_size: int) -> _UploadSess
     session = _UploadSession(
         id=upload_id,
         parent=parent,
-        final_name=filename,
+        final_name=final_name,
         part_path=part_path,
         total_size=total_size,
         owner=_owner_of(parent),

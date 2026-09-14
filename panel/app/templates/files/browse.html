@@ -243,6 +243,19 @@
   </div>
 </dialog>
 
+{# Shown by file-upload.js when an uploaded file's name collides with one
+   already here. Only one conflict is asked about at a time, even with
+   multiple files queued -- see the conflictQueue serialization there. #}
+<dialog id="upload-conflict-dialog" class="dialog">
+  <h2>File already exists</h2>
+  <p><strong id="upload-conflict-name"></strong> already exists in this folder.</p>
+  <div class="dialog-actions">
+    <button type="button" class="button" id="upload-conflict-cancel">Skip</button>
+    <button type="button" class="button" id="upload-conflict-rename">Keep both</button>
+    <button type="button" class="button primary" id="upload-conflict-replace">Replace</button>
+  </div>
+</dialog>
+
 <script src="/static/file-manager.js"></script>
 <script src="/static/file-upload.js"></script>
 {% endblock %}

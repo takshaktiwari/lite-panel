@@ -184,10 +184,28 @@ def download(
     )
 
 
+@router.get("/upload-check")
+def upload_check(
+    path: str,
+    filename: str,
+    session=Depends(require_session),
+):
+    """Whether ``filename`` already exists in ``path`` -- polled by the
+    upload dialog before it starts each file, so it can ask the user to
+    replace/keep both/cancel instead of silently overwriting."""
+    try:
+        exists = files_service.upload_target_exists(path, filename)
+    except ValidationError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+    return {"exists": exists}
+
+
 class _InitUploadRequest(BaseModel):
     path: str
     filename: str
     size: int
+    overwrite: bool = True
 
 
 @router.post("/chunk-upload/init", dependencies=[Depends(csrf_protect)])
@@ -196,11 +214,13 @@ def init_upload(
     session=Depends(require_session),
 ):
     try:
-        upload_session = files_service.init_upload(body.path, body.filename, body.size)
+        upload_session = files_service.init_upload(
+            body.path, body.filename, body.size, overwrite=body.overwrite
+        )
     except (ValidationError, OSError) as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
-    return {"upload_id": upload_session.id}
+    return {"upload_id": upload_session.id, "final_name": upload_session.final_name}
 
 
 @router.post("/chunk-upload/{upload_id}/chunk", dependencies=[Depends(csrf_protect)])
