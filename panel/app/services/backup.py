@@ -77,17 +77,31 @@ def backup_filename(site_name: str, include_files: bool = True, include_db: bool
 
 
 def parse_backup_scope(filename: str) -> str:
-    """Infer the backup scope (Full, Files, Database) from the archive name."""
-    parts = filename.replace(".tar.gz", "").split("_")
+    """Infer the backup scope (Full, Files, Database) from the archive name.
+
+    Archive format: {site_name}_{scope}_{YYYY-MM-DD}_{HHMM}.tar.gz
+    Since site_name may contain underscores (e.g. asiatrade_bee1_online),
+    the scope tag is reliably positioned at parts[-3].
+    """
+    base = filename.replace(".tar.gz", "")
+    parts = base.split("_")
     if len(parts) >= 3:
-        tag = parts[1].lower()
+        tag = parts[-3].lower()
         if tag == "full":
             return "Full (Files + DB)"
         if tag == "files":
             return "Files only"
         if tag == "db":
             return "Database only"
-    return "Full"
+
+    if "_db_" in filename:
+        return "Database only"
+    if "_files_" in filename:
+        return "Files only"
+    if "_full_" in filename:
+        return "Full (Files + DB)"
+
+    return "Full (Files + DB)"
 
 
 def list_backups(site_name: Optional[str] = None) -> List[dict]:

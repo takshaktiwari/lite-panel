@@ -140,6 +140,14 @@ def test_create_backup_db_only(test_site, monkeypatch, tmp_path):
         assert "db/test_db.sql" in names
 
 
+def test_parse_backup_scope_with_underscores():
+    # Site name containing multiple underscores like asiatrade_bee1_online
+    assert backup_service.parse_backup_scope("asiatrade_bee1_online_db_2026-09-15_0504.tar.gz") == "Database only"
+    assert backup_service.parse_backup_scope("asiatrade_bee1_online_files_2026-09-15_0504.tar.gz") == "Files only"
+    assert backup_service.parse_backup_scope("asiatrade_bee1_online_full_2026-09-15_0504.tar.gz") == "Full (Files + DB)"
+    assert backup_service.parse_backup_scope("mysite_db_2026-09-15_0504.tar.gz") == "Database only"
+
+
 def test_create_backup_rejects_empty():
     with pytest.raises(ValueError, match="neither files nor database"):
         backup_service.create_backup(
