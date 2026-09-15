@@ -320,5 +320,37 @@ def test_poll_and_run_schedules(db, test_site):
     payload = json.loads(job.payload)
     assert payload["site_id"] == test_site.id
     assert payload["schedule_id"] == sched.id
+    assert payload["keep_count"] == 7
+
+
+def test_prune_backups_rotation(test_site, monkeypatch, tmp_path):
+    monkeypatch.setattr(backup_service, "BACKUP_ROOT", tmp_path)
+    site_dir = tmp_path / test_site.name
+    site_dir.mkdir(parents=True, exist_ok=True)
+
+    import time
+    files = []
+    for i in range(4):
+        # Create archives with slight mtime differences
+        f = site_dir / f"{test_site.name}_db_2026-09-15_050{i}.tar.gz"
+        f.write_text("test")
+        files.append(f)
+        time.sleep(0.01)
+
+    assert len(backup_service.list_backups(test_site.name)) == 4
+
+    # Keep only the latest 2 DB backups
+    deleted = backup_service.prune_backups(test_site.name, keep_count=2, scope="db")
+    assert deleted == 2
+
+    remaining = backup_service.list_backups(test_site.name)
+    assert len(remaining) == 2
+    # The two newest (0503 and 0502) should remain
+    remaining_names = [b["name"] for b in remaining]
+    assert files[3].name in remaining_names
+    assert files[2].name in remaining_names
+    assert files[0].name not in remaining_names
+    assert files[1].name not in remaining_names
+
 
 

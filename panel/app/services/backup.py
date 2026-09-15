@@ -155,6 +155,55 @@ def delete_backup(site_name: str, filename: str) -> None:
     logger.info("Deleted backup %s", path)
 
 
+def prune_backups(site_name: str, keep_count: int, scope: Optional[str] = None, ctx=None) -> int:
+    """Retain only the newest *keep_count* backup archives for a site.
+
+    If *scope* is given (e.g. "db", "files", "full"), only backups of that scope
+    are counted towards the retention limit.
+    Deletes the oldest excess archives and returns the count of deleted archives.
+    """
+    def log(msg: str) -> None:
+        if ctx:
+            ctx.log(msg)
+        else:
+            logger.info(msg)
+
+    if keep_count <= 0:
+        return 0
+
+    all_backups = list_backups(site_name)
+    if scope:
+        scope_key = scope.lower()
+        if scope_key == "db":
+            target_scope = "Database only"
+        elif scope_key == "files":
+            target_scope = "Files only"
+        elif scope_key == "full":
+            target_scope = "Full (Files + DB)"
+        else:
+            target_scope = scope
+        matching = [b for b in all_backups if b["scope"] == target_scope]
+    else:
+        matching = all_backups
+
+    if len(matching) <= keep_count:
+        return 0
+
+    to_prune = matching[keep_count:]
+    deleted = 0
+    for b in to_prune:
+        try:
+            delete_backup(site_name, b["name"])
+            deleted += 1
+            log(f"Retention policy: deleted older backup {b['name']} (max allowed: {keep_count})")
+        except Exception as exc:
+            logger.warning("Failed to delete old backup %s during rotation: %s", b["name"], exc)
+
+    if deleted:
+        log(f"Retention cleanup complete: pruned {deleted} older backup(s) to match limit of {keep_count}.")
+    return deleted
+
+
 def backup_path(site_name: str, filename: str) -> Path:
     """Resolve and validate a backup path for download."""
     if "/" in filename or "\\" in filename or ".." in filename:
@@ -435,6 +484,7 @@ def poll_and_run_schedules(db: OrmSession) -> int:
                         "include_files": s.include_files,
                         "include_db": s.include_db,
                         "schedule_id": s.id,
+                        "keep_count": s.keep_count,
                     },
                 )
                 s.last_run_at = now

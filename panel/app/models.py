@@ -444,6 +444,9 @@ class BackupSchedule(TimestampMixin, Base):
     day_of_week: Mapped[int] = mapped_column(Integer, default=0, nullable=False)   # 0=Monday, 6=Sunday (for weekly)
     day_of_month: Mapped[int] = mapped_column(Integer, default=1, nullable=False)  # 1-31 (for monthly)
 
+    # Retention
+    keep_count: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
+
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 

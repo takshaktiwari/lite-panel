@@ -628,11 +628,23 @@ def create_site_backup(ctx) -> None:
     except Exception as exc:
         raise JobFailed(str(exc)) from exc
 
+    keep_count = ctx.payload.get("keep_count")
+
     if schedule_id:
         from app.models import BackupSchedule
         with session_scope() as db:
             schedule = db.get(BackupSchedule, schedule_id)
             if schedule:
                 schedule.last_run_at = utcnow()
+                if keep_count is None:
+                    keep_count = schedule.keep_count
                 db.commit()
+
+    if keep_count and keep_count > 0:
+        scope_tag = "full" if include_files and include_db else ("files" if include_files else "db")
+        try:
+            backup_service.prune_backups(site_name, keep_count=keep_count, scope=scope_tag, ctx=ctx)
+        except Exception as exc:
+            ctx.log(f"Warning: backup retention cleanup encountered an error: {exc}")
+
 

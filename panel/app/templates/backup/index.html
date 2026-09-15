@@ -175,10 +175,15 @@
           {% endfor %}
         </select>
       </div>
+
+      <div>
+        <label for="keep_count" style="font-weight:600;">Max Backups to Keep</label>
+        <input type="number" id="keep_count" name="keep_count" value="7" min="1" max="100" required style="width:100%;" title="Keep up to this many backups. Older backups will be automatically pruned.">
+      </div>
     </div>
 
     <p class="muted" style="font-size:12px;margin:12px 0 16px;">
-      The panel scheduler will automatically check and trigger this job at the designated time.
+      The panel scheduler will automatically check and trigger this job at the designated time. When the backup runs, older archives beyond the maximum count will be automatically deleted.
     </p>
 
     <button type="submit" class="button primary">
@@ -201,6 +206,7 @@
         <th>Site</th>
         <th>Components</th>
         <th>Schedule</th>
+        <th>Retention</th>
         <th>Next Run</th>
         <th>Last Run</th>
         <th>Status</th>
@@ -225,6 +231,9 @@
         </td>
         <td style="font-size:13px;">
           {{ s.description }}
+        </td>
+        <td style="font-size:12px;">
+          <span class="badge" title="Retain up to {{ s.keep_count }} backups of this type">Max {{ s.keep_count }}</span>
         </td>
         <td class="muted" style="font-size:12px;">
           {% if s.is_enabled %}

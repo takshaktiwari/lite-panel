@@ -46,6 +46,7 @@ def backup_index(
             "include_files": s.include_files,
             "include_db": s.include_db,
             "frequency": s.frequency,
+            "keep_count": s.keep_count,
             "description": backup_service.describe_schedule(s),
             "next_run": backup_service.get_next_run(s),
             "last_run_at": s.last_run_at,
@@ -121,6 +122,7 @@ def create_schedule(
     minute: int = Form(0),
     day_of_week: int = Form(0),
     day_of_month: int = Form(1),
+    keep_count: int = Form(7),
     session=Depends(require_session),
     db: OrmSession = Depends(get_session),
 ):
@@ -136,6 +138,7 @@ def create_schedule(
     minute = max(0, min(59, int(minute)))
     day_of_week = max(0, min(6, int(day_of_week)))
     day_of_month = max(1, min(31, int(day_of_month)))
+    keep_count = max(1, min(100, int(keep_count)))
 
     valid_frequencies = {"daily", "twice_daily", "weekly", "monthly"}
     if frequency not in valid_frequencies:
@@ -150,6 +153,7 @@ def create_schedule(
         minute=minute,
         day_of_week=day_of_week,
         day_of_month=day_of_month,
+        keep_count=keep_count,
         is_enabled=True,
     )
     db.add(schedule)
@@ -193,6 +197,7 @@ def run_schedule_now(
             "include_files": schedule.include_files,
             "include_db": schedule.include_db,
             "schedule_id": schedule.id,
+            "keep_count": schedule.keep_count,
         },
         user_id=session.user_id,
     )

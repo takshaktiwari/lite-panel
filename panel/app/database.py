@@ -71,6 +71,9 @@ _ADDITIVE_COLUMNS: dict = {
         ("progress_current", "INTEGER"),
         ("progress_total", "INTEGER"),
     ],
+    "backup_schedules": [
+        ("keep_count", "INTEGER DEFAULT 7"),
+    ],
 }
 
 
