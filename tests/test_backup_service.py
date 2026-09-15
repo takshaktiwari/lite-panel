@@ -174,6 +174,19 @@ def test_schedule_descriptions_and_next_run(test_site):
     assert next_daily.day == 16
     assert next_daily.hour == 2
 
+    # Daily schedule at 01:30 UTC (custom / 30m interval)
+    sched_half = BackupSchedule(
+        site_id=test_site.id,
+        frequency="daily",
+        hour=1,
+        minute=30,
+    )
+    assert backup_service.describe_schedule(sched_half) == "Daily at 01:30 UTC"
+    next_half = backup_service.get_next_run(sched_half, from_time=now)
+    assert next_half.day == 16
+    assert next_half.hour == 1
+    assert next_half.minute == 30
+
     # Twice daily at 02:00 and 14:00 UTC
     sched_twice = BackupSchedule(
         site_id=test_site.id,
@@ -253,7 +266,28 @@ def test_web_backup_endpoints(auth_client, db, test_site):
     assert sched is not None
     assert sched.frequency == "daily"
     assert sched.hour == 3
+    assert sched.minute == 0
     assert sched.is_enabled is True
+
+    # 2b. POST /backup/schedule/create with time="01:30" string input
+    token = _csrf(auth_client)
+    res_sched2 = auth_client.post(
+        "/backup/schedule/create",
+        data={
+            "csrf_token": token,
+            "site_id": test_site.id,
+            "include_files": "true",
+            "include_db": "false",
+            "frequency": "daily",
+            "time": "01:30",
+        },
+        follow_redirects=False,
+    )
+    assert res_sched2.status_code == 303
+    sched2 = db.query(BackupSchedule).filter_by(site_id=test_site.id, include_db=False).first()
+    assert sched2 is not None
+    assert sched2.hour == 1
+    assert sched2.minute == 30
 
     # 3. POST /backup/schedule/{id}/toggle
     token = _csrf(auth_client)

@@ -118,8 +118,9 @@ def create_schedule(
     include_files: bool = Form(False),
     include_db: bool = Form(False),
     frequency: str = Form("daily"),
-    hour: int = Form(2),
-    minute: int = Form(0),
+    time: Optional[str] = Form(None),
+    hour: Optional[int] = Form(None),
+    minute: Optional[int] = Form(None),
     day_of_week: int = Form(0),
     day_of_month: int = Form(1),
     keep_count: int = Form(7),
@@ -134,8 +135,31 @@ def create_schedule(
         include_files = True
         include_db = True
 
-    hour = max(0, min(23, int(hour)))
-    minute = max(0, min(59, int(minute)))
+    # Parse time string (e.g. "01:30", "14:45") if provided
+    raw_time = (time or "").strip()
+    parsed_hour = hour
+    parsed_minute = minute
+
+    if raw_time:
+        parts = raw_time.split(":")
+        if len(parts) >= 2:
+            try:
+                parsed_hour = int(parts[0])
+                parsed_minute = int(parts[1])
+            except ValueError:
+                pass
+        elif len(parts) == 1:
+            try:
+                parsed_hour = int(parts[0])
+                parsed_minute = 0
+            except ValueError:
+                pass
+
+    final_hour = 2 if parsed_hour is None else parsed_hour
+    final_minute = 0 if parsed_minute is None else parsed_minute
+
+    hour = max(0, min(23, int(final_hour)))
+    minute = max(0, min(59, int(final_minute)))
     day_of_week = max(0, min(6, int(day_of_week)))
     day_of_month = max(1, min(31, int(day_of_month)))
     keep_count = max(1, min(100, int(keep_count)))

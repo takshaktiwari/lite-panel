@@ -146,12 +146,15 @@
       </div>
 
       <div>
-        <label for="hour" style="font-weight:600;">Run Time (UTC)</label>
-        <select id="hour" name="hour" style="width:100%;">
+        <label for="sched_time" style="font-weight:600;">Run Time (UTC)</label>
+        <input type="time" id="sched_time" name="time" value="02:00" step="60" list="schedule-times" required style="width:100%;">
+        <datalist id="schedule-times">
           {% for h in range(24) %}
-          <option value="{{ h }}" {% if h == 2 %}selected{% endif %}>{{ "%02d:00 UTC"|format(h) }}</option>
+          <option value="{{ "%02d:00"|format(h) }}">{{ "%02d:00 UTC"|format(h) }}</option>
+          <option value="{{ "%02d:30"|format(h) }}">{{ "%02d:30 UTC"|format(h) }}</option>
           {% endfor %}
-        </select>
+        </datalist>
+        <span class="muted" style="font-size:11px;display:block;margin-top:2px;">Enter any time or select 30-min intervals (UTC).</span>
       </div>
 
       <div id="day_of_week_wrap" style="display:none;">
@@ -248,10 +251,12 @@
           <span class="badge" title="Retain up to {{ s.keep_count }} backups of this type">Max {{ s.keep_count }}</span>
         </td>
         <td class="muted" style="font-size:12px;">
-          {% if s.is_enabled %}
+          {% if not s.is_enabled %}
+            <span class="muted">Paused</span>
+          {% elif s.next_run %}
             {{ s.next_run.strftime('%Y-%m-%d %H:%M') }} UTC
           {% else %}
-            <span class="muted">Paused</span>
+            <span class="muted">—</span>
           {% endif %}
         </td>
         <td class="muted" style="font-size:12px;">

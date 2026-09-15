@@ -2,6 +2,7 @@
    Follows the viewer's colour scheme rather than imposing one. */
 
 :root {
+  color-scheme: light;
   --bg: #f6f7f9;
   --surface: #ffffff;
   --border: #e2e5ea;
@@ -19,6 +20,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --bg: #14161a;
     --surface: #1c1f24;
     --border: #2c3037;
@@ -503,7 +505,7 @@ dialog.dialog.wide { max-width: 520px; }
 
 label { display: block; font-size: 12.5px; margin-bottom: 3px; font-weight: 500; }
 
-input[type="text"], input[type="password"], input[type="number"], input[type="search"], select, textarea {
+input[type="text"], input[type="password"], input[type="number"], input[type="search"], input[type="time"], select, textarea {
   width: 100%;
   padding: 6px 9px;
   border: 1px solid var(--border);
