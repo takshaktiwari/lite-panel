@@ -118,6 +118,10 @@ def create_app() -> FastAPI:
     app.include_router(terminal.router)
     app.include_router(backup.router)
 
+    @app.get("/health", include_in_schema=False)
+    def health_check():
+        return {"status": "ok"}
+
     @app.exception_handler(NotAuthenticated)
     async def _needs_login(request: Request, _exc: NotAuthenticated):
         if request.headers.get("accept", "").startswith("application/json"):

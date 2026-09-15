@@ -15,6 +15,7 @@
   const isLive = logEl.getAttribute("data-live") === "true";
   const returnTo = logEl.getAttribute("data-return-to") || "";
   const returnNotice = logEl.getAttribute("data-notice") || "";
+  const jobKind = logEl.getAttribute("data-kind") || "";
   const badgeEl = document.getElementById("job-badge");
   const statusTextEl = document.getElementById("job-status-text");
   const pulseEl = document.getElementById("job-pulse");
@@ -86,6 +87,40 @@
     }
   }
 
+  function waitForRestartAndRedirect(targetUrl) {
+    if (statusTextEl) statusTextEl.textContent = "restarting…";
+    if (badgeEl) badgeEl.className = "badge running";
+    appendLines(["", "→ Lite-Panel service is restarting. Waiting for panel to be ready…"]);
+
+    // Give systemd a few seconds to terminate the old process and launch the new one
+    setTimeout(() => {
+      let attempts = 0;
+      const maxAttempts = 45; // Poll up to 45 seconds
+
+      const checkInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const res = await fetch("/health?t=" + Date.now(), { cache: "no-store" });
+          if (res.ok) {
+            clearInterval(checkInterval);
+            appendLines(["✓ Service restarted and ready! Redirecting…"]);
+            setTimeout(() => {
+              window.location.href = targetUrl;
+            }, 600);
+            return;
+          }
+        } catch (e) {
+          // Expected while service is restarting (gateway 502 / connection refused)
+        }
+
+        if (attempts >= maxAttempts) {
+          clearInterval(checkInterval);
+          window.location.href = targetUrl;
+        }
+      }, 1000);
+    }, 2800);
+  }
+
   // On success, hand the browser back to wherever the action was started
   // from (the job's own page stays put on failure so the error is visible).
   // A one-time notice tied to the job -- e.g. a generated password -- rides
@@ -96,6 +131,15 @@
       if (returnNotice) {
         url += (url.indexOf("?") === -1 ? "?" : "&") + "notice=" + encodeURIComponent(returnNotice);
       }
+
+      // If the job restarts the panel service (e.g. self update), wait for
+      // the new service process to be fully online before redirecting so the
+      // browser doesn't hit a 502 Bad Gateway while systemd is restarting it.
+      if (jobKind === "panel.update") {
+        waitForRestartAndRedirect(url);
+        return;
+      }
+
       window.location.href = url;
       return;
     }
