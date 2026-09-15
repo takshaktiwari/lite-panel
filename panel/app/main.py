@@ -36,6 +36,7 @@ from app.routers import (
     terminal,
 )
 from app.security import purge_expired_sessions
+from app.services.backup import start_backup_scheduler, stop_backup_scheduler
 from app.services.monitor import start_metrics_sampler, stop_metrics_sampler
 
 # Importing this registers every job handler with the worker.
@@ -74,9 +75,11 @@ async def lifespan(app: FastAPI):
 
     worker.start()
     start_metrics_sampler()
+    start_backup_scheduler()
     try:
         yield
     finally:
+        stop_backup_scheduler()
         stop_metrics_sampler()
         worker.stop()
         logger.info("stopped")

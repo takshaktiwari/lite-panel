@@ -3,58 +3,314 @@
 {% block title %}Backups · {{ app_name }}{% endblock %}
 
 {% block content %}
-<header class="page-head">
+<header class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;">
   <div>
     <h1>Backups</h1>
-    <p class="muted">Full site backups — files + database in one archive. Stored at <code>/var/backups/lite-panel/</code>.</p>
+    <p class="muted">High-compression site backups (gzip level 9). Bundles files and databases into a single archive.</p>
   </div>
+  {% if sites %}
+  <button type="button" class="button primary" data-toggle-target="create-backup-section"
+          data-toggle-label-show="+ New Backup or Schedule" data-toggle-label-hide="Cancel">
+    + New Backup or Schedule
+  </button>
+  {% endif %}
 </header>
 
 {% if not sites %}
-<div class="alert alert-notice">No sites yet. <a href="/sites/new">Create a site</a> first.</div>
+<div class="alert alert-notice">No sites configured yet. <a href="/sites/new">Create a site</a> first to start backing up.</div>
 {% else %}
 
-{# ---- Per-site backup sections ------------------------------------------ #}
-{% for site in sites %}
-{% set site_backups = backups_by_site.get(site.name, []) %}
-<section class="panel">
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-    <div>
-      <h2 style="margin:0;">{{ site.domain }}</h2>
-      <p class="muted" style="margin:2px 0 0;font-size:13px;">{{ site.name }} · {{ site_backups|length }} backup{{ 's' if site_backups|length != 1 }}</p>
-    </div>
-    <form method="post" action="/backup/{{ site.id }}/create" style="margin:0;">
-      {{ ui.csrf(session) }}
-      <button type="submit" class="button primary"
-              data-confirm="Create a full backup of {{ site.domain }}? This may take a few minutes for large sites.">
-        + New backup
-      </button>
-    </form>
+{# ---- 1. Create Backup or Schedule Panel --------------------------------- #}
+<section class="panel" id="create-backup-section" style="margin-bottom:24px;">
+  <h2 style="margin-top:0;">Create Backup or Schedule</h2>
+  <p class="muted" style="margin-top:-6px;font-size:13px;">
+    Select the target site and which components to include. You can trigger an immediate backup or set a recurring schedule.
+  </p>
+
+  {# Mode selector tabs #}
+  <div style="display:flex;gap:8px;margin:16px 0;background:var(--card-bg, #1a1e26);padding:4px;border-radius:6px;width:fit-content;border:1px solid var(--border,#2b3240);">
+    <button type="button" id="tab-btn-now" class="button primary" style="font-size:13px;padding:6px 16px;border:none;">
+      ⚡ Backup Now
+    </button>
+    <button type="button" id="tab-btn-schedule" class="button" style="font-size:13px;padding:6px 16px;border:none;background:transparent;">
+      📅 Automated Schedule
+    </button>
   </div>
 
-  {% if site_backups %}
+  {# --- Form A: Immediate Backup --- #}
+  <form id="form-backup-now" method="post" action="/backup/run">
+    {{ ui.csrf(session) }}
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:16px;">
+      <div>
+        <label for="now_site_id" style="font-weight:600;">Select Site</label>
+        <select id="now_site_id" name="site_id" required style="width:100%;">
+          {% for site in sites %}
+          <option value="{{ site.id }}">{{ site.domain }} ({{ site.name }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label style="font-weight:600;display:block;margin-bottom:8px;">Include in Archive</label>
+        <div style="display:flex;gap:20px;align-items:center;padding-top:4px;">
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;">
+            <input type="checkbox" name="include_files" value="true" checked>
+            <span><strong>Website Files</strong> <span class="muted" style="font-size:12px;">(root dir)</span></span>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;">
+            <input type="checkbox" name="include_db" value="true" checked>
+            <span><strong>Database</strong> <span class="muted" style="font-size:12px;">(linked MySQL DBs)</span></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <p class="muted" style="font-size:12px;margin:12px 0 16px;">
+      ℹ️ The backup runs in the background. Files and database are packed together and compressed with maximum gzip level 9.
+    </p>
+
+    <button type="submit" class="button primary" data-confirm="Start immediate backup? This runs in the background.">
+      🚀 Backup Now
+    </button>
+  </form>
+
+  {# --- Form B: Recurring Schedule --- #}
+  <form id="form-backup-schedule" method="post" action="/backup/schedule/create" style="display:none;">
+    {{ ui.csrf(session) }}
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:16px;">
+      <div>
+        <label for="sched_site_id" style="font-weight:600;">Select Site</label>
+        <select id="sched_site_id" name="site_id" required style="width:100%;">
+          {% for site in sites %}
+          <option value="{{ site.id }}">{{ site.domain }} ({{ site.name }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label style="font-weight:600;display:block;margin-bottom:8px;">Include in Archive</label>
+        <div style="display:flex;gap:16px;align-items:center;padding-top:4px;">
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;">
+            <input type="checkbox" name="include_files" value="true" checked>
+            <span>Files</span>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;">
+            <input type="checkbox" name="include_db" value="true" checked>
+            <span>Database</span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label for="frequency" style="font-weight:600;">Frequency</label>
+        <select id="frequency" name="frequency" style="width:100%;">
+          <option value="daily">Daily</option>
+          <option value="twice_daily">Twice Daily (every 12h)</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="hour" style="font-weight:600;">Run Time (UTC)</label>
+        <select id="hour" name="hour" style="width:100%;">
+          {% for h in range(24) %}
+          <option value="{{ h }}" {% if h == 2 %}selected{% endif %}>{{ "%02d:00 UTC"|format(h) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div id="day_of_week_wrap" style="display:none;">
+        <label for="day_of_week" style="font-weight:600;">Day of Week</label>
+        <select id="day_of_week" name="day_of_week" style="width:100%;">
+          <option value="0">Monday</option>
+          <option value="1">Tuesday</option>
+          <option value="2">Wednesday</option>
+          <option value="3">Thursday</option>
+          <option value="4">Friday</option>
+          <option value="5">Saturday</option>
+          <option value="6" selected>Sunday</option>
+        </select>
+      </div>
+
+      <div id="day_of_month_wrap" style="display:none;">
+        <label for="day_of_month" style="font-weight:600;">Day of Month</label>
+        <select id="day_of_month" name="day_of_month" style="width:100%;">
+          {% for d in range(1, 29) %}
+          <option value="{{ d }}">Day {{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <p class="muted" style="font-size:12px;margin:12px 0 16px;">
+      The panel scheduler will automatically check and trigger this job at the designated time.
+    </p>
+
+    <button type="submit" class="button primary">
+      📅 Save Schedule
+    </button>
+  </form>
+</section>
+
+{# ---- 2. Scheduled Backups Table ----------------------------------------- #}
+<section class="panel" style="margin-bottom:24px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h2 style="margin:0;">Active Schedules</h2>
+    <span class="muted" style="font-size:13px;">{{ schedules|length }} configured</span>
+  </div>
+
+  {% if schedules %}
   <table class="table">
     <thead>
       <tr>
-        <th>Filename</th>
+        <th>Site</th>
+        <th>Components</th>
+        <th>Schedule</th>
+        <th>Next Run</th>
+        <th>Last Run</th>
+        <th>Status</th>
+        <th style="text-align:right;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in schedules %}
+      <tr>
+        <td>
+          <strong>{{ s.site.domain if s.site else 'Site #' ~ s.site_id }}</strong>
+          <div class="muted" style="font-size:11px;">{{ s.site.name if s.site }}</div>
+        </td>
+        <td>
+          {% if s.include_files and s.include_db %}
+            {{ ui.badge("Files + DB", "ok") }}
+          {% elif s.include_files %}
+            {{ ui.badge("Files only", "info") }}
+          {% elif s.include_db %}
+            {{ ui.badge("DB only", "info") }}
+          {% endif %}
+        </td>
+        <td style="font-size:13px;">
+          {{ s.description }}
+        </td>
+        <td class="muted" style="font-size:12px;">
+          {% if s.is_enabled %}
+            {{ s.next_run.strftime('%Y-%m-%d %H:%M') }} UTC
+          {% else %}
+            <span class="muted">Paused</span>
+          {% endif %}
+        </td>
+        <td class="muted" style="font-size:12px;">
+          {% if s.last_run_at %}
+            {{ s.last_run_at.strftime('%Y-%m-%d %H:%M') }} UTC
+          {% else %}
+            <span class="muted">Never</span>
+          {% endif %}
+        </td>
+        <td>
+          <span class="dot {{ 'ok' if s.is_enabled else 'off' }}"></span>
+          <span style="font-size:12px;">{{ 'active' if s.is_enabled else 'paused' }}</span>
+        </td>
+        <td style="text-align:right;white-space:nowrap;">
+          {# Run now #}
+          <form method="post" action="/backup/schedule/{{ s.id }}/run" style="display:inline;">
+            {{ ui.csrf(session) }}
+            <button type="submit" class="button" style="font-size:11px;padding:2px 8px;" title="Trigger this backup schedule now">
+              ▶ Run Now
+            </button>
+          </form>
+
+          {# Toggle pause/resume #}
+          <form method="post" action="/backup/schedule/{{ s.id }}/toggle" style="display:inline;margin-left:4px;">
+            {{ ui.csrf(session) }}
+            <button type="submit" class="button" style="font-size:11px;padding:2px 8px;">
+              {{ '⏸ Pause' if s.is_enabled else '▶ Enable' }}
+            </button>
+          </form>
+
+          {# Delete #}
+          <form method="post" action="/backup/schedule/{{ s.id }}/delete" style="display:inline;margin-left:4px;">
+            {{ ui.csrf(session) }}
+            <button type="submit" class="button" style="font-size:11px;padding:2px 8px;color:var(--danger);"
+                    data-confirm="Delete this backup schedule for {{ s.site.domain if s.site }}?">
+              🗑
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted empty">No automated backup schedules configured yet. Use the form above to add one.</p>
+  {% endif %}
+</section>
+
+{# ---- 3. Backup Archives Listing (Filterable / Sitewise) ------------------ #}
+<section class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+    <div>
+      <h2 style="margin:0;">Backup Archives</h2>
+      <p class="muted" style="margin:2px 0 0;font-size:13px;">
+        High-compression single archives stored in <code>/var/backups/lite-panel/</code>.
+      </p>
+    </div>
+
+    {# Site Filter Selector #}
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label for="archive_site_filter" class="muted" style="font-size:12px;margin:0;">Filter site:</label>
+      <select id="archive_site_filter" style="font-size:12px;padding:4px 8px;" onchange="location.href = this.value ? '/backup?site=' + encodeURIComponent(this.value) : '/backup';">
+        <option value="" {% if not selected_site %}selected{% endif %}>All Sites ({{ all_backups|length }})</option>
+        {% for site in sites %}
+        {% set count = backups_by_site.get(site.name, [])|length %}
+        <option value="{{ site.name }}" {% if selected_site == site.name %}selected{% endif %}>
+          {{ site.domain }} ({{ count }})
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  {% if filtered_backups %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Site</th>
+        <th>Archive Filename</th>
+        <th>Contents</th>
         <th>Size</th>
         <th>Created</th>
         <th style="text-align:right;">Actions</th>
       </tr>
     </thead>
     <tbody>
-      {% for b in site_backups %}
+      {% for b in filtered_backups %}
       <tr>
-        <td><code style="font-size:12px;">{{ b.name }}</code></td>
-        <td class="muted">{{ b.size_mb }} MB</td>
-        <td class="muted">{{ b.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+        <td>
+          <strong>{{ b.site }}</strong>
+        </td>
+        <td>
+          <code style="font-size:12px;">{{ b.name }}</code>
+        </td>
+        <td>
+          {% if 'Full' in b.scope %}
+            {{ ui.badge("Files + DB", "ok") }}
+          {% elif 'Files' in b.scope %}
+            {{ ui.badge("Files only", "info") }}
+          {% else %}
+            {{ ui.badge("DB only", "info") }}
+          {% endif %}
+        </td>
+        <td class="muted" style="font-size:12px;font-weight:600;">{{ b.size_mb }} MB</td>
+        <td class="muted" style="font-size:12px;">{{ b.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</td>
         <td style="text-align:right;white-space:nowrap;">
           <a class="button" href="/backup/download/{{ b.site }}/{{ b.name }}"
              style="font-size:12px;padding:3px 10px;">↓ Download</a>
-          <form method="post" action="/backup/delete/{{ b.site }}/{{ b.name }}" style="display:inline;">
+          <form method="post" action="/backup/delete/{{ b.site }}/{{ b.name }}" style="display:inline;margin-left:4px;">
             {{ ui.csrf(session) }}
             <button class="button" type="submit" style="font-size:12px;padding:3px 10px;color:var(--danger);"
-                    data-confirm="Delete backup {{ b.name }}? This cannot be undone.">
+                    data-confirm="Delete backup archive {{ b.name }}? This cannot be undone.">
               Delete
             </button>
           </form>
@@ -64,10 +320,58 @@
     </tbody>
   </table>
   {% else %}
-  <p class="muted empty">No backups yet for this site.</p>
+  <p class="muted empty">
+    {% if selected_site %}
+      No backups found for site '{{ selected_site }}'. <a href="/backup">View all sites</a>.
+    {% else %}
+      No backups generated yet. Create a backup above or configure a recurring schedule.
+    {% endif %}
+  </p>
   {% endif %}
 </section>
-{% endfor %}
 
 {% endif %}
+
+{# Interactive script for tab switching and dynamic frequency fields #}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const tabNow = document.getElementById("tab-btn-now");
+  const tabSchedule = document.getElementById("tab-btn-schedule");
+  const formNow = document.getElementById("form-backup-now");
+  const formSchedule = document.getElementById("form-backup-schedule");
+  const freqSelect = document.getElementById("frequency");
+  const dowWrap = document.getElementById("day_of_week_wrap");
+  const domWrap = document.getElementById("day_of_month_wrap");
+
+  if (tabNow && tabSchedule && formNow && formSchedule) {
+    tabNow.addEventListener("click", function() {
+      tabNow.classList.add("primary");
+      tabNow.style.background = "";
+      tabSchedule.classList.remove("primary");
+      tabSchedule.style.background = "transparent";
+      formNow.style.display = "block";
+      formSchedule.style.display = "none";
+    });
+
+    tabSchedule.addEventListener("click", function() {
+      tabSchedule.classList.add("primary");
+      tabSchedule.style.background = "";
+      tabNow.classList.remove("primary");
+      tabNow.style.background = "transparent";
+      formSchedule.style.display = "block";
+      formNow.style.display = "none";
+    });
+  }
+
+  if (freqSelect && dowWrap && domWrap) {
+    function updateFrequencyFields() {
+      const val = freqSelect.value;
+      dowWrap.style.display = (val === "weekly") ? "block" : "none";
+      domWrap.style.display = (val === "monthly") ? "block" : "none";
+    }
+    freqSelect.addEventListener("change", updateFrequencyFields);
+    updateFrequencyFields();
+  }
+});
+</script>
 {% endblock %}

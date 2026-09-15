@@ -9,6 +9,7 @@ import tempfile
 
 _TMPDIR = tempfile.mkdtemp(prefix="lite-panel-tests-")
 os.environ.setdefault("LITE_PANEL_DATABASE_URL", f"sqlite:///{_TMPDIR}/test.db")
+os.environ.setdefault("LITE_PANEL_BACKUP_DIR", f"{_TMPDIR}/backups")
 os.environ.setdefault("LITE_PANEL_SECRET_KEY", "test-secret-key")
 os.environ.setdefault("LITE_PANEL_DEV_MODE", "true")
 

@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     state_dir: Path = Path("/var/lib/lite-panel")
     config_dir: Path = Path("/etc/lite-panel")
     log_dir: Path = Path("/var/log/lite-panel")
+    backup_dir: Path = Path("/var/backups/lite-panel")
 
     # Root under which site directories live -- /var/www/<site-name>, the
     # layout operators coming from cPanel/Plesk/traditional LAMP boxes expect.

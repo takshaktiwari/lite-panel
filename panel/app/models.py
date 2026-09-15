@@ -236,6 +236,9 @@ class Site(TimestampMixin, Base):
     ssh_keys: Mapped[List["SshKey"]] = relationship(
         back_populates="site", cascade="all, delete-orphan"
     )
+    backup_schedules: Mapped[List["BackupSchedule"]] = relationship(
+        back_populates="site", cascade="all, delete-orphan"
+    )
 
 
 class SiteAlias(Base):
@@ -413,5 +416,38 @@ class SshKey(TimestampMixin, Base):
     key_type: Mapped[str] = mapped_column(String(32), nullable=False)
 
     site: Mapped[Optional[Site]] = relationship(back_populates="ssh_keys")
+
+
+# --------------------------------------------------------------------------
+# Backup Schedules
+# --------------------------------------------------------------------------
+
+
+class BackupSchedule(TimestampMixin, Base):
+    """A recurring schedule for backing up a site."""
+
+    __tablename__ = "backup_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    site_id: Mapped[int] = mapped_column(
+        ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    include_files: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    include_db: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Frequency: "daily", "twice_daily", "weekly", "monthly"
+    frequency: Mapped[str] = mapped_column(String(32), default="daily", nullable=False)
+
+    # Time configuration (stored as UTC)
+    hour: Mapped[int] = mapped_column(Integer, default=2, nullable=False)          # 0-23
+    minute: Mapped[int] = mapped_column(Integer, default=0, nullable=False)        # 0-59
+    day_of_week: Mapped[int] = mapped_column(Integer, default=0, nullable=False)   # 0=Monday, 6=Sunday (for weekly)
+    day_of_month: Mapped[int] = mapped_column(Integer, default=1, nullable=False)  # 1-31 (for monthly)
+
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    site: Mapped[Site] = relationship(back_populates="backup_schedules")
+
 
 

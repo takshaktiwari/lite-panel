@@ -599,6 +599,9 @@ def update_panel(ctx) -> None:
 @register("backup.create")
 def create_site_backup(ctx) -> None:
     site_id = ctx.payload["site_id"]
+    include_files = ctx.payload.get("include_files", True)
+    include_db = ctx.payload.get("include_db", True)
+    schedule_id = ctx.payload.get("schedule_id")
 
     with session_scope() as db:
         site = db.get(Site, site_id)
@@ -614,6 +617,22 @@ def create_site_backup(ctx) -> None:
         db_names = [r.db_name for r in db_records if r.db_name]
 
     try:
-        backup_service.create_backup(site_name, root_dir, db_names, ctx=ctx)
+        backup_service.create_backup(
+            site_name=site_name,
+            root_dir=root_dir,
+            db_names=db_names,
+            include_files=include_files,
+            include_db=include_db,
+            ctx=ctx,
+        )
     except Exception as exc:
         raise JobFailed(str(exc)) from exc
+
+    if schedule_id:
+        from app.models import BackupSchedule
+        with session_scope() as db:
+            schedule = db.get(BackupSchedule, schedule_id)
+            if schedule:
+                schedule.last_run_at = utcnow()
+                db.commit()
+
