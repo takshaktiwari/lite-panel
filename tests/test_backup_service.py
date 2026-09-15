@@ -387,4 +387,42 @@ def test_prune_backups_rotation(test_site, monkeypatch, tmp_path):
     assert files[1].name not in remaining_names
 
 
+def test_create_site_backup_task_updates_schedule(test_site, db, monkeypatch, tmp_path):
+    monkeypatch.setattr(backup_service, "BACKUP_ROOT", tmp_path)
+    sched = BackupSchedule(
+        site_id=test_site.id,
+        frequency="daily",
+        hour=2,
+        minute=0,
+        keep_count=5,
+        is_enabled=True,
+    )
+    db.add(sched)
+    db.commit()
+    sched_id = sched.id
+
+    from app.tasks import create_site_backup
+
+    class DummyCtx:
+        def __init__(self):
+            self.payload = {
+                "site_id": test_site.id,
+                "include_files": True,
+                "include_db": False,
+                "schedule_id": sched_id,
+                "keep_count": 5,
+            }
+            self.logs = []
+
+        def log(self, msg):
+            self.logs.append(msg)
+
+    ctx = DummyCtx()
+    create_site_backup(ctx)
+
+    db.refresh(sched)
+    assert sched.last_run_at is not None
+
+
+
 

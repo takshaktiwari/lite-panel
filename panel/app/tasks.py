@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from app.database import session_scope
 from app.jobs import JobFailed, register
-from app.models import CronJob, FtpAccount, InstalledProvider, Site
+from app.models import BackupSchedule, CronJob, FtpAccount, InstalledProvider, Site, utcnow
 from app.providers import get_provider
 from app.services import cron as cron_service
 from app.services import databases as db_service
@@ -631,7 +631,6 @@ def create_site_backup(ctx) -> None:
     keep_count = ctx.payload.get("keep_count")
 
     if schedule_id:
-        from app.models import BackupSchedule
         with session_scope() as db:
             schedule = db.get(BackupSchedule, schedule_id)
             if schedule:
