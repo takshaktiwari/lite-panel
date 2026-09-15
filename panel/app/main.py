@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
@@ -121,6 +121,10 @@ def create_app() -> FastAPI:
     @app.get("/health", include_in_schema=False)
     def health_check():
         return {"status": "ok"}
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return FileResponse(settings.static_dir / "favicon.svg", media_type="image/svg+xml")
 
     @app.exception_handler(NotAuthenticated)
     async def _needs_login(request: Request, _exc: NotAuthenticated):

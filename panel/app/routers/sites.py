@@ -16,8 +16,9 @@ from sqlalchemy.orm import Session as OrmSession, selectinload
 from app.database import get_session
 from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
-from app.models import AuditLog, FtpAccount, Site, SiteDatabase, SshKey
+from app.models import AuditLog, BackupSchedule, CronJob, FtpAccount, Site, SiteDatabase, SshKey
 from app.providers import get_provider
+from app.services import backup as backup_service
 from app.services import databases as db_service
 from app.services import dns_check as dns_check_service
 from app.services import files as files_service
@@ -153,6 +154,31 @@ def site_detail(
         sizes = db_service.size_map()
         existing_users.update(db_service.list_database_users())
 
+    site_cron_jobs = db.scalars(
+        select(CronJob).where(CronJob.site_id == site.id).order_by(CronJob.created_at.desc())
+    ).all()
+
+    schedules_raw = db.scalars(
+        select(BackupSchedule)
+        .where(BackupSchedule.site_id == site.id)
+        .order_by(BackupSchedule.created_at.desc())
+    ).all()
+    site_schedules = []
+    for s in schedules_raw:
+        site_schedules.append({
+            "id": s.id,
+            "include_files": s.include_files,
+            "include_db": s.include_db,
+            "frequency": s.frequency,
+            "keep_count": s.keep_count,
+            "description": backup_service.describe_schedule(s),
+            "next_run": backup_service.get_next_run(s),
+            "last_run_at": s.last_run_at,
+            "is_enabled": s.is_enabled,
+        })
+
+    site_backups = backup_service.list_backups(site=site.name)
+
     return render(
         request,
         "sites/detail.html",
@@ -165,6 +191,9 @@ def site_detail(
         existing_users=sorted(existing_users),
         ftp_account=db.scalar(select(FtpAccount).where(FtpAccount.site_id == site.id)),
         ssh_keys=db.scalars(select(SshKey).where(SshKey.site_id == site.id)).all(),
+        cron_jobs=site_cron_jobs,
+        backup_schedules=site_schedules,
+        backups=site_backups,
         certbot_ready=certbot.is_installed(),
         has_certificate=certbot.has_certificate(site.domain) if certbot.is_installed() else False,
         cert_expiry=certbot.cert_expiry(site.domain) if certbot.is_installed() and site.ssl_enabled else None,

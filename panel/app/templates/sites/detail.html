@@ -102,6 +102,147 @@
 </section>
 
 <section class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+    <h2 style="margin:0;">Backups</h2>
+    <a class="button button-sm" href="/backup?site={{ site.name }}">Manage in Backup →</a>
+  </div>
+
+  {# Scheduled Backups for this site #}
+  <div style="margin-bottom:14px;">
+    <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 6px;font-weight:600;">Automated Schedules</h3>
+    {% if backup_schedules %}
+    <table class="table" style="margin-bottom:8px;">
+      <thead>
+        <tr>
+          <th>Components</th>
+          <th>Frequency</th>
+          <th>Retention</th>
+          <th>Next Run</th>
+          <th>Last Run</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in backup_schedules %}
+        <tr>
+          <td>
+            {% if s.include_files and s.include_db %}
+              {{ ui.badge("Files + DB", "ok") }}
+            {% elif s.include_files %}
+              {{ ui.badge("Files only", "info") }}
+            {% elif s.include_db %}
+              {{ ui.badge("DB only", "info") }}
+            {% endif %}
+          </td>
+          <td style="font-size:12.5px;">{{ s.description }}</td>
+          <td style="font-size:12px;"><span class="badge">Max {{ s.keep_count }}</span></td>
+          <td class="muted" style="font-size:12px;">
+            {% if s.is_enabled %}
+              {{ s.next_run.strftime('%Y-%m-%d %H:%M') }} UTC
+            {% else %}
+              <span class="muted">Paused</span>
+            {% endif %}
+          </td>
+          <td class="muted" style="font-size:12px;">
+            {% if s.last_run_at %}
+              {{ s.last_run_at.strftime('%Y-%m-%d %H:%M') }} UTC
+            {% else %}
+              <span class="muted">Never</span>
+            {% endif %}
+          </td>
+          <td>
+            {{ ui.badge("Active", "ok") if s.is_enabled else ui.badge("Paused") }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted" style="font-size:13px;margin:0 0 10px;">No automated backup schedules configured for this site.</p>
+    {% endif %}
+  </div>
+
+  {# Backup Archives for this site #}
+  <div>
+    <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 6px;font-weight:600;">Recent Archives ({{ backups|length }})</h3>
+    {% if backups %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Archive</th>
+          <th>Contents</th>
+          <th>Size</th>
+          <th>Created</th>
+          <th style="text-align:right;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in backups[:5] %}
+        <tr>
+          <td><code style="font-size:12px;">{{ b.name }}</code></td>
+          <td>
+            {% if 'Full' in b.scope %}
+              {{ ui.badge("Files + DB", "ok") }}
+            {% elif 'Files' in b.scope %}
+              {{ ui.badge("Files only", "info") }}
+            {% else %}
+              {{ ui.badge("DB only", "info") }}
+            {% endif %}
+          </td>
+          <td class="muted" style="font-size:12px;font-weight:600;">{{ b.size_mb }} MB</td>
+          <td class="muted" style="font-size:12px;">{{ b.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+          <td style="text-align:right;">
+            <a class="button button-sm" href="/backup/download/{{ b.site }}/{{ b.name }}">↓ Download</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if backups|length > 5 %}
+    <p style="margin:8px 0 0;font-size:12px;"><a href="/backup?site={{ site.name }}">View all {{ backups|length }} archives →</a></p>
+    {% endif %}
+    {% else %}
+    <p class="muted" style="font-size:13px;margin:0;">No backup archives created yet. <a href="/backup?site={{ site.name }}">Create a backup</a>.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+    <h2 style="margin:0;">Cron Jobs</h2>
+    <a class="button button-sm" href="/cron">Manage in Cron →</a>
+  </div>
+  {% if cron_jobs %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Schedule</th>
+        <th>Command</th>
+        <th>Description</th>
+        <th>Status</th>
+        <th style="text-align:right;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in cron_jobs %}
+      <tr>
+        <td><code>{{ job.schedule_display }}</code></td>
+        <td style="max-width:280px;overflow-wrap:anywhere;"><code style="font-size:11.5px;">{{ job.command }}</code></td>
+        <td class="muted" style="font-size:12.5px;">{{ job.description or '—' }}</td>
+        <td>{{ ui.badge("Active", "ok") if job.is_enabled else ui.badge("Disabled") }}</td>
+        <td style="text-align:right;">
+          <a class="button button-sm" href="/cron/{{ job.id }}/edit">Edit</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted" style="margin:0;">No cron jobs scheduled for this site. <a href="/cron">Add a cron job</a>.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
   <h2>FTP</h2>
   {% if ftp_account %}
   <p>FTP user <code>{{ ftp_account.username }}</code> is enabled. Manage it from the <a href="/ftp">FTP page</a>.</p>
