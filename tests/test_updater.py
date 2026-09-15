@@ -40,7 +40,8 @@ def test_check_for_updates_cached():
         }
     ]
 
-    with patch("app.services.version.fetch_github_releases", return_value=fake_releases) as mock_fetch:
+    with patch("app.services.version.get_current_version", return_value="1.0.0"), \
+         patch("app.services.version.fetch_github_releases", return_value=fake_releases) as mock_fetch:
         info1 = check_for_updates()
         assert info1.latest_version == "1.0.5"
         assert info1.update_available is True
@@ -59,11 +60,12 @@ def test_check_for_updates_cached():
 
 
 def test_check_for_updates_network_failure():
-    with patch("app.services.version.fetch_github_releases", side_effect=RuntimeError("connection refused")):
+    with patch("app.services.version.get_current_version", return_value="1.0.0"), \
+         patch("app.services.version.fetch_github_releases", side_effect=RuntimeError("connection refused")):
         info = check_for_updates(force=True)
         assert info.error == "connection refused"
         assert info.update_available is False
-        assert info.latest_version == version_service.__version__
+        assert info.latest_version == "1.0.0"
 
 
 def test_panel_update_task_handler(tmp_path):
@@ -93,7 +95,7 @@ def test_panel_update_task_handler(tmp_path):
 
         # Verified that check ran git fetch, checkout, and pip install
         calls = [call[0][0] for call in ctx.check.call_args_list]
-        assert ["git", "fetch", "--tags", "origin"] in calls
+        assert ["git", "fetch", "--tags", "--force", "origin"] in calls
         assert ["git", "checkout", "-f", "1.0.0"] in calls
         assert ["git", "reset", "--hard", "1.0.0"] in calls
         assert [str(venv_bin / "pip"), "install", "--quiet", "-r", str(panel_dir / "requirements.txt")] in calls

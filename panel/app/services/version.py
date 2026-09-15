@@ -92,23 +92,41 @@ def get_git_commit(cwd: Optional[str] = None) -> str:
 
 
 def get_current_version(cwd: Optional[str] = None) -> str:
-    """Determine the running version from the checked-out git tag, falling back to
-    the __version__ literal when git is unavailable (e.g. not a git checkout).
+    """Determine the running version from git tags reachable from HEAD,
+    falling back to git describe or __version__.
 
-    Deriving from the tag avoids the version string drifting out of sync with what
-    was actually released, which happens if __version__ isn't bumped for a tag.
+    Using semver comparison on reachable tags avoids git describe returning an older
+    tag alphabetically when multiple tags point to the same commit (e.g. 1.2.26 vs 1.2.27).
     """
     if cwd is None:
         cwd = _install_dir_cwd()
 
     try:
+        # 1. Tags pointing directly at current HEAD
+        res_points = run(["git", "tag", "--points-at", "HEAD"], cwd=cwd, check=False, timeout=5)
+        if res_points.ok and res_points.stdout.strip():
+            tags = [t.strip() for t in res_points.stdout.splitlines() if t.strip()]
+            valid = [t for t in tags if _parse_version_tuple(t) != (0,)]
+            if valid:
+                return max(valid, key=_parse_version_tuple)
+
+        # 2. Tags reachable (merged) into current HEAD
+        res_merged = run(["git", "tag", "--merged", "HEAD"], cwd=cwd, check=False, timeout=5)
+        if res_merged.ok and res_merged.stdout.strip():
+            tags = [t.strip() for t in res_merged.stdout.splitlines() if t.strip()]
+            valid = [t for t in tags if _parse_version_tuple(t) != (0,)]
+            if valid:
+                return max(valid, key=_parse_version_tuple)
+
+        # 3. Fallback to git describe
         result = run(["git", "describe", "--tags", "--abbrev=0"], cwd=cwd, check=False, timeout=5)
         if result.ok:
             tag = result.stdout.strip()
             if tag and _parse_version_tuple(tag) != (0,):
                 return tag
     except Exception as exc:  # noqa: BLE001
-        logger.debug("could not get nearest git tag: %s", exc)
+        logger.debug("could not determine git version: %s", exc)
+
     return __version__
 
 

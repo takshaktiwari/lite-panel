@@ -545,7 +545,7 @@ def update_panel(ctx) -> None:
     ctx.log(f"Fetching updates at {install_dir}...")
 
     # 1. Fetch tags and branches
-    ctx.check(["git", "fetch", "--tags", "origin"], cwd=install_dir)
+    ctx.check(["git", "fetch", "--tags", "--force", "origin"], cwd=install_dir)
 
 
 
