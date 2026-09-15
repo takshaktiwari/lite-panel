@@ -12,28 +12,96 @@
 <div class="shell">
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-mark">◆</span>
-      <span class="brand-name">{{ app_name }}</span>
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2" fill="currentColor" fill-opacity="0.25"/>
+          <polyline points="2 17 12 22 22 17"/>
+          <polyline points="2 12 12 17 22 12"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <span class="brand-name">{{ app_name }}</span>
+        {% if update_info and update_info.current_version %}
+        <span class="brand-tag">v{{ update_info.current_version }}</span>
+        {% endif %}
+      </div>
     </div>
 
     <nav>
-      <a href="/" class="{{ 'active' if request.url.path == '/' }}">Dashboard</a>
-      <a href="/sites" class="{{ 'active' if request.url.path.startswith('/sites') }}">Sites</a>
-      <a href="/databases" class="{{ 'active' if request.url.path.startswith('/databases') }}">Databases</a>
-      <a href="/ftp" class="{{ 'active' if request.url.path.startswith('/ftp') }}">FTP</a>
-      <a href="/ssh" class="{{ 'active' if request.url.path.startswith('/ssh') }}">SSH</a>
-      <a href="/files" class="{{ 'active' if request.url.path.startswith('/files') }}">Files</a>
-      <a href="/stack" class="{{ 'active' if request.url.path.startswith('/stack') }}">Stack</a>
-      <a href="/config" class="{{ 'active' if request.url.path.startswith('/config') }}">Config</a>
-      <a href="/firewall" class="{{ 'active' if request.url.path.startswith('/firewall') }}">Firewall</a>
-      <a href="/cron" class="{{ 'active' if request.url.path.startswith('/cron') }}">Cron</a>
-      <a href="/backup" class="{{ 'active' if request.url.path.startswith('/backup') }}">Backup</a>
-      <a href="/jobs" class="{{ 'active' if request.url.path.startswith('/jobs') }}">Jobs</a>
-      <a href="/terminal" class="{{ 'active' if request.url.path.startswith('/terminal') }}">Terminal</a>
-      <a href="/logs" class="{{ 'active' if request.url.path.startswith('/logs') }}">Logs</a>
-      <a href="/monitor" class="{{ 'active' if request.url.path.startswith('/monitor') }}">Monitor</a>
+      <div class="nav-group-title">Overview</div>
+      <a href="/" class="{{ 'active' if request.url.path == '/' }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+        <span>Dashboard</span>
+      </a>
+
+      <div class="nav-group-title">Manage</div>
+      <a href="/sites" class="{{ 'active' if request.url.path.startswith('/sites') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+        <span>Sites</span>
+      </a>
+      <a href="/databases" class="{{ 'active' if request.url.path.startswith('/databases') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>
+        <span>Databases</span>
+      </a>
+      <a href="/files" class="{{ 'active' if request.url.path.startswith('/files') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+        <span>Files</span>
+      </a>
+      <a href="/backup" class="{{ 'active' if request.url.path.startswith('/backup') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Backup</span>
+      </a>
+
+      <div class="nav-group-title">Access</div>
+      <a href="/terminal" class="{{ 'active' if request.url.path.startswith('/terminal') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span>Terminal</span>
+      </a>
+      <a href="/ftp" class="{{ 'active' if request.url.path.startswith('/ftp') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m8 17 4 4 4-4"/></svg>
+        <span>FTP</span>
+      </a>
+      <a href="/ssh" class="{{ 'active' if request.url.path.startswith('/ssh') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-2 2m-1.5 1.5L14 9l-2-2-4 4 2 2-4 4 2 2-3 3"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+        <span>SSH</span>
+      </a>
+      <a href="/cron" class="{{ 'active' if request.url.path.startswith('/cron') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Cron</span>
+      </a>
+
+      <div class="nav-group-title">Server</div>
+      <a href="/monitor" class="{{ 'active' if request.url.path.startswith('/monitor') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <span>Monitor</span>
+      </a>
+      <a href="/logs" class="{{ 'active' if request.url.path.startswith('/logs') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Logs</span>
+      </a>
+      <a href="/jobs" class="{{ 'active' if request.url.path.startswith('/jobs') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <span>Jobs</span>
+      </a>
+      <a href="/firewall" class="{{ 'active' if request.url.path.startswith('/firewall') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Firewall</span>
+      </a>
+      <a href="/stack" class="{{ 'active' if request.url.path.startswith('/stack') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span>Stack</span>
+      </a>
+      <a href="/config" class="{{ 'active' if request.url.path.startswith('/config') }}">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+        <span>Config</span>
+      </a>
+
+      <div class="nav-group-title">Settings</div>
       <a href="/setup" class="{{ 'active' if request.url.path.startswith('/setup') }}" style="display:flex;align-items:center;justify-content:space-between;">
-        <span>Setup</span>
+        <span style="display:inline-flex;align-items:center;gap:9px;">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Setup</span>
+        </span>
         {% if update_info and update_info.update_available %}
         <span class="update-nav-dot" title="Update available: {{ update_info.latest_version }}"></span>
         {% endif %}
@@ -41,9 +109,12 @@
     </nav>
 
     <div class="sidebar-foot">
-      <span class="who" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ user.username }}</span>
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+        <span class="user-avatar">{{ user.username[:1]|upper }}</span>
+        <span class="who" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;">{{ user.username }}</span>
+      </div>
       <details class="dropdown">
-        <summary class="icon-button" title="User settings" aria-label="User settings" style="width:28px;height:28px;font-size:14px;border-radius:6px;">
+        <summary class="icon-button" title="User settings" aria-label="User settings" style="width:26px;height:26px;font-size:13px;border-radius:6px;">
           ⚙
         </summary>
         <div class="dropdown-menu dropup" style="min-width:190px;right:0;">
