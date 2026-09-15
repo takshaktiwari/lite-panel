@@ -8,6 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="alternate icon" href="/favicon.ico">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/theme.js"></script>
 </head>
 <body>
 {% if user %}
@@ -115,24 +116,35 @@
         <span class="user-avatar">{{ user.username[:1]|upper }}</span>
         <span class="who" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;">{{ user.username }}</span>
       </div>
-      <details class="dropdown">
-        <summary class="icon-button" title="User settings" aria-label="User settings" style="width:26px;height:26px;font-size:13px;border-radius:6px;">
-          ⚙
-        </summary>
-        <div class="dropdown-menu dropup" style="min-width:190px;right:0;">
-          <button type="button" id="btn-change-password-modal" class="dropdown-item">
-            <span class="icon">🔑</span>
-            <span>Change password</span>
-          </button>
-          <form method="post" action="/logout" style="margin:0;">
-            <input type="hidden" name="csrf_token" value="{{ session.csrf_token if session }}">
-            <button type="submit" class="dropdown-item danger">
-              <span class="icon">🚪</span>
-              <span>Sign out</span>
+      <div style="display:flex;align-items:center;gap:5px;">
+        <button type="button" id="theme-toggle-btn" class="theme-toggle-btn" data-theme-toggle title="Toggle dark/light mode" aria-label="Toggle dark/light mode">
+          <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+          <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </button>
+        <details class="dropdown">
+          <summary class="icon-button" title="User settings" aria-label="User settings" style="width:26px;height:26px;font-size:13px;border-radius:6px;">
+            ⚙
+          </summary>
+          <div class="dropdown-menu dropup" style="min-width:190px;right:0;">
+            <button type="button" id="btn-theme-dropdown" class="dropdown-item">
+              <span class="icon" id="dropdown-theme-icon">🌙</span>
+              <span id="dropdown-theme-text">Dark mode</span>
             </button>
-          </form>
-        </div>
-      </details>
+            <div style="border-top:1px solid var(--border);margin:4px 0;"></div>
+            <button type="button" id="btn-change-password-modal" class="dropdown-item">
+              <span class="icon">🔑</span>
+              <span>Change password</span>
+            </button>
+            <form method="post" action="/logout" style="margin:0;">
+              <input type="hidden" name="csrf_token" value="{{ session.csrf_token if session }}">
+              <button type="submit" class="dropdown-item danger">
+                <span class="icon">🚪</span>
+                <span>Sign out</span>
+              </button>
+            </form>
+          </div>
+        </details>
+      </div>
     </div>
   </aside>
 

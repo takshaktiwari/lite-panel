@@ -316,6 +316,21 @@ def test_site_detail_page_renders(signed_in, db):
     assert archive_file.name in response.text
 
 
+def test_theme_toggle_on_login_page(client):
+    login_resp = client.get("/login")
+    assert login_resp.status_code == 200
+    assert "theme.js" in login_resp.text
+    assert "data-theme-toggle" in login_resp.text
+
+
+def test_theme_toggle_in_sidebar(signed_in):
+    resp = signed_in.get("/setup")
+    assert resp.status_code == 200
+    assert "theme.js" in resp.text
+    assert "theme-toggle-btn" in resp.text
+    assert "btn-theme-dropdown" in resp.text
+
+
 def _extract_csrf(html: str) -> str:
     marker = 'name="csrf_token" value="'
     start = html.index(marker) + len(marker)
