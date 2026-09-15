@@ -14,7 +14,14 @@
 
 <section class="panel">
   {% if sites %}
-  <table class="table">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+    <div class="table-filter-input-wrap">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="search" class="table-filter-input" data-table-filter="#sites-table" placeholder="Search sites by domain, user, php..." aria-label="Search sites">
+    </div>
+    <span class="table-filter-count muted" data-filter-count-for="#sites-table">{{ sites|length }} sites</span>
+  </div>
+  <table class="table" id="sites-table">
     <thead><tr><th>Domain</th><th>PHP</th><th>SSL</th><th>System user</th><th style="text-align:right;">Quick access</th></tr></thead>
     <tbody>
       {% for site in sites %}

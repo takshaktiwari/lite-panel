@@ -63,9 +63,20 @@
 </section>
 
 <section class="panel">
-  <h2>Accounts</h2>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
+    <h2 style="margin:0;">Accounts</h2>
+    {% if accounts %}
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="table-filter-input-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="search" class="table-filter-input" data-table-filter="#ftp-accounts-table" placeholder="Search accounts..." aria-label="Search FTP accounts">
+      </div>
+      <span class="table-filter-count muted" data-filter-count-for="#ftp-accounts-table">{{ accounts|length }} accounts</span>
+    </div>
+    {% endif %}
+  </div>
   {% if accounts %}
-  <table class="table">
+  <table class="table" id="ftp-accounts-table">
     <thead><tr><th>Host</th><th>Username</th><th>Path</th><th></th></tr></thead>
     <tbody>
       {% for account in accounts %}

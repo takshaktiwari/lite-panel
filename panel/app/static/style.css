@@ -381,7 +381,7 @@ dialog.dialog.wide { max-width: 520px; }
 
 label { display: block; font-size: 13px; margin-bottom: 4px; font-weight: 500; }
 
-input[type="text"], input[type="password"], input[type="number"], select, textarea {
+input[type="text"], input[type="password"], input[type="number"], input[type="search"], select, textarea {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -435,6 +435,49 @@ input[readonly] { background: var(--border); color: var(--muted); cursor: not-al
   border-radius: 0 6px 6px 0;
   margin-bottom: 0;
   font-family: var(--mono);
+}
+
+/* --- table search / filter toolbar ------------------------------------- */
+
+.table-filter-input-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.table-filter-input-wrap svg {
+  position: absolute;
+  left: 9px;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.table-filter-input {
+  width: 220px;
+  max-width: 100%;
+  padding: 5px 10px 5px 28px !important;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  margin-bottom: 0 !important;
+  transition: border-color 0.15s, width 0.2s;
+}
+
+.table-filter-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  width: 280px;
+}
+
+.table-filter-count {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 /* Five short fields for a crontab schedule (minute/hour/day/month/weekday),

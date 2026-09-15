@@ -194,13 +194,25 @@
 
 {# ---- 2. Scheduled Backups Table ----------------------------------------- #}
 <section class="panel" style="margin-bottom:24px;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
     <h2 style="margin:0;">Active Schedules</h2>
-    <span class="muted" style="font-size:13px;">{{ schedules|length }} configured</span>
+    {% if schedules %}
+    <div style="display:flex;align-items:center;gap:10px;">
+      {% if schedules|length > 3 %}
+      <div class="table-filter-input-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="search" class="table-filter-input" data-table-filter="#backup-schedules-table" placeholder="Search schedules..." aria-label="Search backup schedules">
+      </div>
+      {% endif %}
+      <span class="table-filter-count muted" data-filter-count-for="#backup-schedules-table">{{ schedules|length }} configured</span>
+    </div>
+    {% else %}
+    <span class="muted" style="font-size:13px;">0 configured</span>
+    {% endif %}
   </div>
 
   {% if schedules %}
-  <table class="table">
+  <table class="table" id="backup-schedules-table">
     <thead>
       <tr>
         <th>Site</th>
@@ -298,23 +310,34 @@
       </p>
     </div>
 
-    {# Site Filter Selector #}
-    <div style="display:flex;align-items:center;gap:8px;">
-      <label for="archive_site_filter" class="muted" style="font-size:12px;margin:0;">Filter site:</label>
-      <select id="archive_site_filter" style="font-size:12px;padding:4px 8px;" onchange="location.href = this.value ? '/backup?site=' + encodeURIComponent(this.value) : '/backup';">
-        <option value="" {% if not selected_site %}selected{% endif %}>All Sites ({{ all_backups|length }})</option>
-        {% for site in sites %}
-        {% set count = backups_by_site.get(site.name, [])|length %}
-        <option value="{{ site.name }}" {% if selected_site == site.name %}selected{% endif %}>
-          {{ site.domain }} ({{ count }})
-        </option>
-        {% endfor %}
-      </select>
+    {# Site Filter Selector & Live Search #}
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div class="table-filter-input-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="search" class="table-filter-input" data-table-filter="#backup-archives-table" placeholder="Search archives..." aria-label="Search backup archives">
+      </div>
+
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label for="archive_site_filter" class="muted" style="font-size:12px;margin:0;">Site:</label>
+        <select id="archive_site_filter" data-site-filter-url="/backup?site=" style="font-size:12px;padding:5px 8px;margin:0;">
+          <option value="" {% if not selected_site %}selected{% endif %}>All Sites ({{ all_backups|length }})</option>
+          {% for site in sites %}
+          {% set count = backups_by_site.get(site.name, [])|length %}
+          <option value="{{ site.name }}" {% if selected_site == site.name %}selected{% endif %}>
+            {{ site.domain }} ({{ count }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {% if filtered_backups %}
+      <span class="table-filter-count muted" data-filter-count-for="#backup-archives-table">{{ filtered_backups|length }} backups</span>
+      {% endif %}
     </div>
   </div>
 
   {% if filtered_backups %}
-  <table class="table">
+  <table class="table" id="backup-archives-table">
     <thead>
       <tr>
         <th>Site</th>

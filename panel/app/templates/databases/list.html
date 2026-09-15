@@ -72,9 +72,20 @@
 </section>
 
 <section class="panel">
-  <h2>Managed databases</h2>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
+    <h2 style="margin:0;">Managed databases</h2>
+    {% if databases %}
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="table-filter-input-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="search" class="table-filter-input" data-table-filter="#managed-databases-table" placeholder="Search databases..." aria-label="Search databases">
+      </div>
+      <span class="table-filter-count muted" data-filter-count-for="#managed-databases-table">{{ databases|length }} databases</span>
+    </div>
+    {% endif %}
+  </div>
   {% if databases %}
-  {{ ui.database_table(databases, sizes) }}
+  {{ ui.database_table(databases, sizes, table_id="managed-databases-table") }}
   {% else %}
   <p class="muted empty">No databases yet.</p>
   {% endif %}
@@ -82,8 +93,19 @@
 
 {% if existing_users %}
 <section class="panel">
-  <h2>Database users</h2>
-  <table class="table">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
+    <h2 style="margin:0;">Database users</h2>
+    {% if existing_users|length > 3 %}
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="table-filter-input-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="search" class="table-filter-input" data-table-filter="#database-users-table" placeholder="Search users..." aria-label="Search database users">
+      </div>
+      <span class="table-filter-count muted" data-filter-count-for="#database-users-table">{{ existing_users|length }} users</span>
+    </div>
+    {% endif %}
+  </div>
+  <table class="table" id="database-users-table">
     <thead><tr><th>User</th><th>Assigned databases</th><th style="text-align:right;">Actions</th></tr></thead>
     <tbody>
       {% for u in existing_users %}

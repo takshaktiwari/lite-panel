@@ -23,8 +23,8 @@
    (Adminer, export, import, reassign, password reset, delete) everywhere it
    appears -- the Databases page and a site's own detail page both call this
    rather than keeping two copies of the row markup in sync by hand. #}
-{% macro database_table(databases, sizes) %}
-<table class="table">
+{% macro database_table(databases, sizes, table_id="databases-table") %}
+<table class="table" id="{{ table_id }}">
   <thead><tr><th>Database</th><th>Assigned user</th><th>Size</th><th style="text-align:right;">Actions</th></tr></thead>
   <tbody>
     {% for entry in databases %}
