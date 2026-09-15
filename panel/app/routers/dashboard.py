@@ -47,7 +47,6 @@ def _services() -> list:
             unit="redis-server",
         ),
         system.service_state("vsftpd"),
-        system.service_state("lite-panel"),
     ]
 
 
