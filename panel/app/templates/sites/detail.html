@@ -137,10 +137,12 @@
           <td style="font-size:12.5px;">{{ s.description }}</td>
           <td style="font-size:12px;"><span class="badge">Max {{ s.keep_count }}</span></td>
           <td class="muted" style="font-size:12px;">
-            {% if s.is_enabled %}
+            {% if not s.is_enabled %}
+              <span class="muted">Paused</span>
+            {% elif s.next_run %}
               {{ s.next_run.strftime('%Y-%m-%d %H:%M') }} UTC
             {% else %}
-              <span class="muted">Paused</span>
+              <span class="muted">—</span>
             {% endif %}
           </td>
           <td class="muted" style="font-size:12px;">

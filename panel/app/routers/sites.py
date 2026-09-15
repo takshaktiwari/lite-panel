@@ -155,7 +155,7 @@ def site_detail(
         existing_users.update(db_service.list_database_users())
 
     site_cron_jobs = db.scalars(
-        select(CronJob).where(CronJob.site_id == site.id).order_by(CronJob.created_at.desc())
+        select(CronJob).where(CronJob.site_id == site.id).order_by(CronJob.id.desc())
     ).all()
 
     schedules_raw = db.scalars(
@@ -177,7 +177,7 @@ def site_detail(
             "is_enabled": s.is_enabled,
         })
 
-    site_backups = backup_service.list_backups(site=site.name)
+    site_backups = backup_service.list_backups(site_name=site.name)
 
     return render(
         request,

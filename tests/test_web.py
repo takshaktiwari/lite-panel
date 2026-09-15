@@ -263,8 +263,62 @@ def test_change_password_success(signed_in):
     assert login_resp.headers["location"] == "/"
 
 
+def test_site_detail_page_renders(signed_in, db):
+    from app.models import Site, CronJob, BackupSchedule
+    site = Site(
+        domain="mysite.example.com",
+        name="mysite",
+        root_dir="/var/www/mysite",
+        system_user="mysite",
+        webroot="public",
+    )
+    db.add(site)
+    db.commit()
+
+    cron = CronJob(
+        site_id=site.id,
+        minute="0",
+        hour="2",
+        day_of_month="*",
+        month="*",
+        day_of_week="*",
+        command="php /var/www/mysite/artisan schedule:run",
+        description="Daily artisan",
+        is_enabled=True,
+    )
+    sched = BackupSchedule(
+        site_id=site.id,
+        frequency="daily",
+        hour=3,
+        minute=0,
+        day_of_week=0,
+        day_of_month=1,
+        include_files=True,
+        include_db=True,
+        keep_count=7,
+        is_enabled=True,
+    )
+    db.add_all([cron, sched])
+    db.commit()
+
+    # Simulate a backup archive existing for this site
+    from app.services.backup import get_backup_root
+    backup_dir = get_backup_root() / site.name
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    archive_file = backup_dir / f"{site.name}_2026-09-15_120000_full.tar.gz"
+    archive_file.write_bytes(b"dummy backup contents")
+
+    response = signed_in.get(f"/sites/{site.id}")
+    assert response.status_code == 200
+    assert "mysite.example.com" in response.text
+    assert "Daily artisan" in response.text
+    assert "Automated Schedules" in response.text
+    assert archive_file.name in response.text
+
+
 def _extract_csrf(html: str) -> str:
     marker = 'name="csrf_token" value="'
     start = html.index(marker) + len(marker)
     return html[start : html.index('"', start)]
+
 

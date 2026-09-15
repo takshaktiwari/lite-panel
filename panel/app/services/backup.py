@@ -104,16 +104,17 @@ def parse_backup_scope(filename: str) -> str:
     return "Full (Files + DB)"
 
 
-def list_backups(site_name: Optional[str] = None) -> List[dict]:
+def list_backups(site_name: Optional[str] = None, site: Optional[str] = None) -> List[dict]:
     """Return backup metadata dicts, newest first.
 
-    If *site_name* is given, only that site's backups are returned.
+    If *site_name* (or *site*) is given, only that site's backups are returned.
     Each dict has: name, site, path, size_mb, scope, created_at (datetime).
     """
+    target = site_name or site
     results = []
 
     root = get_backup_root()
-    search_root = root / site_name if site_name else root
+    search_root = root / target if target else root
     try:
         if not search_root.exists():
             return []
