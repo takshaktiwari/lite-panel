@@ -20,7 +20,9 @@
 <section class="metrics">
   {{ ui.meter("CPU", info.cpu_percent, "%s%% of %d cores" % (info.cpu_percent, info.cpu_count)) }}
   {{ ui.meter("Memory", info.memory.percent, "%d / %d MB" % (info.memory.used_mb, info.memory.total_mb)) }}
-  {{ ui.meter("Disk", info.disk.percent, "%d / %d GB" % (info.disk.used_mb // 1024, info.disk.total_mb // 1024)) }}
+  <a href="/monitor#disk-breakdown-section" style="text-decoration:none;color:inherit;display:block;" title="View disk usage breakdown in Monitor">
+    {{ ui.meter("Disk", info.disk.percent, "%d / %d GB · Breakdown →" % (info.disk.used_mb // 1024, info.disk.total_mb // 1024)) }}
+  </a>
   {% if info.swap.total_mb %}
     {{ ui.meter("Swap", info.swap.percent, "%d / %d MB" % (info.swap.used_mb, info.swap.total_mb)) }}
   {% else %}

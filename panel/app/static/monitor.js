@@ -322,6 +322,121 @@
     btnRefresh.addEventListener("click", fetchLiveMetrics);
   }
 
+  // -------------------------------------------------------------------------
+  // Disk Usage Breakdown
+  // -------------------------------------------------------------------------
+
+  const btnRefreshDisk = document.getElementById("btn-refresh-disk");
+  const diskScannedTime = document.getElementById("disk-scanned-time");
+  const diskCategoriesGrid = document.getElementById("disk-categories-grid");
+  const tbodyDiskTop = document.getElementById("tbody-disk-top");
+  const diskTopCount = document.getElementById("disk-top-count");
+
+  function getBadgeHtml(category) {
+    let tone = "";
+    if (category === "Websites") tone = "ok";
+    else if (category === "Backups") tone = "warn";
+    else if (category === "Databases") tone = "info";
+    return `<span class="badge ${tone}">${escapeHtml(category)}</span>`;
+  }
+
+  function escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function renderDiskBreakdown(data) {
+    if (!data) return;
+
+    if (diskScannedTime && data.scanned_at) {
+      diskScannedTime.textContent = `Scanned at ${data.scanned_at}`;
+    }
+
+    if (diskCategoriesGrid && data.categories) {
+      diskCategoriesGrid.innerHTML = data.categories
+        .map(
+          (cat) => `
+        <div class="metric" style="padding:10px 12px;">
+          <div class="metric-label" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>${escapeHtml(cat.name)}</span>
+            <span class="muted" style="font-size:11px;">${cat.percent}%</span>
+          </div>
+          <div class="metric-value" style="font-size:17px;margin:2px 0;">${escapeHtml(cat.human_size)}</div>
+          <div class="bar" style="height:4px;"><span style="width: ${Math.min(cat.percent, 100)}%;"></span></div>
+          <div class="metric-detail muted" style="font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(cat.path)}">${escapeHtml(cat.path)}</div>
+        </div>
+      `
+        )
+        .join("");
+    }
+
+    if (tbodyDiskTop) {
+      const topDirs = data.top_directories || [];
+      if (diskTopCount) {
+        diskTopCount.textContent = `${topDirs.length} locations identified`;
+      }
+
+      if (topDirs.length === 0) {
+        tbodyDiskTop.innerHTML = `<tr><td colspan="4" class="muted empty">No large directories detected.</td></tr>`;
+      } else {
+        tbodyDiskTop.innerHTML = topDirs
+          .map(
+            (d) => `
+          <tr>
+            <td>
+              <div style="font-weight:600;font-size:13px;">${escapeHtml(d.name)}</div>
+              <code style="font-size:11.5px;color:var(--muted);display:inline-block;max-width:380px;overflow-wrap:anywhere;">${escapeHtml(d.path)}</code>
+            </td>
+            <td>${getBadgeHtml(d.category)}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div class="bar" style="height:5px;flex:1;background:var(--border);border-radius:3px;overflow:hidden;margin:0;">
+                  <span style="display:block;height:100%;background:var(--accent);width:${Math.min(d.percent_of_used, 100)}%;"></span>
+                </div>
+                <span class="muted" style="font-size:11.5px;min-width:38px;text-align:right;">${d.percent_of_used}%</span>
+              </div>
+            </td>
+            <td style="text-align:right;font-family:var(--mono);font-weight:600;font-size:12.5px;">
+              ${escapeHtml(d.human_size)}
+            </td>
+          </tr>
+        `
+          )
+          .join("");
+      }
+    }
+  }
+
+  async function refreshDiskBreakdown() {
+    if (!btnRefreshDisk) return;
+    const origText = btnRefreshDisk.textContent;
+    btnRefreshDisk.textContent = "Scanning…";
+    btnRefreshDisk.disabled = true;
+
+    try {
+      const res = await fetch("/monitor/disk-breakdown?refresh=true");
+      if (res.ok) {
+        const data = await res.json();
+        renderDiskBreakdown(data);
+      }
+    } catch (e) {
+      // network error
+    } finally {
+      btnRefreshDisk.textContent = origText;
+      btnRefreshDisk.disabled = false;
+    }
+  }
+
+  if (btnRefreshDisk) {
+    btnRefreshDisk.addEventListener("click", refreshDiskBreakdown);
+  }
+
   // Poll live metrics every 3 seconds
   setInterval(fetchLiveMetrics, 3000);
 })();
+

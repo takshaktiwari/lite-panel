@@ -91,6 +91,82 @@
   </div>
 </section>
 
+<!-- Disk Usage Breakdown Section -->
+<section class="panel" id="disk-breakdown-section">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+    <div>
+      <h2 style="margin:0;">Disk Usage Breakdown</h2>
+      <p class="muted" style="margin:0;font-size:13px;">Storage distribution by category and top space-consuming directories.</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="muted" id="disk-scanned-time" style="font-size:12px;">Scanned at {{ disk_breakdown.scanned_at }}</span>
+      <button type="button" id="btn-refresh-disk" class="button button-sm" title="Re-scan disk usage">↻ Scan Disk</button>
+    </div>
+  </div>
+
+  <!-- Category Grid -->
+  <div class="metrics" style="grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:12px;margin-bottom:18px;" id="disk-categories-grid">
+    {% for cat in disk_breakdown.categories %}
+    <div class="metric" style="padding:10px 12px;">
+      <div class="metric-label" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>{{ cat.name }}</span>
+        <span class="muted" style="font-size:11px;">{{ cat.percent }}%</span>
+      </div>
+      <div class="metric-value" style="font-size:17px;margin:2px 0;">{{ cat.human_size }}</div>
+      <div class="bar" style="height:4px;"><span style="width: {{ [cat.percent, 100] | min }}%;"></span></div>
+      <div class="metric-detail muted" style="font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ cat.path }}">{{ cat.path }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Top Directories Table -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px;flex-wrap:wrap;gap:8px;">
+    <h3 style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0;font-weight:600;">
+      Top Space-Consuming Directories
+    </h3>
+    <span class="muted" style="font-size:12px;" id="disk-top-count">{{ disk_breakdown.top_directories|length }} locations identified</span>
+  </div>
+
+  <table class="table" id="table-disk-top">
+    <thead>
+      <tr>
+        <th>Directory / Location</th>
+        <th style="width:130px;">Category</th>
+        <th style="width:160px;">Share of Used</th>
+        <th style="text-align:right;width:110px;">Size</th>
+      </tr>
+    </thead>
+    <tbody id="tbody-disk-top">
+      {% if disk_breakdown.top_directories %}
+        {% for d in disk_breakdown.top_directories %}
+        <tr>
+          <td>
+            <div style="font-weight:600;font-size:13px;">{{ d.name }}</div>
+            <code style="font-size:11.5px;color:var(--muted);display:inline-block;max-width:380px;overflow-wrap:anywhere;">{{ d.path }}</code>
+          </td>
+          <td>
+            {{ ui.badge(d.category, "ok" if d.category == "Websites" else ("warn" if d.category == "Backups" else ("info" if d.category == "Databases" else ""))) }}
+          </td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="bar" style="height:5px;flex:1;background:var(--border);border-radius:3px;overflow:hidden;margin:0;">
+                <span style="display:block;height:100%;background:var(--accent);width:{{ [d.percent_of_used, 100] | min }}%;"></span>
+              </div>
+              <span class="muted" style="font-size:11.5px;min-width:38px;text-align:right;">{{ d.percent_of_used }}%</span>
+            </div>
+          </td>
+          <td style="text-align:right;font-family:var(--mono);font-weight:600;font-size:12.5px;">
+            {{ d.human_size }}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="4" class="muted empty">No large directories detected or disk scan in progress.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</section>
+
 <!-- Top Processes Section (top/htop view) -->
 <section class="panel">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">

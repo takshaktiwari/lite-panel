@@ -31,6 +31,7 @@ def monitor_page(
     hours_map = {"1h": 1, "24h": 24, "2d": 48, "7d": 168}
     hours = hours_map.get(range, 24)
     history = monitor_service.get_history(db, hours=hours, max_points=60)
+    disk_breakdown = monitor_service.get_disk_breakdown(force_refresh=False)
 
     return render(
         request,
@@ -41,7 +42,18 @@ def monitor_page(
         processes=processes,
         history=history,
         current_range=range,
+        disk_breakdown=disk_breakdown,
     )
+
+
+@router.get("/disk-breakdown")
+def get_disk_breakdown(
+    refresh: bool = Query(False),
+    session=Depends(require_session),
+):
+    """Return on-demand or cached disk usage breakdown and top directories."""
+    data = monitor_service.get_disk_breakdown(force_refresh=refresh)
+    return JSONResponse(data)
 
 
 @router.get("/live")

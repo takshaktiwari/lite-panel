@@ -5,6 +5,7 @@ from app.services.monitor import (
     get_top_processes,
     record_metric_snapshot,
     get_history,
+    get_disk_breakdown,
 )
 from app.models import ServerMetric
 
@@ -66,3 +67,30 @@ def test_history_pruning(db):
     
     remaining = db.query(ServerMetric).filter(ServerMetric.created_at == old_time).first()
     assert remaining is None
+
+
+def test_get_disk_breakdown(monkeypatch, tmp_path):
+    sites_dir = tmp_path / "www"
+    sites_dir.mkdir()
+    site1 = sites_dir / "site1.example.com"
+    site1.mkdir()
+    (site1 / "index.php").write_bytes(b"x" * 200000)
+
+    from app.services import sites as sites_service
+    monkeypatch.setattr(sites_service, "sites_root", lambda: sites_dir)
+
+    data = get_disk_breakdown(force_refresh=True)
+    assert "disk" in data
+    assert "categories" in data
+    assert "top_directories" in data
+    assert "scanned_at" in data
+
+    cat_names = [c["name"] for c in data["categories"]]
+    assert "Websites" in cat_names
+    assert "Databases" in cat_names
+    assert "Backups" in cat_names
+    assert "Logs" in cat_names
+
+    top_paths = [d["path"] for d in data["top_directories"]]
+    assert str(site1) in top_paths
+

@@ -46,3 +46,21 @@ def test_monitor_history_endpoint(signed_in: TestClient):
     assert "history" in data
     assert data["range"] == "24h"
     assert isinstance(data["history"], list)
+
+
+def test_monitor_disk_breakdown_endpoint(signed_in: TestClient):
+    response = signed_in.get("/monitor/disk-breakdown?refresh=true")
+    assert response.status_code == 200
+    data = response.json()
+    assert "disk" in data
+    assert "categories" in data
+    assert "top_directories" in data
+
+
+def test_monitor_page_contains_disk_breakdown(signed_in: TestClient):
+    response = signed_in.get("/monitor")
+    assert response.status_code == 200
+    assert "Disk Usage Breakdown" in response.text
+    assert "Top Space-Consuming Directories" in response.text
+    assert "btn-refresh-disk" in response.text
+
