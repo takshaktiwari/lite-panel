@@ -69,6 +69,9 @@ def test_security_page_loads_installed(signed_in: TestClient):
     assert "Installed" in response.text
     assert "Run Scan" in response.text
     assert "Scan" in response.text
+    assert "Uninstall" in response.text
+    assert "dlg-uninstall-maldet" in response.text
+    assert "dlg-uninstall-rkhunter" in response.text
 
 
 def test_security_page_shows_scan_history(signed_in: TestClient):

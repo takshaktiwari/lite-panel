@@ -80,13 +80,10 @@
             Scan
           </button>
         </form>
-        <form method="post" action="/security/maldet/uninstall" style="margin:0;" data-confirm="Are you sure you want to uninstall and remove Linux Malware Detect (LMD) from this server?">
-          {{ ui.csrf(session) }}
-          <button type="submit" class="button" id="btn-uninstall-maldet" style="height:34px;padding:0 10px;margin:0;box-sizing:border-box;font-size:12.5px;display:inline-flex;align-items:center;gap:5px;color:var(--danger);white-space:nowrap;flex-shrink:0;" title="Uninstall LMD">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            Uninstall
-          </button>
-        </form>
+        <button type="button" class="button" id="btn-uninstall-maldet" data-dialog-open="dlg-uninstall-maldet" style="height:34px;padding:0 10px;margin:0;box-sizing:border-box;font-size:12.5px;display:inline-flex;align-items:center;gap:5px;color:var(--danger);white-space:nowrap;flex-shrink:0;" title="Uninstall LMD">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Uninstall
+        </button>
       </div>
       {% endif %}
     </div>
@@ -212,13 +209,10 @@
             Run Scan
           </button>
         </form>
-        <form method="post" action="/security/rkhunter/uninstall" style="margin:0;" data-confirm="Are you sure you want to uninstall and remove Rootkit Hunter (rkhunter) from this server?">
-          {{ ui.csrf(session) }}
-          <button type="submit" class="button" id="btn-uninstall-rkhunter" style="height:34px;padding:0 10px;margin:0;box-sizing:border-box;font-size:12.5px;display:inline-flex;align-items:center;gap:5px;color:var(--danger);white-space:nowrap;flex-shrink:0;" title="Uninstall rkhunter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            Uninstall
-          </button>
-        </form>
+        <button type="button" class="button" id="btn-uninstall-rkhunter" data-dialog-open="dlg-uninstall-rkhunter" style="height:34px;padding:0 10px;margin:0;box-sizing:border-box;font-size:12.5px;display:inline-flex;align-items:center;gap:5px;color:var(--danger);white-space:nowrap;flex-shrink:0;" title="Uninstall rkhunter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Uninstall
+        </button>
       </div>
       {% endif %}
     </div>
@@ -473,4 +467,61 @@ function onScanFreqChange() {
     </ul>
   </div>
 </div>
+
+{# ── Modals: Uninstall Confirmation Dialogs ─────────────────────────────── #}
+<dialog id="dlg-uninstall-maldet" class="dialog">
+  <form method="post" action="/security/maldet/uninstall" style="margin:0;">
+    {{ ui.csrf(session) }}
+    <h2 style="color:var(--danger);display:flex;align-items:center;gap:8px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Uninstall Linux Malware Detect (LMD)
+    </h2>
+    <p class="muted" style="margin:8px 0 14px;font-size:13px;line-height:1.5;">
+      Are you sure you want to completely uninstall and remove <strong>Linux Malware Detect</strong> from this server?
+    </p>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:18px;font-size:12.5px;line-height:1.5;" class="muted">
+      This action will:
+      <ul style="margin:6px 0 0 16px;padding:0;">
+        <li>Stop any running malware scan jobs</li>
+        <li>Remove scanner binaries (<code>/usr/local/sbin/maldet</code>)</li>
+        <li>Remove daily cron jobs (<code>/etc/cron.daily/maldet</code>)</li>
+        <li>Delete installation files and quarantine logs</li>
+      </ul>
+      <p style="margin:8px 0 0;font-size:12px;">You can reinstall LMD at any time with a single click.</p>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="button" data-close>Cancel</button>
+      <button type="submit" class="button primary" style="background:var(--danger);border-color:var(--danger);color:#fff;font-weight:600;">
+        Yes, Uninstall LMD
+      </button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-uninstall-rkhunter" class="dialog">
+  <form method="post" action="/security/rkhunter/uninstall" style="margin:0;">
+    {{ ui.csrf(session) }}
+    <h2 style="color:var(--danger);display:flex;align-items:center;gap:8px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Uninstall Rootkit Hunter (rkhunter)
+    </h2>
+    <p class="muted" style="margin:8px 0 14px;font-size:13px;line-height:1.5;">
+      Are you sure you want to completely uninstall and purge <strong>Rootkit Hunter (rkhunter)</strong> from this server?
+    </p>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:18px;font-size:12.5px;line-height:1.5;" class="muted">
+      This action will:
+      <ul style="margin:6px 0 0 16px;padding:0;">
+        <li>Purge the <code>rkhunter</code> package and system binaries</li>
+        <li>Remove local whitelist configurations and scanner logs</li>
+      </ul>
+      <p style="margin:8px 0 0;font-size:12px;">You can reinstall rkhunter at any time with a single click.</p>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="button" data-close>Cancel</button>
+      <button type="submit" class="button primary" style="background:var(--danger);border-color:var(--danger);color:#fff;font-weight:600;">
+        Yes, Uninstall rkhunter
+      </button>
+    </div>
+  </form>
+</dialog>
 {% endblock %}

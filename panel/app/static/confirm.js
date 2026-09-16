@@ -3,17 +3,30 @@
 (function () {
   "use strict";
 
-  // data-confirm confirmation prompt on submit buttons
+  // data-confirm confirmation prompt on submit buttons or forms
   document.addEventListener("submit", (event) => {
     const submitter = event.submitter;
-    if (!submitter || !submitter.hasAttribute("data-confirm")) return;
-    if (!window.confirm(submitter.getAttribute("data-confirm"))) {
+    const msg = (submitter && submitter.getAttribute("data-confirm")) ||
+                event.target.getAttribute("data-confirm");
+    if (!msg) return;
+    if (!window.confirm(msg)) {
       event.preventDefault();
     }
   });
 
-  // Global dialog closer for [data-close]
+  // Global dialog opener for [data-dialog-open]
   document.addEventListener("click", (e) => {
+    const openBtn = e.target.closest("[data-dialog-open]");
+    if (openBtn) {
+      const targetId = openBtn.getAttribute("data-dialog-open");
+      const dlg = document.getElementById(targetId);
+      if (dlg && typeof dlg.showModal === "function") {
+        dlg.showModal();
+      }
+      return;
+    }
+
+    // Global dialog closer for [data-close]
     const closeBtn = e.target.closest("[data-close]");
     if (closeBtn) {
       const dlg = closeBtn.closest("dialog");
