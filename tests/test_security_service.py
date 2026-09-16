@@ -119,6 +119,25 @@ def test_parse_rkhunter_output_with_warnings():
     assert any(keyword in messages for keyword in ("ls", "passwd", "rootkit", "Warning", "hidden"))
 
 
+def test_parse_rkhunter_filters_benign_ubuntu_noise():
+    noisy_output = """
+[09:06:27] Checking for passwd file changes [ Warning ]
+[09:06:27] Warning: User 'postfix' has been added to the passwd file.
+[09:06:27] Checking for group file changes [ Warning ]
+[09:06:27] Warning: Group 'postfix' has been added to the group file.
+[09:06:27] Warning: Group 'postdrop' has been added to the group file.
+[09:06:27] Checking if SSH root access is allowed [ Warning ]
+[09:06:27] Warning: The SSH and rkhunter configuration options should be the same:
+[09:06:31] Checking /dev for suspicious file types [ Warning ]
+[09:06:31] Warning: Suspicious file types found in /dev:
+[09:06:31] Checking for hidden files and directories [ Warning ]
+[09:06:31] Warning: Hidden file found: /etc/.resolv.conf.systemd-resolved.bak: ASCII text
+[09:06:31] Warning: Hidden file found: /etc/.updated: ASCII text
+"""
+    result = sec._parse_rkhunter_output(noisy_output)
+    assert result["warnings"] == 0
+    assert result["warning_list"] == []
+
 
 def test_parse_rkhunter_output_returns_scanned_at():
     result = sec._parse_rkhunter_output("")

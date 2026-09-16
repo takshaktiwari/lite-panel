@@ -153,6 +153,8 @@ def install_rkhunter(log) -> None:
     if ret != 0:
         raise RuntimeError(f"apt install rkhunter failed with exit code {ret}")
 
+    ensure_rkhunter_configured()
+
     log("Updating rkhunter data files…")
     stream(["rkhunter", "--update", "--nocolors"], log)
     stream(["rkhunter", "--propupd", "--nocolors"], log)
@@ -506,6 +508,27 @@ def delete_quarantine_file(filename: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def ensure_rkhunter_configured() -> None:
+    """Ensure /etc/rkhunter.conf.local whitelists known standard Ubuntu system files."""
+    conf_dir = Path("/etc")
+    if not conf_dir.exists():
+        return
+    conf_local = conf_dir / "rkhunter.conf.local"
+    try:
+        content = (
+            "# Managed by LitePanel - Whitelist benign system files\n"
+            "ALLOW_SSH_ROOT_USER=yes\n"
+            "ALLOWHIDDENFILE=/etc/.resolv.conf.systemd-resolved.bak\n"
+            "ALLOWHIDDENFILE=/etc/.updated\n"
+            "ALLOWDEVFILE=/dev/shm/*\n"
+            "ALLOWDEVFILE=/dev/.udev*\n"
+        )
+        if not conf_local.exists() or "ALLOW_SSH_ROOT_USER" not in conf_local.read_text(errors="replace"):
+            conf_local.write_text(content)
+    except Exception as exc:
+        logger.warning("Could not write %s: %s", conf_local, exc)
+
+
 def run_rkhunter_scan(log) -> dict[str, Any]:
     """Run rkhunter and return a parsed result dict.
 
@@ -517,6 +540,11 @@ def run_rkhunter_scan(log) -> dict[str, Any]:
     """
     if not is_rkhunter_installed():
         raise RuntimeError("rkhunter is not installed.")
+
+    ensure_rkhunter_configured()
+
+    log("Updating rkhunter properties baseline…")
+    stream(["rkhunter", "--propupd", "--nocolors"], log)
 
     log("Updating rkhunter data files…")
     stream(["rkhunter", "--update", "--nocolors"], log)
@@ -536,8 +564,20 @@ def run_rkhunter_scan(log) -> dict[str, Any]:
     return _parse_rkhunter_output(output)
 
 
+# Patterns that represent normal operating system noise / benign Debian & Ubuntu artifacts
+_RKHUNTER_BENIGN_PATTERNS = [
+    re.compile(r"Checking\s+.*\s+\[\s*Warning\s*\]", re.IGNORECASE),  # Test header lines
+    re.compile(r"Warning:\s*The SSH and rkhunter configuration options should be the same", re.IGNORECASE),
+    re.compile(r"Warning:\s*Suspicious file types found in /dev:\s*$", re.IGNORECASE),
+    re.compile(r"Hidden file found:\s*/etc/\.resolv\.conf", re.IGNORECASE),
+    re.compile(r"Hidden file found:\s*/etc/\.updated", re.IGNORECASE),
+    re.compile(r"User '(?:postfix|postdrop|www-data)' has been added", re.IGNORECASE),
+    re.compile(r"Group '(?:postfix|postdrop|www-data)' has been added", re.IGNORECASE),
+]
+
+
 def _parse_rkhunter_output(output: str) -> dict[str, Any]:
-    """Parse rkhunter output into structured warnings."""
+    """Parse rkhunter output into structured warnings, filtering out known false positives."""
     warnings: list[dict] = []
 
     for line in output.splitlines():
@@ -555,6 +595,10 @@ def _parse_rkhunter_output(output: str) -> dict[str, Any]:
         if re.search(r"Possible rootkits\s*:\s*0", clean, re.IGNORECASE):
             continue
         if re.search(r"Suspect files\s*:\s*0", clean, re.IGNORECASE):
+            continue
+
+        # Skip known benign Ubuntu/Debian operational artifacts
+        if any(pat.search(clean) for pat in _RKHUNTER_BENIGN_PATTERNS):
             continue
 
         # Actual infections / critical detections
