@@ -51,25 +51,25 @@
         Scans website files for PHP web shells, backdoors, and injected malware (LMD).
       </p>
     </div>
-    <div>
+    <div style="flex-shrink:0;">
       {% if not maldet_installed %}
       <form method="post" action="/security/maldet/install" style="margin:0;">
         {{ ui.csrf(session) }}
-        <button type="submit" class="button primary" id="btn-install-maldet" style="height:34px;padding:0 14px;display:inline-flex;align-items:center;gap:6px;">
+        <button type="submit" class="button primary" id="btn-install-maldet" style="height:34px;padding:0 14px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Install LMD
         </button>
       </form>
       {% else %}
-      <form method="post" action="/security/maldet/scan" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <form method="post" action="/security/maldet/scan" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;">
         {{ ui.csrf(session) }}
-        <select name="path" id="scan-path-select" style="height:34px;font-size:13px;padding:0 10px;margin:0;min-width:240px;box-sizing:border-box;border-radius:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);">
+        <select name="path" id="scan-path-select" style="height:34px;font-size:13px;padding:0 10px;margin:0;width:auto;min-width:180px;box-sizing:border-box;border-radius:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);">
           <option value="/var/www">All Sites (/var/www)</option>
           {% for site in sites %}
           <option value="/var/www/{{ site }}">/var/www/{{ site }}</option>
           {% endfor %}
         </select>
-        <button type="submit" class="button primary" id="btn-run-maldet-scan" style="height:34px;padding:0 14px;margin:0;box-sizing:border-box;font-size:13px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
+        <button type="submit" class="button primary" id="btn-run-maldet-scan" style="height:34px;padding:0 14px;margin:0;box-sizing:border-box;font-size:13px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           Scan
         </button>
