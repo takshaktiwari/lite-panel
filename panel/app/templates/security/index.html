@@ -264,10 +264,10 @@
     {{ ui.csrf(session) }}
     <h3 style="margin:0 0 14px;font-size:13.5px;font-weight:600;">Configure New Scan Schedule</h3>
     
-    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;align-items:end;">
-      <div>
-        <label for="sched-target" style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;">Scan Target</label>
-        <select id="sched-target" name="target" style="width:100%;height:34px;padding:0 10px;font-size:13px;border-radius:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-sizing:border-box;">
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;">
+      <div style="flex:1 1 220px;min-width:180px;">
+        <label for="sched-target" style="display:block;font-size:12px;font-weight:600;margin:0 0 6px;">Scan Target</label>
+        <select id="sched-target" name="target" style="width:100%;height:36px;padding:0 10px;font-size:13px;border-radius:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-sizing:border-box;margin:0;">
           <optgroup label="Linux Malware Detect (LMD)">
             <option value="/var/www">All Sites (/var/www)</option>
             {% for site in sites %}
@@ -280,18 +280,18 @@
         </select>
       </div>
 
-      <div>
-        <label for="sched-freq" style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;">Frequency</label>
-        <select id="sched-freq" name="frequency" onchange="onScanFreqChange()" style="width:100%;height:34px;padding:0 10px;font-size:13px;border-radius:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-sizing:border-box;">
+      <div style="flex:1 1 150px;min-width:130px;">
+        <label for="sched-freq" style="display:block;font-size:12px;font-weight:600;margin:0 0 6px;">Frequency</label>
+        <select id="sched-freq" name="frequency" onchange="onScanFreqChange()" style="width:100%;height:36px;padding:0 10px;font-size:13px;border-radius:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-sizing:border-box;margin:0;">
           <option value="daily" selected>Daily</option>
           <option value="weekly">Weekly</option>
           <option value="monthly">Monthly</option>
         </select>
       </div>
 
-      <div id="sched-dow-wrap" style="display:none;">
-        <label for="sched-dow" style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;">Day of Week</label>
-        <select id="sched-dow" name="day_of_week" style="width:100%;height:34px;padding:0 10px;font-size:13px;border-radius:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-sizing:border-box;">
+      <div id="sched-dow-wrap" style="display:none;flex-direction:column;flex:1 1 140px;min-width:130px;">
+        <label for="sched-dow" style="display:block;font-size:12px;font-weight:600;margin:0 0 6px;">Day of Week</label>
+        <select id="sched-dow" name="day_of_week" style="width:100%;height:36px;padding:0 10px;font-size:13px;border-radius:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-sizing:border-box;margin:0;">
           <option value="0">Monday</option>
           <option value="1">Tuesday</option>
           <option value="2">Wednesday</option>
@@ -302,18 +302,18 @@
         </select>
       </div>
 
-      <div id="sched-dom-wrap" style="display:none;">
-        <label for="sched-dom" style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;">Day of Month</label>
-        <select id="sched-dom" name="day_of_month" style="width:100%;height:34px;padding:0 10px;font-size:13px;border-radius:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-sizing:border-box;">
+      <div id="sched-dom-wrap" style="display:none;flex-direction:column;flex:1 1 140px;min-width:130px;">
+        <label for="sched-dom" style="display:block;font-size:12px;font-weight:600;margin:0 0 6px;">Day of Month</label>
+        <select id="sched-dom" name="day_of_month" style="width:100%;height:36px;padding:0 10px;font-size:13px;border-radius:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-sizing:border-box;margin:0;">
           {% for d in range(1, 29) %}
           <option value="{{ d }}">Day {{ d }}</option>
           {% endfor %}
         </select>
       </div>
 
-      <div>
-        <label for="sched-time" style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;">Run Time (UTC)</label>
-        <input type="time" id="sched-time" name="time" value="02:00" step="60" list="scan-schedule-times" required style="width:100%;height:34px;padding:0 10px;font-size:13px;border-radius:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-sizing:border-box;">
+      <div style="flex:0 1 140px;min-width:120px;">
+        <label for="sched-time" style="display:block;font-size:12px;font-weight:600;margin:0 0 6px;">Run Time (UTC)</label>
+        <input type="time" id="sched-time" name="time" value="02:00" step="60" list="scan-schedule-times" required style="width:100%;height:36px;padding:0 10px;font-size:13px;border-radius:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-sizing:border-box;margin:0;">
         <datalist id="scan-schedule-times">
           {% for h in range(24) %}
           <option value="{{ "%02d:00"|format(h) }}">{{ "%02d:00 UTC"|format(h) }}</option>
@@ -322,11 +322,11 @@
         </datalist>
       </div>
 
-      <div style="display:flex;gap:8px;">
-        <button type="submit" class="button primary" id="btn-save-schedule" style="height:34px;padding:0 14px;font-size:13px;white-space:nowrap;">
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+        <button type="submit" class="button primary" id="btn-save-schedule" style="height:36px;padding:0 16px;font-size:13px;white-space:nowrap;margin:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;">
           Save Schedule
         </button>
-        <button type="button" class="button" onclick="toggleScheduleForm(false)" style="height:34px;padding:0 12px;font-size:13px;">
+        <button type="button" class="button" onclick="toggleScheduleForm(false)" style="height:36px;padding:0 14px;font-size:13px;white-space:nowrap;margin:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;">
           Cancel
         </button>
       </div>
@@ -393,22 +393,22 @@
           <span style="font-size:12px;">{{ 'active' if s.is_enabled else 'paused' }}</span>
         </td>
         <td style="text-align:right;white-space:nowrap;">
-          <form method="post" action="/security/schedules/{{ s.id }}/run" style="display:inline;">
+          <form method="post" action="/security/schedules/{{ s.id }}/run" style="display:inline;margin:0;">
             {{ ui.csrf(session) }}
-            <button type="submit" class="button button-sm" style="font-size:11px;padding:2px 8px;" title="Trigger this scan now">
+            <button type="submit" class="button button-sm" style="font-size:11px;padding:0 8px;height:28px;box-sizing:border-box;display:inline-flex;align-items:center;margin:0;vertical-align:middle;" title="Trigger this scan now">
               ▶ Run Now
             </button>
           </form>
-          <form method="post" action="/security/schedules/{{ s.id }}/toggle" style="display:inline;margin-left:4px;">
+          <form method="post" action="/security/schedules/{{ s.id }}/toggle" style="display:inline;margin:0 0 0 4px;">
             {{ ui.csrf(session) }}
-            <button type="submit" class="button button-sm" style="font-size:11px;padding:2px 8px;">
+            <button type="submit" class="button button-sm" style="font-size:11px;padding:0 8px;height:28px;box-sizing:border-box;display:inline-flex;align-items:center;margin:0;vertical-align:middle;">
               {{ '⏸ Pause' if s.is_enabled else '▶ Enable' }}
             </button>
           </form>
-          <form method="post" action="/security/schedules/{{ s.id }}/delete" style="display:inline;margin-left:4px;"
+          <form method="post" action="/security/schedules/{{ s.id }}/delete" style="display:inline;margin:0 0 0 4px;"
                 data-confirm="Delete this scan schedule?">
             {{ ui.csrf(session) }}
-            <button type="submit" class="button button-sm" style="font-size:11px;padding:2px 8px;color:var(--danger);">
+            <button type="submit" class="button button-sm" style="font-size:11px;padding:0 8px;height:28px;box-sizing:border-box;display:inline-flex;align-items:center;color:var(--danger);margin:0;vertical-align:middle;">
               🗑
             </button>
           </form>
@@ -439,8 +439,8 @@ function onScanFreqChange() {
   const freq = document.getElementById('sched-freq').value;
   const dow = document.getElementById('sched-dow-wrap');
   const dom = document.getElementById('sched-dom-wrap');
-  if (dow) dow.style.display = freq === 'weekly' ? 'block' : 'none';
-  if (dom) dom.style.display = freq === 'monthly' ? 'block' : 'none';
+  if (dow) dow.style.display = freq === 'weekly' ? 'flex' : 'none';
+  if (dom) dom.style.display = freq === 'monthly' ? 'flex' : 'none';
 }
 </script>
 
