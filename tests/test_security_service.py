@@ -91,9 +91,12 @@ def test_parse_maldet_output_no_scan_id():
 
 
 RKHUNTER_CLEAN = """
+[09:00:11] Running Rootkit Hunter version 1.4.6 on bee1
 [22:00:01] Info: Starting test name 'system_commands'
 [22:00:01] Checking 'ls'... [ OK ]
 [22:00:01] Checking 'ps'... [ OK ]
+Rootkits checked : 498
+Possible rootkits: 0
 """
 
 RKHUNTER_WARNINGS = """

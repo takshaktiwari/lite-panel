@@ -545,16 +545,26 @@ def _parse_rkhunter_output(output: str) -> dict[str, Any]:
         if not line:
             continue
 
-        # Warning lines contain "[ Warning ]" or "Warning:"
-        if "[ Warning ]" in line or line.startswith("Warning:"):
-            # Clean ANSI escape codes if any remain
-            clean = re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
-            if clean:
-                warnings.append({"message": clean, "severity": "warning"})
-        elif "[ Infected ]" in line or "Rootkit" in line:
-            clean = re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
-            if clean:
-                warnings.append({"message": clean, "severity": "critical"})
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
+
+        # Skip informational banners, test names, and clean summaries
+        if "Running Rootkit Hunter" in clean or "Info:" in clean or "Starting test name" in clean:
+            continue
+        if re.search(r"Rootkits checked\s*:", clean, re.IGNORECASE):
+            continue
+        if re.search(r"Possible rootkits\s*:\s*0", clean, re.IGNORECASE):
+            continue
+        if re.search(r"Suspect files\s*:\s*0", clean, re.IGNORECASE):
+            continue
+
+        # Actual infections / critical detections
+        if "[ Infected ]" in clean or "[ infected ]" in clean.lower() or "rootkit found" in clean.lower():
+            warnings.append({"message": clean, "severity": "critical"})
+        # Actual warnings & suspicious checks
+        elif "[ Warning ]" in clean or "Warning:" in clean or "[ warning ]" in clean.lower():
+            warnings.append({"message": clean, "severity": "warning"})
+        elif "[ Suspect ]" in clean or "[ suspect ]" in clean.lower() or "possible rootkit:" in clean.lower():
+            warnings.append({"message": clean, "severity": "warning"})
 
     return {
         "warnings": len(warnings),
