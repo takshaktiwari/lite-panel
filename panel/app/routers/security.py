@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session as OrmSession
 
 from app.database import get_session
-from app.deps import csrf_protect, render, require_session
+from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
 from app.services import security as security_service
 
@@ -72,7 +72,7 @@ def maldet_install(
 ):
     job = enqueue(db, "security.maldet_install", "Install LMD (Malware Detect)",
                   payload={}, user_id=session.user_id)
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/security")
 
 
 @router.post("/maldet/scan", dependencies=[Depends(csrf_protect)])
@@ -90,7 +90,7 @@ def maldet_scan(
         payload={"path": safe_path},
         user_id=session.user_id,
     )
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/security")
 
 
 @router.get("/maldet/report/{scan_id}")
@@ -125,7 +125,7 @@ def maldet_quarantine(
         payload={"file_path": file_path},
         user_id=session.user_id,
     )
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/security")
 
 
 @router.post("/maldet/delete", dependencies=[Depends(csrf_protect)])
@@ -141,7 +141,7 @@ def maldet_delete(
         payload={"file_path": file_path},
         user_id=session.user_id,
     )
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/security")
 
 
 @router.post("/maldet/restore", dependencies=[Depends(csrf_protect)])
@@ -157,7 +157,7 @@ def maldet_restore(
         payload={"filename": filename},
         user_id=session.user_id,
     )
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/security")
 
 
 @router.post("/maldet/quarantine-delete", dependencies=[Depends(csrf_protect)])
@@ -185,7 +185,7 @@ def rkhunter_install(
 ):
     job = enqueue(db, "security.rkhunter_install", "Install rkhunter",
                   payload={}, user_id=session.user_id)
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/security")
 
 
 @router.post("/rkhunter/scan", dependencies=[Depends(csrf_protect)])
@@ -196,7 +196,7 @@ def rkhunter_scan(
 ):
     job = enqueue(db, "security.rkhunter_scan", "rkhunter system scan",
                   payload={}, user_id=session.user_id)
-    return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    return job_redirect(job.id, "/security")
 
 
 # ---------------------------------------------------------------------------
