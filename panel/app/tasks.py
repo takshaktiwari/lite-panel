@@ -662,6 +662,15 @@ def maldet_install(ctx) -> None:
         raise JobFailed(str(exc)) from exc
 
 
+@register("security.maldet_uninstall")
+def maldet_uninstall(ctx) -> None:
+    """Uninstall LMD (Linux Malware Detect / maldet)."""
+    try:
+        security_service.uninstall_maldet(ctx.log)
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc
+
+
 @register("security.maldet_scan")
 def maldet_scan(ctx) -> None:
     """Run a maldet scan on the given path."""
@@ -720,6 +729,15 @@ def rkhunter_install(ctx) -> None:
     """Install rkhunter via apt."""
     try:
         security_service.install_rkhunter(ctx.log)
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc
+
+
+@register("security.rkhunter_uninstall")
+def rkhunter_uninstall(ctx) -> None:
+    """Uninstall rkhunter via apt."""
+    try:
+        security_service.uninstall_rkhunter(ctx.log)
     except Exception as exc:
         raise JobFailed(str(exc)) from exc
 

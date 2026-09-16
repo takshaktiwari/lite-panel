@@ -135,6 +135,62 @@ def install_maldet(log) -> None:
     log("LMD (maldet) installed successfully.")
 
 
+def uninstall_maldet(log) -> None:
+    """Uninstall and remove Linux Malware Detect (LMD)."""
+    log("Removing LMD (maldet)…")
+
+    # Stop and disable systemd service if active
+    try:
+        run(["systemctl", "stop", "maldet"], check=False)
+        run(["systemctl", "disable", "maldet"], check=False)
+    except Exception:
+        pass
+
+    # Check for LMD uninstall script
+    uninstall_script = Path("/usr/local/maldetect/uninstall.sh")
+    if uninstall_script.exists():
+        log("Executing /usr/local/maldetect/uninstall.sh…")
+        try:
+            stream(["bash", str(uninstall_script)], log)
+        except Exception as exc:
+            log(f"Warning: uninstall script exited with: {exc}")
+
+    # Remove symlinks
+    for symlink in ("/usr/local/sbin/maldet", "/usr/local/bin/maldet"):
+        p = Path(symlink)
+        if p.exists() or p.is_symlink():
+            try:
+                p.unlink()
+                log(f"Removed {symlink}")
+            except Exception as exc:
+                log(f"Could not remove {symlink}: {exc}")
+
+    # Remove cron tasks installed by LMD
+    for cron_file in (
+        "/etc/cron.daily/maldet",
+        "/etc/cron.d/maldet_pub",
+        "/etc/cron.daily/maldet_pub",
+    ):
+        p = Path(cron_file)
+        if p.exists() or p.is_symlink():
+            try:
+                p.unlink()
+                log(f"Removed cron file {cron_file}")
+            except Exception as exc:
+                log(f"Could not remove {cron_file}: {exc}")
+
+    # Remove installation directory
+    maldet_dir = Path("/usr/local/maldetect")
+    if maldet_dir.exists():
+        try:
+            shutil.rmtree(str(maldet_dir), ignore_errors=True)
+            log("Removed /usr/local/maldetect directory")
+        except Exception as exc:
+            log(f"Could not remove /usr/local/maldetect: {exc}")
+
+    log("Linux Malware Detect (LMD) has been successfully uninstalled.")
+
+
 def install_rkhunter(log) -> None:
     """Install rkhunter via apt.
 
@@ -162,6 +218,33 @@ def install_rkhunter(log) -> None:
     if not is_rkhunter_installed():
         raise RuntimeError("Installation appeared to succeed but rkhunter binary not found.")
     log("rkhunter installed successfully.")
+
+
+def uninstall_rkhunter(log) -> None:
+    """Uninstall and purge rkhunter."""
+    log("Uninstalling rkhunter via apt…")
+    ret = stream(
+        ["apt-get", "purge", "-y", "rkhunter"],
+        log,
+        env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"},
+    )
+    if ret != 0:
+        stream(
+            ["apt-get", "remove", "-y", "rkhunter"],
+            log,
+            env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"},
+        )
+
+    # Clean up local config and logs
+    conf_local = Path("/etc/rkhunter.conf.local")
+    if conf_local.exists():
+        try:
+            conf_local.unlink()
+            log("Removed /etc/rkhunter.conf.local")
+        except Exception as exc:
+            log(f"Could not remove {conf_local}: {exc}")
+
+    log("rkhunter has been successfully uninstalled.")
 
 
 # ---------------------------------------------------------------------------

@@ -66,19 +66,28 @@
         </button>
       </form>
       {% else %}
-      <form method="post" action="/security/maldet/scan" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;">
-        {{ ui.csrf(session) }}
-        <select name="path" id="scan-path-select" style="height:34px;font-size:13px;padding:0 10px;margin:0;width:auto;min-width:180px;box-sizing:border-box;border-radius:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);">
-          <option value="/var/www">All Sites (/var/www)</option>
-          {% for site in sites %}
-          <option value="/var/www/{{ site }}">/var/www/{{ site }}</option>
-          {% endfor %}
-        </select>
-        <button type="submit" class="button primary" id="btn-run-maldet-scan" style="height:34px;padding:0 14px;margin:0;box-sizing:border-box;font-size:13px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          Scan
-        </button>
-      </form>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;">
+        <form method="post" action="/security/maldet/scan" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;">
+          {{ ui.csrf(session) }}
+          <select name="path" id="scan-path-select" style="height:34px;font-size:13px;padding:0 10px;margin:0;width:auto;min-width:180px;box-sizing:border-box;border-radius:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);">
+            <option value="/var/www">All Sites (/var/www)</option>
+            {% for site in sites %}
+            <option value="/var/www/{{ site }}">/var/www/{{ site }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="button primary" id="btn-run-maldet-scan" style="height:34px;padding:0 14px;margin:0;box-sizing:border-box;font-size:13px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Scan
+          </button>
+        </form>
+        <form method="post" action="/security/maldet/uninstall" style="margin:0;" data-confirm="Are you sure you want to uninstall and remove Linux Malware Detect (LMD) from this server?">
+          {{ ui.csrf(session) }}
+          <button type="submit" class="button" id="btn-uninstall-maldet" style="height:34px;padding:0 10px;margin:0;box-sizing:border-box;font-size:12.5px;display:inline-flex;align-items:center;gap:5px;color:var(--danger);white-space:nowrap;flex-shrink:0;" title="Uninstall LMD">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Uninstall
+          </button>
+        </form>
+      </div>
       {% endif %}
     </div>
   </div>
@@ -195,13 +204,22 @@
         </button>
       </form>
       {% else %}
-      <form method="post" action="/security/rkhunter/scan" style="margin:0;">
-        {{ ui.csrf(session) }}
-        <button type="submit" class="button primary" id="btn-run-rkhunter" style="height:34px;padding:0 14px;margin:0;box-sizing:border-box;font-size:13px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          Run Scan
-        </button>
-      </form>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;">
+        <form method="post" action="/security/rkhunter/scan" style="margin:0;">
+          {{ ui.csrf(session) }}
+          <button type="submit" class="button primary" id="btn-run-rkhunter" style="height:34px;padding:0 14px;margin:0;box-sizing:border-box;font-size:13px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            Run Scan
+          </button>
+        </form>
+        <form method="post" action="/security/rkhunter/uninstall" style="margin:0;" data-confirm="Are you sure you want to uninstall and remove Rootkit Hunter (rkhunter) from this server?">
+          {{ ui.csrf(session) }}
+          <button type="submit" class="button" id="btn-uninstall-rkhunter" style="height:34px;padding:0 10px;margin:0;box-sizing:border-box;font-size:12.5px;display:inline-flex;align-items:center;gap:5px;color:var(--danger);white-space:nowrap;flex-shrink:0;" title="Uninstall rkhunter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Uninstall
+          </button>
+        </form>
+      </div>
       {% endif %}
     </div>
   </div>

@@ -191,6 +191,28 @@ def test_rkhunter_scan_enqueues_job(signed_in: TestClient, db):
     assert "/jobs/" in response.headers["location"]
 
 
+def test_maldet_uninstall_enqueues_job(signed_in: TestClient, db):
+    csrf = _csrf(signed_in)
+    response = signed_in.post(
+        "/security/maldet/uninstall",
+        data={"csrf_token": csrf},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "/jobs/" in response.headers["location"]
+
+
+def test_rkhunter_uninstall_enqueues_job(signed_in: TestClient, db):
+    csrf = _csrf(signed_in)
+    response = signed_in.post(
+        "/security/rkhunter/uninstall",
+        data={"csrf_token": csrf},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "/jobs/" in response.headers["location"]
+
+
 # ---------------------------------------------------------------------------
 # Schedule Endpoints Tests
 # ---------------------------------------------------------------------------

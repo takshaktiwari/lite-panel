@@ -85,6 +85,17 @@ def maldet_install(
     return job_redirect(job.id, "/security")
 
 
+@router.post("/maldet/uninstall", dependencies=[Depends(csrf_protect)])
+def maldet_uninstall(
+    request: Request,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    job = enqueue(db, "security.maldet_uninstall", "Uninstall LMD (Malware Detect)",
+                  payload={}, user_id=session.user_id)
+    return job_redirect(job.id, "/security")
+
+
 @router.post("/maldet/scan", dependencies=[Depends(csrf_protect)])
 def maldet_scan(
     request: Request,
@@ -199,6 +210,17 @@ def rkhunter_install(
     db: OrmSession = Depends(get_session),
 ):
     job = enqueue(db, "security.rkhunter_install", "Install rkhunter",
+                  payload={}, user_id=session.user_id)
+    return job_redirect(job.id, "/security")
+
+
+@router.post("/rkhunter/uninstall", dependencies=[Depends(csrf_protect)])
+def rkhunter_uninstall(
+    request: Request,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    job = enqueue(db, "security.rkhunter_uninstall", "Uninstall rkhunter",
                   payload={}, user_id=session.user_id)
     return job_redirect(job.id, "/security")
 

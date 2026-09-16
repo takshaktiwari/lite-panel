@@ -350,6 +350,23 @@ def test_install_rkhunter_success():
     assert any("LMD" in l or "rkhunter installed" in l for l in logs)
 
 
+def test_uninstall_maldet_success():
+    logs = []
+    with patch("app.services.security.run") as mock_run, \
+         patch("app.services.security.stream") as mock_stream, \
+         patch("pathlib.Path.exists", return_value=False):
+        sec.uninstall_maldet(logs.append)
+    assert any("removed" in l.lower() or "uninstall" in l.lower() for l in logs)
+
+
+def test_uninstall_rkhunter_success():
+    logs = []
+    with patch("app.services.security.stream", return_value=0) as mock_stream, \
+         patch("pathlib.Path.exists", return_value=False):
+        sec.uninstall_rkhunter(logs.append)
+    assert any("uninstall" in l.lower() for l in logs)
+
+
 # ---------------------------------------------------------------------------
 # Scan Schedules Service Tests
 # ---------------------------------------------------------------------------
