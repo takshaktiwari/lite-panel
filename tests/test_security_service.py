@@ -325,3 +325,109 @@ def test_install_rkhunter_success():
 
     assert any("rkhunter" in " ".join(c) for c in stream_calls)
     assert any("LMD" in l or "rkhunter installed" in l for l in logs)
+
+
+# ---------------------------------------------------------------------------
+# Scan Schedules Service Tests
+# ---------------------------------------------------------------------------
+
+
+from datetime import datetime, timezone
+from app.models import SecurityScanSchedule
+
+
+def test_describe_scan_schedule():
+    s_daily = SecurityScanSchedule(scan_type="maldet", frequency="daily", hour=3, minute=30)
+    assert sec.describe_scan_schedule(s_daily) == "Daily at 03:30 UTC"
+
+    s_weekly = SecurityScanSchedule(scan_type="maldet", frequency="weekly", hour=4, minute=0, day_of_week=6)
+    assert sec.describe_scan_schedule(s_weekly) == "Weekly on Sunday at 04:00 UTC"
+
+    s_monthly = SecurityScanSchedule(scan_type="rkhunter", frequency="monthly", hour=1, minute=15, day_of_month=1)
+    assert sec.describe_scan_schedule(s_monthly) == "Monthly on day 1st at 01:15 UTC"
+
+
+def test_get_next_scan_run():
+    ref_time = datetime(2026, 9, 16, 10, 0, tzinfo=timezone.utc)  # Wednesday
+
+    # Daily: later today
+    s1 = SecurityScanSchedule(frequency="daily", hour=12, minute=0)
+    next_s1 = sec.get_next_scan_run(s1, ref_time)
+    assert next_s1 == datetime(2026, 9, 16, 12, 0, tzinfo=timezone.utc)
+
+    # Daily: already passed today -> tomorrow
+    s2 = SecurityScanSchedule(frequency="daily", hour=8, minute=0)
+    next_s2 = sec.get_next_scan_run(s2, ref_time)
+    assert next_s2 == datetime(2026, 9, 17, 8, 0, tzinfo=timezone.utc)
+
+    # Weekly: upcoming Sunday (day_of_week=6)
+    s3 = SecurityScanSchedule(frequency="weekly", hour=2, minute=0, day_of_week=6)
+    next_s3 = sec.get_next_scan_run(s3, ref_time)
+    assert next_s3.weekday() == 6
+    assert next_s3 > ref_time
+
+
+def test_check_scan_schedule_due():
+    now = datetime(2026, 9, 16, 14, 0, tzinfo=timezone.utc)
+
+    # Disabled schedule is never due
+    s_off = SecurityScanSchedule(is_enabled=False, frequency="daily", hour=2, minute=0)
+    assert sec.check_scan_schedule_due(s_off, now) is False
+
+    # Daily schedule at 2 AM, hasn't run yet -> due
+    s_daily = SecurityScanSchedule(is_enabled=True, frequency="daily", hour=2, minute=0, last_run_at=None)
+    assert sec.check_scan_schedule_due(s_daily, now) is True
+
+    # Daily schedule already ran at 2:05 AM today -> not due
+    s_daily.last_run_at = datetime(2026, 9, 16, 2, 5, tzinfo=timezone.utc)
+    assert sec.check_scan_schedule_due(s_daily, now) is False
+
+
+def test_create_and_manage_scan_schedules(db):
+    sched = sec.create_scan_schedule(
+        db,
+        scan_type="maldet",
+        target_path="/var/www/mysite.com",
+        frequency="weekly",
+        hour=3,
+        minute=0,
+        day_of_week=6,
+    )
+    assert sched.id is not None
+    assert sched.target_path == "/var/www/mysite.com"
+    assert sched.is_enabled is True
+
+    schedules = sec.get_scan_schedules(db)
+    assert len(schedules) == 1
+    assert schedules[0]["id"] == sched.id
+    assert schedules[0]["scan_type"] == "maldet"
+    assert schedules[0]["target_path"] == "/var/www/mysite.com"
+
+    # Toggle
+    state = sec.toggle_scan_schedule(db, sched.id)
+    assert state is False
+    assert sec.get_scan_schedules(db)[0]["is_enabled"] is False
+
+    # Delete
+    sec.delete_scan_schedule(db, sched.id)
+    assert len(sec.get_scan_schedules(db)) == 0
+
+
+def test_poll_and_run_scan_schedules(db):
+    # Create due schedule
+    sched = sec.create_scan_schedule(
+        db,
+        scan_type="maldet",
+        target_path="/var/www",
+        frequency="daily",
+        hour=0,
+        minute=0,
+    )
+
+    with patch("app.services.security.is_maldet_installed", return_value=True), \
+         patch("app.jobs.enqueue") as mock_enqueue:
+        enqueued = sec.poll_and_run_scan_schedules(db)
+        assert enqueued == 1
+        assert mock_enqueue.called
+        assert sched.last_run_at is not None
+

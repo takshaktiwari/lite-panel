@@ -187,3 +187,82 @@ def test_rkhunter_scan_enqueues_job(signed_in: TestClient, db):
         )
     assert response.status_code == 303
     assert "/jobs/" in response.headers["location"]
+
+
+# ---------------------------------------------------------------------------
+# Schedule Endpoints Tests
+# ---------------------------------------------------------------------------
+
+
+def test_create_scan_schedule_route(signed_in: TestClient, db):
+    csrf = _csrf(signed_in)
+    response = signed_in.post(
+        "/security/schedules",
+        data={
+            "csrf_token": csrf,
+            "target": "/var/www/example.com",
+            "frequency": "weekly",
+            "time": "03:30",
+            "day_of_week": "6",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "/security" in response.headers["location"]
+    assert "notice=" in response.headers["location"]
+
+    from app.models import SecurityScanSchedule
+    from sqlalchemy import select
+    sched = db.scalars(select(SecurityScanSchedule)).first()
+    assert sched is not None
+    assert sched.target_path == "/var/www/example.com"
+    assert sched.frequency == "weekly"
+    assert sched.hour == 3
+    assert sched.minute == 30
+    assert sched.day_of_week == 6
+
+
+def test_toggle_scan_schedule_route(signed_in: TestClient, db):
+    from app.services import security as sec
+    sched = sec.create_scan_schedule(db, scan_type="maldet", target_path="/var/www")
+    assert sched.is_enabled is True
+
+    csrf = _csrf(signed_in)
+    response = signed_in.post(
+        f"/security/schedules/{sched.id}/toggle",
+        data={"csrf_token": csrf},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    db.refresh(sched)
+    assert sched.is_enabled is False
+
+
+def test_run_scan_schedule_route(signed_in: TestClient, db):
+    from app.services import security as sec
+    sched = sec.create_scan_schedule(db, scan_type="maldet", target_path="/var/www/testsite")
+
+    csrf = _csrf(signed_in)
+    with patch("app.services.security.is_maldet_installed", return_value=True):
+        response = signed_in.post(
+            f"/security/schedules/{sched.id}/run",
+            data={"csrf_token": csrf},
+            follow_redirects=False,
+        )
+    assert response.status_code == 303
+    assert "/jobs/" in response.headers["location"]
+
+
+def test_delete_scan_schedule_route(signed_in: TestClient, db):
+    from app.services import security as sec
+    sched = sec.create_scan_schedule(db, scan_type="maldet", target_path="/var/www")
+
+    csrf = _csrf(signed_in)
+    response = signed_in.post(
+        f"/security/schedules/{sched.id}/delete",
+        data={"csrf_token": csrf},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert len(sec.get_scan_schedules(db)) == 0
+

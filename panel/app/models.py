@@ -453,4 +453,34 @@ class BackupSchedule(TimestampMixin, Base):
     site: Mapped[Site] = relationship(back_populates="backup_schedules")
 
 
+# --------------------------------------------------------------------------
+# Security Scan Schedules
+# --------------------------------------------------------------------------
+
+
+class SecurityScanSchedule(TimestampMixin, Base):
+    """A recurring schedule for running a malware or rootkit scan."""
+
+    __tablename__ = "security_scan_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # scan_type: "maldet" or "rkhunter"
+    scan_type: Mapped[str] = mapped_column(String(32), default="maldet", nullable=False)
+    # target_path: "/var/www" for all sites, or "/var/www/<domain>" for a specific site
+    target_path: Mapped[str] = mapped_column(String(255), default="/var/www", nullable=False)
+
+    # Frequency: "daily", "weekly", "monthly"
+    frequency: Mapped[str] = mapped_column(String(32), default="daily", nullable=False)
+
+    # Time configuration (stored as UTC)
+    hour: Mapped[int] = mapped_column(Integer, default=2, nullable=False)          # 0-23
+    minute: Mapped[int] = mapped_column(Integer, default=0, nullable=False)        # 0-59
+    day_of_week: Mapped[int] = mapped_column(Integer, default=0, nullable=False)   # 0=Monday, 6=Sunday (for weekly)
+    day_of_month: Mapped[int] = mapped_column(Integer, default=1, nullable=False)  # 1-31 (for monthly)
+
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
+from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -22,6 +24,7 @@ router = APIRouter(prefix="/security")
 def security_page(
     request: Request,
     session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
 ):
     maldet_installed = security_service.is_maldet_installed()
     rkhunter_installed = security_service.is_rkhunter_installed()
@@ -29,6 +32,7 @@ def security_page(
     scan_history = []
     quarantine = []
     rkhunter_report = None
+    schedules = []
 
     if maldet_installed:
         try:
@@ -43,6 +47,11 @@ def security_page(
         except Exception as exc:
             logger.warning("Could not load rkhunter report: %s", exc)
 
+    try:
+        schedules = security_service.get_scan_schedules(db)
+    except Exception as exc:
+        logger.warning("Could not load scan schedules: %s", exc)
+
     sites = security_service.get_sites()
 
     return render(
@@ -55,6 +64,7 @@ def security_page(
         scan_history=scan_history,
         quarantine=quarantine,
         rkhunter_report=rkhunter_report,
+        schedules=schedules,
         sites=sites,
     )
 
@@ -201,6 +211,135 @@ def rkhunter_scan(
 ):
     job = enqueue(db, "security.rkhunter_scan", "rkhunter system scan",
                   payload={}, user_id=session.user_id)
+    return job_redirect(job.id, "/security")
+
+
+# ---------------------------------------------------------------------------
+# Scan Schedules
+# ---------------------------------------------------------------------------
+
+
+@router.post("/schedules", dependencies=[Depends(csrf_protect)])
+def create_scan_schedule(
+    target: str = Form("/var/www"),
+    frequency: str = Form("daily"),
+    time: Optional[str] = Form(None),
+    hour: Optional[int] = Form(None),
+    minute: Optional[int] = Form(None),
+    day_of_week: int = Form(0),
+    day_of_month: int = Form(1),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    clean_target = (target or "").strip()
+    if clean_target == "rkhunter":
+        scan_type = "rkhunter"
+        target_path = "/"
+    else:
+        scan_type = "maldet"
+        target_path = clean_target or "/var/www"
+
+    raw_time = (time or "").strip()
+    parsed_hour = hour
+    parsed_minute = minute
+
+    if raw_time:
+        parts = raw_time.split(":")
+        if len(parts) >= 2:
+            try:
+                parsed_hour = int(parts[0])
+                parsed_minute = int(parts[1])
+            except ValueError:
+                pass
+        elif len(parts) == 1:
+            try:
+                parsed_hour = int(parts[0])
+                parsed_minute = 0
+            except ValueError:
+                pass
+
+    final_hour = 2 if parsed_hour is None else parsed_hour
+    final_minute = 0 if parsed_minute is None else parsed_minute
+
+    try:
+        sched = security_service.create_scan_schedule(
+            db,
+            scan_type=scan_type,
+            target_path=target_path,
+            frequency=frequency,
+            hour=final_hour,
+            minute=final_minute,
+            day_of_week=day_of_week,
+            day_of_month=day_of_month,
+        )
+        desc = security_service.describe_scan_schedule(sched)
+        return _back(notice=f"Scan schedule created ({desc}).")
+    except Exception as exc:
+        return _back(error=f"Failed to create scan schedule: {exc}")
+
+
+@router.post("/schedules/{schedule_id}/delete", dependencies=[Depends(csrf_protect)])
+def delete_scan_schedule(
+    schedule_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    try:
+        security_service.delete_scan_schedule(db, schedule_id)
+        return _back(notice="Scan schedule deleted.")
+    except Exception as exc:
+        return _back(error=str(exc))
+
+
+@router.post("/schedules/{schedule_id}/toggle", dependencies=[Depends(csrf_protect)])
+def toggle_scan_schedule(
+    schedule_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    try:
+        is_active = security_service.toggle_scan_schedule(db, schedule_id)
+        status_str = "enabled" if is_active else "paused"
+        return _back(notice=f"Scan schedule is now {status_str}.")
+    except Exception as exc:
+        return _back(error=str(exc))
+
+
+@router.post("/schedules/{schedule_id}/run", dependencies=[Depends(csrf_protect)])
+def run_scan_schedule(
+    schedule_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    from app.models import SecurityScanSchedule
+
+    schedule = db.get(SecurityScanSchedule, schedule_id)
+    if not schedule:
+        return _back(error=f"Scan schedule #{schedule_id} not found.")
+
+    if schedule.scan_type == "rkhunter":
+        if not security_service.is_rkhunter_installed():
+            return _back(error="rkhunter is not installed on this server.")
+        job = enqueue(
+            db,
+            "security.rkhunter_scan",
+            "Run Rootkit Scan (Manual trigger from schedule)",
+            payload={},
+            user_id=session.user_id,
+        )
+    else:
+        if not security_service.is_maldet_installed():
+            return _back(error="Malware Detect (LMD) is not installed on this server.")
+        job = enqueue(
+            db,
+            "security.maldet_scan",
+            f"Run Malware Scan: {schedule.target_path}",
+            payload={"path": schedule.target_path},
+            user_id=session.user_id,
+        )
+
+    schedule.last_run_at = datetime.now(timezone.utc)
+    db.commit()
     return job_redirect(job.id, "/security")
 
 

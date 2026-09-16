@@ -514,6 +514,11 @@ def _scheduler_worker():
         try:
             with session_scope() as db:
                 poll_and_run_schedules(db)
+                try:
+                    from app.services import security as security_service
+                    security_service.poll_and_run_scan_schedules(db)
+                except Exception as sec_exc:
+                    logger.error("Error in security scan scheduler loop: %s", sec_exc)
         except Exception as exc:
             logger.error("Error in backup scheduler loop: %s", exc)
 

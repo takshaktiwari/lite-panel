@@ -10,9 +10,14 @@ import logging
 import os
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session as OrmSession
+
+from app.models import SecurityScanSchedule
 
 from app.shell import run, stream
 
@@ -585,3 +590,238 @@ def get_sites() -> list[str]:
     if not base.exists():
         return []
     return sorted(d.name for d in base.iterdir() if d.is_dir() and not d.name.startswith("."))
+
+
+# ---------------------------------------------------------------------------
+# Scan Scheduling
+# ---------------------------------------------------------------------------
+
+WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def describe_scan_schedule(schedule: SecurityScanSchedule) -> str:
+    """Format human-readable schedule description."""
+    freq = schedule.frequency
+    h = f"{schedule.hour:02d}:{schedule.minute:02d}"
+
+    if freq == "weekly":
+        day_name = WEEKDAY_NAMES[schedule.day_of_week % 7]
+        return f"Weekly on {day_name} at {h} UTC"
+    if freq == "monthly":
+        d = schedule.day_of_month
+        suffix = "th"
+        if d in [1, 21, 31]:
+            suffix = "st"
+        elif d in [2, 22]:
+            suffix = "nd"
+        elif d in [3, 23]:
+            suffix = "rd"
+        return f"Monthly on day {d}{suffix} at {h} UTC"
+    return f"Daily at {h} UTC"
+
+
+def get_next_scan_run(schedule: SecurityScanSchedule, from_time: Optional[datetime] = None) -> datetime:
+    """Calculate the next datetime (UTC) the schedule is scheduled to run."""
+    now = from_time or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+
+    freq = schedule.frequency
+    h = schedule.hour
+    m = schedule.minute
+
+    if freq == "daily":
+        candidate = now.replace(hour=h, minute=m, second=0, microsecond=0)
+        if candidate <= now:
+            candidate += timedelta(days=1)
+        return candidate
+
+    if freq == "weekly":
+        days_ahead = (schedule.day_of_week - now.weekday()) % 7
+        candidate = (now + timedelta(days=days_ahead)).replace(hour=h, minute=m, second=0, microsecond=0)
+        if candidate <= now:
+            candidate += timedelta(days=7)
+        return candidate
+
+    if freq == "monthly":
+        target_day = min(schedule.day_of_month, 28)
+        try:
+            candidate = now.replace(day=target_day, hour=h, minute=m, second=0, microsecond=0)
+        except ValueError:
+            candidate = now.replace(day=28, hour=h, minute=m, second=0, microsecond=0)
+
+        if candidate <= now:
+            month = now.month + 1
+            year = now.year
+            if month > 12:
+                month = 1
+                year += 1
+            candidate = candidate.replace(year=year, month=month)
+        return candidate
+
+    return now + timedelta(days=1)
+
+
+def check_scan_schedule_due(schedule: SecurityScanSchedule, now: Optional[datetime] = None) -> bool:
+    """Return True if the scan schedule is currently due to run."""
+    if not schedule.is_enabled:
+        return False
+
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+
+    last_run = schedule.last_run_at
+    if last_run and last_run.tzinfo is None:
+        last_run = last_run.replace(tzinfo=timezone.utc)
+
+    freq = schedule.frequency
+    h = schedule.hour
+    m = schedule.minute
+
+    if freq == "daily":
+        target = current.replace(hour=h, minute=m, second=0, microsecond=0)
+        if current >= target:
+            return last_run is None or last_run < target
+        return False
+
+    if freq == "weekly":
+        if current.weekday() == (schedule.day_of_week % 7):
+            target = current.replace(hour=h, minute=m, second=0, microsecond=0)
+            if current >= target:
+                return last_run is None or last_run < target
+        return False
+
+    if freq == "monthly":
+        target_day = min(schedule.day_of_month, 28)
+        if current.day == target_day:
+            target = current.replace(hour=h, minute=m, second=0, microsecond=0)
+            if current >= target:
+                return last_run is None or last_run < target
+        return False
+
+    return False
+
+
+def get_scan_schedules(db: OrmSession) -> list[dict]:
+    """List all configured scan schedules with metadata and next run time."""
+    schedules = db.scalars(
+        select(SecurityScanSchedule).order_by(SecurityScanSchedule.created_at.desc())
+    ).all()
+
+    now = datetime.now(timezone.utc)
+    result = []
+    for s in schedules:
+        next_run = get_next_scan_run(s, now)
+        result.append({
+            "id": s.id,
+            "scan_type": s.scan_type,
+            "target_path": s.target_path,
+            "frequency": s.frequency,
+            "hour": s.hour,
+            "minute": s.minute,
+            "day_of_week": s.day_of_week,
+            "day_of_month": s.day_of_month,
+            "is_enabled": s.is_enabled,
+            "description": describe_scan_schedule(s),
+            "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None,
+            "next_run_at": next_run.isoformat(),
+        })
+    return result
+
+
+def create_scan_schedule(
+    db: OrmSession,
+    *,
+    scan_type: str = "maldet",
+    target_path: str = "/var/www",
+    frequency: str = "daily",
+    hour: int = 2,
+    minute: int = 0,
+    day_of_week: int = 0,
+    day_of_month: int = 1,
+) -> SecurityScanSchedule:
+    """Create and persist a new scan schedule."""
+    if scan_type not in ("maldet", "rkhunter"):
+        raise ValueError(f"Invalid scan type: {scan_type}")
+
+    clean_path = target_path.strip() if scan_type == "maldet" else "/"
+    if not clean_path:
+        clean_path = "/var/www"
+
+    schedule = SecurityScanSchedule(
+        scan_type=scan_type,
+        target_path=clean_path,
+        frequency=frequency if frequency in ("daily", "weekly", "monthly") else "daily",
+        hour=max(0, min(23, int(hour))),
+        minute=max(0, min(59, int(minute))),
+        day_of_week=max(0, min(6, int(day_of_week))),
+        day_of_month=max(1, min(31, int(day_of_month))),
+        is_enabled=True,
+    )
+    db.add(schedule)
+    db.commit()
+    db.refresh(schedule)
+    return schedule
+
+
+def delete_scan_schedule(db: OrmSession, schedule_id: int) -> None:
+    """Delete a scan schedule."""
+    schedule = db.get(SecurityScanSchedule, schedule_id)
+    if not schedule:
+        raise ValueError(f"Scan schedule #{schedule_id} not found.")
+    db.delete(schedule)
+    db.commit()
+
+
+def toggle_scan_schedule(db: OrmSession, schedule_id: int) -> bool:
+    """Toggle a scan schedule active/inactive. Returns new is_enabled state."""
+    schedule = db.get(SecurityScanSchedule, schedule_id)
+    if not schedule:
+        raise ValueError(f"Scan schedule #{schedule_id} not found.")
+    schedule.is_enabled = not schedule.is_enabled
+    db.commit()
+    return schedule.is_enabled
+
+
+def poll_and_run_scan_schedules(db: OrmSession) -> int:
+    """Find due security scan schedules and enqueue them as background jobs."""
+    from app.jobs import enqueue
+
+    schedules = db.scalars(
+        select(SecurityScanSchedule).where(SecurityScanSchedule.is_enabled == True)
+    ).all()
+
+    now = datetime.now(timezone.utc)
+    enqueued_count = 0
+
+    for s in schedules:
+        if check_scan_schedule_due(s, now):
+            try:
+                if s.scan_type == "rkhunter":
+                    if is_rkhunter_installed():
+                        enqueue(
+                            db,
+                            "security.rkhunter_scan",
+                            "Scheduled Rootkit Scan (rkhunter)",
+                            payload={},
+                        )
+                        s.last_run_at = now
+                        db.commit()
+                        enqueued_count += 1
+                else:
+                    if is_maldet_installed():
+                        enqueue(
+                            db,
+                            "security.maldet_scan",
+                            f"Scheduled Malware Scan: {s.target_path}",
+                            payload={"path": s.target_path},
+                        )
+                        s.last_run_at = now
+                        db.commit()
+                        enqueued_count += 1
+            except Exception as exc:
+                logger.error("Failed to enqueue scheduled scan for schedule #%d: %s", s.id, exc)
+
+    return enqueued_count
+
