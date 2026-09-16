@@ -245,3 +245,61 @@ def test_get_rkhunter_last_report_parses_log(tmp_path):
     assert report is not None
     assert report["warnings"] >= 1
     assert "scanned_at" in report
+
+
+# ---------------------------------------------------------------------------
+# install_maldet / install_rkhunter
+# ---------------------------------------------------------------------------
+
+
+def test_install_maldet_sets_cwd_to_install_dir(tmp_path):
+    calls = []
+
+    def mock_run(args, **kwargs):
+        from unittest.mock import MagicMock
+        m = MagicMock()
+        m.returncode = 0
+        if "curl" in args:
+            # Simulate downloaded tarball
+            tarball = Path(args[args.index("-o") + 1])
+            tarball.touch()
+        elif "tar" in args:
+            # Simulate extracted directory
+            target_dir = Path(args[args.index("-C") + 1])
+            (target_dir / "maldetect-1.6.6").mkdir(parents=True, exist_ok=True)
+            (target_dir / "maldetect-1.6.6" / "install.sh").touch()
+        return m
+
+    stream_calls = []
+
+    def mock_stream(args, log_fn, **kwargs):
+        stream_calls.append({"args": args, "kwargs": kwargs})
+        return 0
+
+    logs = []
+    with patch("app.services.security.run", side_effect=mock_run), \
+         patch("app.services.security.stream", side_effect=mock_stream), \
+         patch("app.services.security.is_maldet_installed", return_value=True):
+        sec.install_maldet(logs.append)
+
+    assert len(stream_calls) == 1
+    call = stream_calls[0]
+    assert call["args"] == ["bash", "install.sh"]
+    assert "maldetect-1.6.6" in call["kwargs"]["cwd"]
+
+
+def test_install_rkhunter_success():
+    stream_calls = []
+
+    def mock_stream(args, log_fn, **kwargs):
+        stream_calls.append(args)
+        return 0
+
+    logs = []
+    with patch("app.services.security.run") as mock_run, \
+         patch("app.services.security.stream", side_effect=mock_stream), \
+         patch("app.services.security.is_rkhunter_installed", return_value=True):
+        sec.install_rkhunter(logs.append)
+
+    assert any("rkhunter" in " ".join(c) for c in stream_calls)
+    assert any("LMD" in l or "rkhunter installed" in l for l in logs)

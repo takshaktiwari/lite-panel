@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.shell import run
+from app.shell import run, stream
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 MALDET_BIN = "/usr/local/sbin/maldet"
+MALDET_INTERNAL_BIN = "/usr/local/maldetect/maldet"
 RKHUNTER_BIN = "/usr/bin/rkhunter"
 MALDET_QUARANTINE_DIR = Path("/usr/local/maldetect/quarantine")
 MALDET_TMP_DIR = Path("/usr/local/maldetect/tmp")
@@ -35,9 +36,21 @@ SITES_DIR = "/var/www"
 # ---------------------------------------------------------------------------
 
 
+def get_maldet_bin() -> str:
+    """Return the path to the maldet executable."""
+    for path in (MALDET_BIN, MALDET_INTERNAL_BIN, shutil.which("maldet")):
+        if path and os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return MALDET_BIN
+
+
 def is_maldet_installed() -> bool:
     """Return True if maldet binary exists on disk."""
-    return os.path.isfile(MALDET_BIN) or shutil.which("maldet") is not None
+    return (
+        os.path.isfile(MALDET_BIN)
+        or os.path.isfile(MALDET_INTERNAL_BIN)
+        or shutil.which("maldet") is not None
+    )
 
 
 def is_rkhunter_installed() -> bool:
@@ -59,36 +72,56 @@ def install_maldet(log) -> None:
     log("Updating package lists…")
     run(["apt-get", "update", "-qq"], check=True)
 
+    # Ensure /usr/local/sbin exists
+    try:
+        Path("/usr/local/sbin").mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
     # maldet is not in apt — install from rfxn.com tarball
     log("Downloading LMD installer from rfxn.com…")
     tmp_dir = Path("/tmp/maldet-install")
-    tmp_dir.mkdir(exist_ok=True)
-    tarball = tmp_dir / "maldetect-current.tar.gz"
+    if tmp_dir.exists():
+        shutil.rmtree(str(tmp_dir), ignore_errors=True)
+    tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    res = run(
-        ["curl", "-fsSL", "-o", str(tarball),
-         "https://www.rfxn.com/downloads/maldetect-current.tar.gz"],
-        check=False,
-    )
-    if res.returncode != 0:
-        raise RuntimeError(f"Download failed: {res.stderr}")
+    try:
+        tarball = tmp_dir / "maldetect-current.tar.gz"
 
-    log("Extracting…")
-    run(["tar", "-xzf", str(tarball), "-C", str(tmp_dir)], check=True)
+        res = run(
+            ["curl", "-fsSL", "-o", str(tarball),
+             "https://www.rfxn.com/downloads/maldetect-current.tar.gz"],
+            check=False,
+        )
+        if res.returncode != 0:
+            raise RuntimeError(f"Download failed: {res.stderr}")
 
-    # Find the extracted directory
-    dirs = [d for d in tmp_dir.iterdir() if d.is_dir() and d.name.startswith("maldetect")]
-    if not dirs:
-        raise RuntimeError("Could not find extracted maldetect directory.")
-    install_dir = dirs[0]
+        log("Extracting…")
+        run(["tar", "-xzf", str(tarball), "-C", str(tmp_dir)], check=True)
 
-    log(f"Running installer from {install_dir}…")
-    res = run(["bash", str(install_dir / "install.sh")], check=False)
-    if res.returncode != 0:
-        raise RuntimeError(f"Installer failed: {res.stderr}")
+        # Find the extracted directory
+        dirs = [d for d in tmp_dir.iterdir() if d.is_dir() and d.name.startswith("maldetect")]
+        if not dirs:
+            raise RuntimeError("Could not find extracted maldetect directory.")
+        install_dir = dirs[0]
 
-    log("Cleaning up…")
-    shutil.rmtree(str(tmp_dir), ignore_errors=True)
+        log(f"Running installer from {install_dir}…")
+        # IMPORTANT: install.sh requires cwd=install_dir because it references ./files/*
+        ret = stream(["bash", "install.sh"], log, cwd=str(install_dir))
+        if ret != 0:
+            raise RuntimeError(f"Installer failed with exit code {ret}")
+    finally:
+        log("Cleaning up temporary installer files…")
+        shutil.rmtree(str(tmp_dir), ignore_errors=True)
+
+    # Ensure symlink /usr/local/sbin/maldet exists if internal binary exists
+    if os.path.isfile(MALDET_INTERNAL_BIN) and not os.path.isfile(MALDET_BIN):
+        try:
+            if os.path.islink(MALDET_BIN):
+                os.unlink(MALDET_BIN)
+            os.symlink(MALDET_INTERNAL_BIN, MALDET_BIN)
+        except Exception as exc:
+            log(f"Warning: could not create symlink {MALDET_BIN}: {exc}")
 
     if not is_maldet_installed():
         raise RuntimeError("Installation appeared to succeed but maldet binary not found.")
@@ -105,17 +138,17 @@ def install_rkhunter(log) -> None:
     run(["apt-get", "update", "-qq"], check=True)
 
     log("Installing rkhunter…")
-    res = run(
+    ret = stream(
         ["apt-get", "install", "-y", "rkhunter"],
-        check=False,
+        log,
         env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"},
     )
-    if res.returncode != 0:
-        raise RuntimeError(f"apt install rkhunter failed: {res.stderr}")
+    if ret != 0:
+        raise RuntimeError(f"apt install rkhunter failed with exit code {ret}")
 
     log("Updating rkhunter data files…")
-    run(["rkhunter", "--update", "--nocolors"], check=False)
-    run(["rkhunter", "--propupd", "--nocolors"], check=False)
+    stream(["rkhunter", "--update", "--nocolors"], log)
+    stream(["rkhunter", "--propupd", "--nocolors"], log)
 
     if not is_rkhunter_installed():
         raise RuntimeError("Installation appeared to succeed but rkhunter binary not found.")
@@ -141,12 +174,15 @@ def run_maldet_scan(path: str, log) -> dict[str, Any]:
         raise RuntimeError("maldet is not installed.")
 
     log(f"Starting maldet scan on {path} …")
-    res = run([MALDET_BIN, "-a", path], check=False)
+    bin_path = get_maldet_bin()
+    output_lines: list[str] = []
 
-    output = (res.stdout or "") + (res.stderr or "")
-    for line in output.splitlines():
+    def on_line(line: str) -> None:
+        output_lines.append(line)
         log(line)
 
+    stream([bin_path, "-a", path], on_line)
+    output = "\n".join(output_lines)
     return _parse_maldet_output(output, path)
 
 
@@ -259,7 +295,8 @@ def quarantine_file(file_path: str, log) -> None:
         raise ValueError(f"File not found: {file_path}")
 
     log(f"Quarantining {file_path}…")
-    res = run([MALDET_BIN, "-q", file_path], check=False)
+    bin_path = get_maldet_bin()
+    res = run([bin_path, "-q", file_path], check=False)
     output = (res.stdout or "") + (res.stderr or "")
     for line in output.splitlines():
         log(line)
@@ -306,7 +343,8 @@ def restore_quarantine(filename: str, log) -> None:
         raise ValueError(f"Quarantined file not found: {filename}")
 
     log(f"Restoring {filename} from quarantine…")
-    res = run([MALDET_BIN, "--restore", str(qpath)], check=False)
+    bin_path = get_maldet_bin()
+    res = run([bin_path, "--restore", str(qpath)], check=False)
     output = (res.stdout or "") + (res.stderr or "")
     for line in output.splitlines():
         log(line)
@@ -343,18 +381,20 @@ def run_rkhunter_scan(log) -> dict[str, Any]:
         raise RuntimeError("rkhunter is not installed.")
 
     log("Updating rkhunter data files…")
-    run(["rkhunter", "--update", "--nocolors"], check=False)
+    stream(["rkhunter", "--update", "--nocolors"], log)
 
     log("Running rkhunter system check…")
-    res = run(
-        ["rkhunter", "--check", "--skip-keypress", "--nocolors", "--report-warnings-only"],
-        check=False,
-    )
+    output_lines: list[str] = []
 
-    output = (res.stdout or "") + (res.stderr or "")
-    for line in output.splitlines():
+    def on_line(line: str) -> None:
+        output_lines.append(line)
         log(line)
 
+    stream(
+        ["rkhunter", "--check", "--skip-keypress", "--nocolors", "--report-warnings-only"],
+        on_line,
+    )
+    output = "\n".join(output_lines)
     return _parse_rkhunter_output(output)
 
 
