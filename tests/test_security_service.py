@@ -255,18 +255,19 @@ def test_get_maldet_scan_history_parses_session_files(tmp_path):
     sess_file = tmp_path / "session.260916-0810.1234"
     sess_file.write_text(
         "SCAN ID: 260916-0810.1234\n"
-        "PATH: /var/www\n"
+        "PATH: /var/www/dreame_bee1_online\n"
         "TOTAL FILES: 45\n"
         "TOTAL HITS: 1\n"
     )
     (tmp_path / "session.last").write_text("260916-0810.1234")
-    (tmp_path / "session.hits.260916-0810.1234").write_text("{HEX}shell.php : /var/www/site/shell.php\n")
+    (tmp_path / "session.hits.260916-0810.1234").write_text("{HEX}shell.php : /var/www/dreame_bee1_online/shell.php\n")
 
     with patch("app.services.security.MALDET_SESS_DIR", tmp_path):
         history = sec.get_maldet_scan_history()
 
     assert len(history) == 1
     assert history[0]["scan_id"] == "260916-0810.1234"
+    assert history[0]["path"] == "/var/www/dreame_bee1_online"
     assert history[0]["total_files"] == 45
     assert history[0]["hits"] == 1
 

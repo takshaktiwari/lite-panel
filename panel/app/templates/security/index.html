@@ -99,7 +99,7 @@
         {% for s in scan_history %}
         <tr>
           <td><code>{{ s.scan_id }}</code></td>
-          <td class="muted"><code>/var/www</code></td>
+          <td class="muted"><code>{{ s.path or '/var/www' }}</code></td>
           <td style="white-space:nowrap;">{{ s.scanned_at[:16].replace('T',' ') }} UTC</td>
           <td>
             {% if s.hits > 0 %}

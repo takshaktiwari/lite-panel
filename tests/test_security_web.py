@@ -74,8 +74,8 @@ def test_security_page_loads_installed(signed_in: TestClient):
 def test_security_page_shows_scan_history(signed_in: TestClient):
     """Scan history table rendered when history is available."""
     history = [
-        {"scan_id": "abc123", "scanned_at": "2026-09-15T10:00:00", "hits": 2},
-        {"scan_id": "def456", "scanned_at": "2026-09-14T08:00:00", "hits": 0},
+        {"scan_id": "abc123", "path": "/var/www/site_a", "scanned_at": "2026-09-15T10:00:00", "hits": 2},
+        {"scan_id": "def456", "path": "/var/www/site_b", "scanned_at": "2026-09-14T08:00:00", "hits": 0},
     ]
     with patch("app.services.security.is_maldet_installed", return_value=True), \
          patch("app.services.security.is_rkhunter_installed", return_value=False), \
@@ -87,6 +87,8 @@ def test_security_page_shows_scan_history(signed_in: TestClient):
     assert response.status_code == 200
     assert "abc123" in response.text
     assert "def456" in response.text
+    assert "/var/www/site_a" in response.text
+    assert "/var/www/site_b" in response.text
 
 
 def test_security_page_shows_quarantine(signed_in: TestClient):

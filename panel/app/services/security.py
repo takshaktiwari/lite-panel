@@ -358,24 +358,38 @@ def get_maldet_scan_history() -> list[dict]:
         path_scanned = "/var/www"
         total_files = 0
         hits_count = 0
-
         try:
             content = f.read_text(errors="replace")
             for line in content.splitlines():
-                if line.startswith("SCAN ID:"):
-                    sid = line.split("SCAN ID:", 1)[1].strip()
+                line_str = line.strip()
+                if line_str.startswith("SCAN ID:"):
+                    sid = line_str.split("SCAN ID:", 1)[1].strip()
                     if sid:
                         scan_id = sid
-                elif line.startswith("PATH:"):
-                    path_scanned = line.split("PATH:", 1)[1].strip()
-                elif line.startswith("TOTAL FILES:"):
+                elif line_str.startswith("PATH:"):
+                    val = line_str.split("PATH:", 1)[1].strip()
+                    if val:
+                        path_scanned = val
+                elif line_str.startswith("SCAN PATH:"):
+                    val = line_str.split("SCAN PATH:", 1)[1].strip()
+                    if val:
+                        path_scanned = val
+                elif "scanning path:" in line_str.lower():
+                    parts = re.split(r"scanning path:\s*", line_str, flags=re.IGNORECASE)
+                    if len(parts) > 1 and parts[1].strip():
+                        path_scanned = parts[1].strip()
+                elif "scan_path=" in line_str.lower():
+                    val = line_str.split("=", 1)[1].strip().strip('"').strip("'")
+                    if val:
+                        path_scanned = val
+                elif line_str.startswith("TOTAL FILES:"):
                     try:
-                        total_files = int(line.split("TOTAL FILES:", 1)[1].strip())
+                        total_files = int(line_str.split("TOTAL FILES:", 1)[1].strip())
                     except Exception:
                         pass
-                elif line.startswith("TOTAL HITS:"):
+                elif line_str.startswith("TOTAL HITS:"):
                     try:
-                        hits_count = int(line.split("TOTAL HITS:", 1)[1].strip())
+                        hits_count = int(line_str.split("TOTAL HITS:", 1)[1].strip())
                     except Exception:
                         pass
         except Exception as exc:
