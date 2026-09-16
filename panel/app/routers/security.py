@@ -6,7 +6,7 @@ import logging
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy.orm import Session as OrmSession
 
 from app.database import get_session
@@ -101,15 +101,20 @@ def maldet_report(
 ):
     try:
         report = security_service.get_maldet_report(scan_id)
+        if "application/json" in request.headers.get("accept", ""):
+            return JSONResponse(report)
+        raw = report.get("raw") or ""
+        if not raw:
+            raw = f"SCAN ID: {scan_id}\nTOTAL HITS: {report.get('hits', 0)}\n\n"
+            if report.get("hit_list"):
+                raw += "FILE HIT LIST:\n"
+                for hit in report.get("hit_list", []):
+                    raw += f"  [{hit.get('severity', 'high').upper()}] {hit.get('threat')} : {hit.get('path')}\n"
+            else:
+                raw += "No malware hits detected in this scan.\n"
+        return PlainTextResponse(raw)
     except Exception as exc:
-        return render(
-            request,
-            "security/index.html",
-            session=session,
-            user=session.user,
-            error=str(exc),
-        )
-    return JSONResponse(report)
+        return PlainTextResponse(f"Error reading scan report: {exc}", status_code=500)
 
 
 @router.post("/maldet/quarantine", dependencies=[Depends(csrf_protect)])

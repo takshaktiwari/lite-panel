@@ -209,7 +209,8 @@ def test_delete_quarantine_file_raises_when_not_found(tmp_path):
 
 
 def test_get_maldet_scan_history_empty_when_dir_missing():
-    with patch("app.services.security.MALDET_TMP_DIR", Path("/nonexistent")):
+    with patch("app.services.security.MALDET_SESS_DIR", Path("/nonexistent")), \
+         patch("app.services.security.MALDET_TMP_DIR", Path("/nonexistent")):
         assert sec.get_maldet_scan_history() == []
 
 
@@ -218,13 +219,34 @@ def test_get_maldet_scan_history_lists_reports(tmp_path):
     (tmp_path / "report.def456").write_text("another report")
     (tmp_path / "other_file").write_text("ignored")
 
-    with patch("app.services.security.MALDET_TMP_DIR", tmp_path):
+    with patch("app.services.security.MALDET_SESS_DIR", Path("/nonexistent")), \
+         patch("app.services.security.MALDET_TMP_DIR", tmp_path):
         history = sec.get_maldet_scan_history()
 
     scan_ids = {r["scan_id"] for r in history}
     assert "abc123" in scan_ids
     assert "def456" in scan_ids
     assert len(history) == 2
+
+
+def test_get_maldet_scan_history_parses_session_files(tmp_path):
+    sess_file = tmp_path / "session.260916-0810.1234"
+    sess_file.write_text(
+        "SCAN ID: 260916-0810.1234\n"
+        "PATH: /var/www\n"
+        "TOTAL FILES: 45\n"
+        "TOTAL HITS: 1\n"
+    )
+    (tmp_path / "session.last").write_text("260916-0810.1234")
+    (tmp_path / "session.hits.260916-0810.1234").write_text("{HEX}shell.php : /var/www/site/shell.php\n")
+
+    with patch("app.services.security.MALDET_SESS_DIR", tmp_path):
+        history = sec.get_maldet_scan_history()
+
+    assert len(history) == 1
+    assert history[0]["scan_id"] == "260916-0810.1234"
+    assert history[0]["total_files"] == 45
+    assert history[0]["hits"] == 1
 
 
 # ---------------------------------------------------------------------------

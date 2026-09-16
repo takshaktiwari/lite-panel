@@ -26,7 +26,9 @@ MALDET_BIN = "/usr/local/sbin/maldet"
 MALDET_INTERNAL_BIN = "/usr/local/maldetect/maldet"
 RKHUNTER_BIN = "/usr/bin/rkhunter"
 MALDET_QUARANTINE_DIR = Path("/usr/local/maldetect/quarantine")
+MALDET_SESS_DIR = Path("/usr/local/maldetect/sess")
 MALDET_TMP_DIR = Path("/usr/local/maldetect/tmp")
+MALDET_LAST_SCAN = Path("/usr/local/maldetect/sess/session.last")
 RKHUNTER_LOG = Path("/var/log/rkhunter.log")
 SITES_DIR = "/var/www"
 
@@ -191,92 +193,223 @@ def _parse_maldet_output(output: str, path: str) -> dict[str, Any]:
     hits: list[dict] = []
     scan_id = ""
     total_files = 0
+    total_hits = 0
 
     for line in output.splitlines():
-        # Scan ID line: "maldet(12345): {scan} scanning path: /var/www"
+        # Scan ID: "scan report saved, to view run: maldet --report 260916-0810.12345"
+        m = re.search(r"maldet\s+--report\s+([0-9a-zA-Z._-]+)", line)
+        if m and not scan_id:
+            scan_id = m.group(1).strip()
+
+        # Scan ID: "SCAN ID: 260916-0810.12345"
+        m = re.search(r"SCAN ID:\s*([0-9a-zA-Z._-]+)", line, re.IGNORECASE)
+        if m and not scan_id:
+            scan_id = m.group(1).strip()
+
+        # Scan ID: "maldet(12345): {scan}"
         m = re.search(r"maldet\((\d+)\)", line)
         if m and not scan_id:
-            scan_id = m.group(1)
+            scan_id = m.group(1).strip()
 
-        # Total files scanned
-        m = re.search(r"total files scanned:\s*(\d+)", line, re.IGNORECASE)
+        # Summary line: "scan completed on /var/www: files 123, malware hits 2, cleaned hits 0"
+        m = re.search(r"files\s+(\d+),\s*malware\s+hits\s+(\d+)", line, re.IGNORECASE)
         if m:
             total_files = int(m.group(1))
+            total_hits = int(m.group(2))
 
-        # Hit line format: "THREAT: <name> : <filepath>"
+        # Total files fallback: "total files scanned: 1234"
+        m = re.search(r"total files (?:scanned)?:\s*(\d+)", line, re.IGNORECASE)
+        if m and total_files == 0:
+            total_files = int(m.group(1))
+
+        # Total hits fallback: "total hits found: 0"
+        m = re.search(r"total hits (?:found)?:\s*(\d+)", line, re.IGNORECASE)
+        if m and total_hits == 0:
+            total_hits = int(m.group(1))
+
+        # Hit line format: "ALERT: <name> : <filepath>"
         m = re.match(r"^\{?\s*ALERT\s*\}?.*?:\s*(.+?)\s*:\s*(.+)$", line, re.IGNORECASE)
         if m:
             hits.append({"threat": m.group(1).strip(), "path": m.group(2).strip(), "severity": "high"})
 
-    # Also try to read the maldet report file for hits if stdout parsing found none
+    # If scan_id was not in stdout, read session.last
+    if not scan_id and MALDET_LAST_SCAN.exists():
+        try:
+            scan_id = MALDET_LAST_SCAN.read_text().strip()
+        except Exception:
+            pass
+
+    # Read maldet report file for hits if stdout parsing found none
     if not hits and scan_id:
         hits = _read_maldet_report_hits(scan_id)
+
+    if total_hits > len(hits) and scan_id:
+        extra_hits = _read_maldet_report_hits(scan_id)
+        if extra_hits:
+            hits = extra_hits
 
     return {
         "path": path,
         "scan_id": scan_id,
         "total_files": total_files,
-        "hits": len(hits),
+        "hits": len(hits) if hits else total_hits,
         "hit_list": hits,
         "scanned_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
 def _read_maldet_report_hits(scan_id: str) -> list[dict]:
-    """Read hits from maldet's report file for a given scan_id."""
+    """Read hits from maldet's session file or hits file for a given scan_id."""
     hits = []
-    report_path = MALDET_TMP_DIR / f"report.{scan_id}"
-    if not report_path.exists():
-        # Try glob for partial match
-        candidates = list(MALDET_TMP_DIR.glob(f"*{scan_id}*")) if MALDET_TMP_DIR.exists() else []
-        if not candidates:
-            return hits
-        report_path = candidates[0]
-
-    try:
-        text = report_path.read_text(errors="replace")
-        for line in text.splitlines():
-            # Lines look like: "THREAT: hex.php.base64.1234 : /var/www/site/shell.php"
-            m = re.match(r"^\s*(.+?)\s*:\s*(/.+)$", line)
-            if m and "/" in m.group(2):
+    # 1. Check session.hits.<scan_id>
+    hits_file = MALDET_SESS_DIR / f"session.hits.{scan_id}"
+    if hits_file.exists():
+        for line in hits_file.read_text(errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            m = re.match(r"^\{?(.*?)\}?\s*:\s*(/.+)$", line)
+            if m:
                 hits.append({
                     "threat": m.group(1).strip(),
                     "path": m.group(2).strip(),
                     "severity": "high",
                 })
-    except Exception as exc:
-        logger.warning("Could not read maldet report %s: %s", report_path, exc)
+        if hits:
+            return hits
+
+    # 2. Check session.<scan_id> in MALDET_SESS_DIR and fallback to MALDET_TMP_DIR
+    candidates = []
+    if MALDET_SESS_DIR.exists():
+        candidates.extend(MALDET_SESS_DIR.glob(f"session.*{scan_id}*"))
+    if MALDET_TMP_DIR.exists():
+        candidates.extend(MALDET_TMP_DIR.glob(f"*{scan_id}*"))
+
+    for report_path in candidates:
+        try:
+            text = report_path.read_text(errors="replace")
+            in_hit_list = False
+            for line in text.splitlines():
+                if "FILE HIT LIST:" in line:
+                    in_hit_list = True
+                    continue
+                if in_hit_list:
+                    if line.startswith("===") or "Linux Malware Detect" in line:
+                        break
+                    line = line.strip()
+                    if not line:
+                        continue
+                    m = re.match(r"^\s*\{?(.*?)\}?\s*:\s*(/.+)$", line)
+                    if m and "/" in m.group(2):
+                        hits.append({
+                            "threat": m.group(1).strip(),
+                            "path": m.group(2).strip(),
+                            "severity": "high",
+                        })
+                else:
+                    m = re.match(r"^\s*\{?(.*?)\}?\s*:\s*(/.+)$", line)
+                    if m and "/" in m.group(2) and not line.startswith("PATH:") and not line.startswith("HOST:"):
+                        hits.append({
+                            "threat": m.group(1).strip(),
+                            "path": m.group(2).strip(),
+                            "severity": "high",
+                        })
+            if hits:
+                break
+        except Exception as exc:
+            logger.warning("Could not read maldet report %s: %s", report_path, exc)
 
     return hits
 
 
 def get_maldet_scan_history() -> list[dict]:
     """List recent maldet scan report IDs and metadata."""
-    if not MALDET_TMP_DIR.exists():
+    candidates = []
+
+    # Check MALDET_SESS_DIR (/usr/local/maldetect/sess/)
+    if MALDET_SESS_DIR.exists():
+        for f in MALDET_SESS_DIR.iterdir():
+            if f.is_file() and f.name.startswith("session."):
+                suffix = f.name[len("session."):]
+                if suffix in ("last", "monitor.current") or suffix.startswith(("hits.", "clean.", "suspend.", "monitor.")):
+                    continue
+                candidates.append(f)
+
+    # Check MALDET_TMP_DIR (/usr/local/maldetect/tmp/) as fallback
+    if MALDET_TMP_DIR.exists():
+        for f in MALDET_TMP_DIR.iterdir():
+            if f.is_file() and f.name.startswith("report."):
+                candidates.append(f)
+
+    if not candidates:
         return []
 
     reports = []
-    for f in sorted(MALDET_TMP_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-        if f.name.startswith("report."):
-            scan_id = f.name[len("report."):]
-            mtime = datetime.fromtimestamp(f.stat().st_mtime, timezone.utc)
-            hits = len(_read_maldet_report_hits(scan_id))
-            reports.append({
-                "scan_id": scan_id,
-                "scanned_at": mtime.isoformat(),
-                "hits": hits,
-            })
-        if len(reports) >= 10:
+    for f in sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True):
+        mtime = datetime.fromtimestamp(f.stat().st_mtime, timezone.utc)
+        scan_id = f.name.split(".", 1)[1] if "." in f.name else f.name
+        path_scanned = "/var/www"
+        total_files = 0
+        hits_count = 0
+
+        try:
+            content = f.read_text(errors="replace")
+            for line in content.splitlines():
+                if line.startswith("SCAN ID:"):
+                    sid = line.split("SCAN ID:", 1)[1].strip()
+                    if sid:
+                        scan_id = sid
+                elif line.startswith("PATH:"):
+                    path_scanned = line.split("PATH:", 1)[1].strip()
+                elif line.startswith("TOTAL FILES:"):
+                    try:
+                        total_files = int(line.split("TOTAL FILES:", 1)[1].strip())
+                    except Exception:
+                        pass
+                elif line.startswith("TOTAL HITS:"):
+                    try:
+                        hits_count = int(line.split("TOTAL HITS:", 1)[1].strip())
+                    except Exception:
+                        pass
+        except Exception as exc:
+            logger.warning("Could not parse maldet session file %s: %s", f, exc)
+
+        if hits_count == 0:
+            hits_count = len(_read_maldet_report_hits(scan_id))
+
+        reports.append({
+            "scan_id": scan_id,
+            "path": path_scanned,
+            "total_files": total_files,
+            "scanned_at": mtime.isoformat(),
+            "hits": hits_count,
+        })
+        if len(reports) >= 15:
             break
 
     return reports
 
 
 def get_maldet_report(scan_id: str) -> dict[str, Any]:
-    """Return parsed hits for a specific scan_id."""
+    """Return report details for a specific scan_id."""
+    raw_text = ""
+    sess_file = MALDET_SESS_DIR / f"session.{scan_id}"
+    if sess_file.exists():
+        raw_text = sess_file.read_text(errors="replace")
+    elif MALDET_SESS_DIR.exists():
+        for cand in MALDET_SESS_DIR.glob(f"session.*{scan_id}*"):
+            raw_text = cand.read_text(errors="replace")
+            break
+
+    if not raw_text and MALDET_TMP_DIR.exists():
+        for cand in MALDET_TMP_DIR.glob(f"*{scan_id}*"):
+            raw_text = cand.read_text(errors="replace")
+            break
+
     hits = _read_maldet_report_hits(scan_id)
     return {
         "scan_id": scan_id,
+        "raw": raw_text,
         "hits": len(hits),
         "hit_list": hits,
     }
