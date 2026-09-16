@@ -306,3 +306,127 @@ tests/                 — 163 tests, all pure-Python/HTTP-client, no server req
   (which returns the private AWS IP on EC2 instances)
 - Push repo to GitHub (`git push` currently fails — no SSH key configured in
   the dev environment; use HTTPS token or push from a different machine)
+- PHP-FPM config per site — memory limit, max execution time, upload size
+  overrides per site (not just global); devs hit this for Laravel/WordPress
+
+---
+
+## Planned Feature: Email Module (not started)
+
+Full self-hosted email hosting, comparable to what cPanel provides under the hood.
+
+### Goal
+Allow users to create domain mailboxes (`info@example.com`), read email via
+webmail (Roundcube), and have PHP sites send mail through the local mail server.
+
+### Stack
+| Component     | Software       | Purpose                                        |
+|---------------|----------------|------------------------------------------------|
+| MTA           | Postfix        | Send & receive email                           |
+| IMAP/POP3     | Dovecot        | Store mailboxes, let mail clients connect      |
+| Webmail       | Roundcube      | Browser UI to read/send email                  |
+| DKIM signing  | OpenDKIM       | Cryptographic signing of outgoing mail         |
+| Spam filter   | Rspamd         | Block incoming spam (lighter than SpamAssassin)|
+| SSL for mail  | Let's Encrypt  | Secure IMAP/SMTP/Webmail connections           |
+
+### What LitePanel builds
+
+**Server-level (one-time install — user opt-in, not automatic):**
+- Install Postfix + Dovecot + OpenDKIM + Rspamd + Roundcube via install script
+- Postfix configured in `virtual_mailbox` mode (multi-domain)
+- Dovecot for IMAP + Submission (port 587 + STARTTLS)
+- Wire msmtp/sendmail so `PHP mail()` routes through local Postfix automatically
+
+**Per-domain setup (UI):**
+- Auto-generate DKIM keypair per domain when email is enabled for that domain
+- Show exact DNS records to add (copy-paste ready):
+  - `MX` → points to the server
+  - `SPF` TXT → `v=spf1 ip4:<server-ip> ~all`
+  - `DKIM` TXT → generated public key
+  - `DMARC` TXT → `v=DMARC1; p=quarantine; rua=mailto:postmaster@domain.com`
+- DNS verification checker (confirms records are live before letting user proceed)
+
+**Mailbox management UI:**
+- Create / delete / list mailboxes per domain
+- Set mailbox password and quota
+- Link to Roundcube webmail per domain
+
+**Diagnostics:**
+- "Send Test Email" form → sends via local Postfix → shows live result
+- Mail log viewer (filtered per domain, from `/var/log/mail.log`)
+
+### DNS Records Reference
+
+```
+MX:     @  →  mail.yourdomain.com  (priority 10)
+SPF:    @  →  "v=spf1 ip4:<your-server-ip> ~all"
+DKIM:   mail._domainkey  →  "v=DKIM1; k=rsa; p=<generated-public-key>"
+DMARC:  _dmarc  →  "v=DMARC1; p=quarantine; rua=mailto:postmaster@yourdomain.com"
+```
+
+### IP Reputation — unavoidable one-time step (same for cPanel/Plesk)
+1. Open ticket with VPS provider to unblock outbound port 25
+2. Add DNS records above
+3. Check server IP on MXToolbox blacklist — request delisting if listed
+4. Send legitimate mail for 1–2 weeks → IP reputation builds naturally
+
+### Implementation Phases
+- **Phase A** — Core: Postfix + Dovecot + OpenDKIM install, SMTP settings in
+  panel, Send Test Email, msmtp config so PHP mail() works
+- **Phase B** — Mailbox UI: create/delete mailboxes, DNS record display +
+  verification checker
+- **Phase C** — Webmail + extras: Roundcube, Rspamd, mail log viewer,
+  per-site SMTP override
+
+### Key paths on server
+- Mailboxes: `/var/mail/vhosts/<domain>/<user>/`
+- DKIM keys: `/etc/opendkim/keys/<domain>/`
+- Roundcube config points to Dovecot on localhost IMAP
+
+---
+
+## Planned Feature: Security / Malware Scanner (not started)
+
+Optional, user-enabled malware and rootkit scanning for hosted sites.
+**Not installed automatically** — user explicitly enables it from the panel.
+
+### Tools
+
+| Tool    | Type              | Purpose                                              | Weight   |
+|---------|-------------------|------------------------------------------------------|----------|
+| **LMD** (Linux Malware Detect / Maldet) | Web malware | PHP web shells, backdoors, injected JS/malware — purpose-built for shared hosting | Light — no daemon, runs on demand |
+| **rkhunter** | OS-level rootkits | Suspicious binaries, SUID files, hidden processes   | Light — periodic scans only |
+
+ClamAV was considered but rejected: too RAM-heavy (300–500 MB daemon) and
+not specialized enough for PHP web malware. LMD can optionally use ClamAV
+as its scan engine but does not require it.
+
+### What LitePanel builds
+
+```
+Security → Malware Scanner
+├── [Install Maldet] button  (only shown if not installed)
+├── Scan all sites           (/var/www/)
+├── Scan specific site       (/var/www/example.com/)
+├── Schedule auto-scan       (daily / weekly, time picker)
+├── View scan results        (list of suspicious files + severity)
+└── Actions per file         (Quarantine / Delete / Whitelist)
+
+Security → Rootkit Scanner
+├── [Install rkhunter] button
+├── Run scan now
+└── View results
+```
+
+**Quarantine** = move file to `/var/quarantine/` (recoverable, safe default).
+**Delete** = permanent; requires explicit confirmation in UI.
+
+### Resource usage
+- Idle: ~0 MB RAM, 0% CPU (no daemon)
+- During scan of 10 GB: ~50 MB RAM, 10–30% CPU
+- After scan: returns to ~0 MB / 0%
+
+### Implementation note
+`maldet -a /var/www/` for all sites; `maldet -a /var/www/<domain>/` for a
+single site. Results parsed from LMD's report output and displayed in panel UI.
+

@@ -23,6 +23,7 @@ from app.services import ftp as ftp_service
 from app.services import renderer
 from app.services import sites as sites_service
 from app.services import backup as backup_service
+from app.services import security as security_service
 from app.validators import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -647,3 +648,93 @@ def create_site_backup(ctx) -> None:
             ctx.log(f"Warning: backup retention cleanup encountered an error: {exc}")
 
 
+# --------------------------------------------------------------------------
+# Security — Maldet
+# --------------------------------------------------------------------------
+
+
+@register("security.maldet_install")
+def maldet_install(ctx) -> None:
+    """Install LMD (Linux Malware Detect / maldet)."""
+    try:
+        security_service.install_maldet(ctx.log)
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc
+
+
+@register("security.maldet_scan")
+def maldet_scan(ctx) -> None:
+    """Run a maldet scan on the given path."""
+    path = ctx.payload.get("path", "/var/www")
+    try:
+        result = security_service.run_maldet_scan(path, ctx.log)
+        ctx.log(f"\nScan complete. Files scanned: {result['total_files']}. Threats found: {result['hits']}.")
+        if result["hits"] > 0:
+            ctx.log("\nThreats detected:")
+            for hit in result["hit_list"]:
+                ctx.log(f"  [{hit['severity'].upper()}] {hit['threat']} — {hit['path']}")
+        else:
+            ctx.log("No threats detected. Server is clean.")
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc
+
+
+@register("security.maldet_quarantine")
+def maldet_quarantine(ctx) -> None:
+    """Quarantine a flagged file using maldet."""
+    file_path = ctx.payload["file_path"]
+    try:
+        security_service.quarantine_file(file_path, ctx.log)
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc
+
+
+@register("security.maldet_delete")
+def maldet_delete(ctx) -> None:
+    """Permanently delete a flagged file."""
+    file_path = ctx.payload["file_path"]
+    try:
+        security_service.delete_file(file_path)
+        ctx.log(f"Deleted: {file_path}")
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc
+
+
+@register("security.maldet_restore")
+def maldet_restore(ctx) -> None:
+    """Restore a quarantined file."""
+    filename = ctx.payload["filename"]
+    try:
+        security_service.restore_quarantine(filename, ctx.log)
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc
+
+
+# --------------------------------------------------------------------------
+# Security — rkhunter
+# --------------------------------------------------------------------------
+
+
+@register("security.rkhunter_install")
+def rkhunter_install(ctx) -> None:
+    """Install rkhunter via apt."""
+    try:
+        security_service.install_rkhunter(ctx.log)
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc
+
+
+@register("security.rkhunter_scan")
+def rkhunter_scan(ctx) -> None:
+    """Run rkhunter system check."""
+    try:
+        result = security_service.run_rkhunter_scan(ctx.log)
+        ctx.log(f"\nScan complete. Warnings found: {result['warnings']}.")
+        if result["warnings"] > 0:
+            ctx.log("\nWarnings:")
+            for w in result["warning_list"]:
+                ctx.log(f"  [{w['severity'].upper()}] {w['message']}")
+        else:
+            ctx.log("No rootkit warnings detected. System appears clean.")
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc
