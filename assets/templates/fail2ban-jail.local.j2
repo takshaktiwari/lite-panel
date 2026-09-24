@@ -6,8 +6,9 @@
 [DEFAULT]
 # Never banned. Localhost is always here so the server cannot ban itself.
 ignoreip = {{ ignoreip | join(" ") }}
-banaction = {{ banaction }}
-banaction_allports = {{ banaction_allports }}
+# banaction is deliberately not set: the distribution's packaged choice
+# (iptables or nftables) stands, so installing never swaps the action of a
+# running jail. Either way bans live in fail2ban's own chains, not UFW's.
 {% if settings.increment_enabled %}
 # Growing bans: each repeat ban for the same IP doubles, capped at maxtime.
 bantime.increment = true

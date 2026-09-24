@@ -58,6 +58,20 @@
   </div>
 </div>
 
+{% if status.broken_jails %}
+<div class="alert alert-error" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+  <div>
+    <strong>fail2ban is detecting attacks but not blocking them.</strong>
+    These jails have no blocking action: <code>{{ status.broken_jails|join(', ') }}</code>.
+    Repair restarts fail2ban; existing bans are restored.
+  </div>
+  <form method="post" action="/fail2ban/repair" style="margin:0;">
+    {{ ui.csrf(session) }}
+    <button type="submit" class="button primary" id="btn-repair-fail2ban">Repair</button>
+  </form>
+</div>
+{% endif %}
+
 {% if ssh.password_auth %}
 <div class="alert alert-notice">
   <strong>Tip:</strong> SSH still accepts passwords. Fail2ban slows attackers down, but attacks spread across many IPs each get their own attempts.

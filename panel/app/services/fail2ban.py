@@ -8,7 +8,7 @@ The panel owns three files and never touches the packaged ones:
 * ``/etc/fail2ban/filter.d/lite-panel-manual.conf`` -- the filter behind the
   jail that holds permanent bans.
 
-Every write is checked with ``fail2ban-client -t`` before fail2ban reloads, and
+Every write is checked with ``fail2ban-client -t`` before fail2ban restarts, and
 the previous files are put back if the check fails, so a bad value can never
 leave fail2ban unable to start.
 """
@@ -18,6 +18,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Optional
@@ -126,17 +127,6 @@ def detect_ssh() -> SshInfo:
     if not res.ok:
         return SshInfo()
     return parse_sshd_config_dump(res.stdout)
-
-
-def choose_banactions() -> tuple:
-    """iptables when present (it is what UFW drives), nftables otherwise.
-
-    Either way bans live in fail2ban's own chains, so they never show up as
-    clutter in the Firewall page's UFW rule list.
-    """
-    if which("iptables") or not which("nft"):
-        return "iptables-multiport", "iptables-allports"
-    return "nftables-multiport", "nftables-allports"
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +245,7 @@ def is_ignored(ip: str, entries: Iterable[str]) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def build_context(row: Fail2banSettings, ssh: SshInfo, banactions: tuple) -> dict:
+def build_context(row: Fail2banSettings, ssh: SshInfo) -> dict:
     ignoreip = list(ALWAYS_IGNORED) + [e for e in parse_ignoreip(row.ignoreip)
                                        if e not in ALWAYS_IGNORED]
     longest = row.increment_maxtime if row.increment_enabled else row.bantime
@@ -263,8 +253,6 @@ def build_context(row: Fail2banSettings, ssh: SshInfo, banactions: tuple) -> dic
         "settings": row,
         "ignoreip": ignoreip,
         "ssh_ports": ssh.ports,
-        "banaction": banactions[0],
-        "banaction_allports": banactions[1],
         # Keep history for at least a week (recidive looks back a day and
         # bans for a week) and never less than the longest ban.
         "dbpurgeage": max(longest, WEEK),
@@ -277,13 +265,16 @@ def _log(log: Optional[Callable], message: str) -> None:
         log(message)
 
 
-def apply_config(db: OrmSession, log: Optional[Callable] = None) -> None:
-    """Render the panel's files, verify them, and reload fail2ban.
+def apply_config(db: OrmSession, log: Optional[Callable] = None, *, force_restart: bool = False) -> None:
+    """Render the panel's files, verify them, and restart fail2ban if needed.
 
     On a failed check the previous files are restored and RuntimeError is
-    raised with fail2ban's own explanation.
+    raised with fail2ban's own explanation. After the restart every enabled
+    jail must have a blocking action, or RuntimeError is raised -- a jail that
+    detects attackers but blocks nothing is worse than an error.
     """
-    context = build_context(get_settings(db), detect_ssh(), choose_banactions())
+    row = get_settings(db)
+    context = build_context(row, detect_ssh())
     targets = {
         _jail_file(): "fail2ban-jail.local.j2",
         _daemon_file(): "fail2ban.local.j2",
@@ -292,8 +283,9 @@ def apply_config(db: OrmSession, log: Optional[Callable] = None) -> None:
 
     previous = {path: (path.read_text(encoding="utf-8") if path.exists() else None)
                 for path in targets}
+    changed = False
     for path, template in targets.items():
-        renderer.render_to_file(template, path, context)
+        changed |= renderer.render_to_file(template, path, context)
 
     check = run(["fail2ban-client", "-t"], check=False, timeout=60)
     if not check.ok:
@@ -305,15 +297,64 @@ def apply_config(db: OrmSession, log: Optional[Callable] = None) -> None:
         detail = (check.stderr or check.stdout).strip()[-800:]
         raise RuntimeError(f"fail2ban rejected the new configuration, previous settings kept: {detail}")
 
-    if is_running():
-        _log(log, "Reloading fail2ban…")
-        run(["fail2ban-client", "reload"], check=True, timeout=60)
-    else:
-        _log(log, "Starting fail2ban…")
+    # A full restart, never `fail2ban-client reload`: reload can leave a jail
+    # with no actions at all when its action changes (seen on Ubuntu 24.04
+    # right after install -- the jail kept "banning" while nothing was
+    # blocked). Bans survive the restart through fail2ban's own database,
+    # and permanent bans are re-applied from ours below.
+    if changed or force_restart or not is_running():
+        _log(log, "Restarting fail2ban…")
         run(["systemctl", "enable", "fail2ban"], check=False, timeout=30)
-        run(["systemctl", "restart", "fail2ban"], check=True, timeout=60)
+        run(["systemctl", "restart", "fail2ban"], check=True, timeout=90)
+        if not wait_until_running():
+            raise RuntimeError("fail2ban did not come back after restarting. "
+                               "Check `journalctl -u fail2ban` on the server.")
 
     reapply_permanent_bans(db, log)
+
+    broken = jails_without_actions(expected_jails(row))
+    if broken:
+        raise RuntimeError(f"fail2ban is running but these jails have no blocking action: "
+                           f"{', '.join(broken)}. Check /var/log/fail2ban.log on the server.")
+    _log(log, "fail2ban is active and blocking.")
+
+
+def wait_until_running(timeout: float = 30) -> bool:
+    """Poll until the daemon answers; restart returns before it's ready."""
+    deadline = time.monotonic() + timeout
+    while True:
+        if is_running():
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(1)
+
+
+def expected_jails(row: Fail2banSettings) -> list:
+    jails = [MANUAL_JAIL]
+    if row.sshd_enabled:
+        jails.insert(0, SSHD_JAIL)
+    if row.recidive_enabled:
+        jails.append(RECIDIVE_JAIL)
+    return jails
+
+
+def parse_jail_actions(output: str) -> list:
+    """Parse ``fail2ban-client get <jail> actions``."""
+    if "no actions" in output.lower():
+        return []
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    return [line for line in lines if not line.lower().startswith("the jail")]
+
+
+def jails_without_actions(jails: Iterable[str]) -> list:
+    """Jails that are missing entirely or that detect but can't block."""
+    broken = []
+    for jail in jails:
+        res = run(["fail2ban-client", "get", jail, "actions"], check=False, timeout=15)
+        if not res.ok or not parse_jail_actions(res.stdout):
+            broken.append(jail)
+    return broken
 
 
 def install(db: OrmSession, log: Callable) -> None:
@@ -431,6 +472,7 @@ def get_status() -> dict:
     running = is_running()
     status = {"running": running, "jails": {}, "bans": [],
               "total_failed": 0, "total_banned": 0}
+    status["broken_jails"] = []
     if not running:
         return status
     for jail in (SSHD_JAIL, RECIDIVE_JAIL, MANUAL_JAIL):
@@ -445,6 +487,7 @@ def get_status() -> dict:
         status["bans"].extend(bans)
         status["total_failed"] += jail_status["total_failed"]
         status["total_banned"] += jail_status["total_banned"]
+    status["broken_jails"] = jails_without_actions(status["jails"])
     return status
 
 

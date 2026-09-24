@@ -55,6 +55,7 @@ def test_page_not_installed(signed_in):
 def test_page_installed_shows_bans(signed_in):
     status = {
         "running": True, "jails": {"sshd": {}}, "total_failed": 12, "total_banned": 3,
+        "broken_jails": [],
         "bans": [
             {"ip": "198.51.100.4", "jail": "sshd", "banned_at": "2026-09-24 10:00:00",
              "expires_at": "2026-09-24 11:00:00", "permanent": False},
@@ -73,6 +74,27 @@ def test_page_installed_shows_bans(signed_in):
     assert "Permanent" in response.text
     assert "key-only login" in response.text
     assert "dlg-uninstall-fail2ban" in response.text
+    assert "Repair" not in response.text
+
+
+def test_page_warns_when_jail_cannot_block(signed_in):
+    status = {"running": True, "jails": {"sshd": {}}, "total_failed": 157, "total_banned": 1,
+              "bans": [], "broken_jails": ["sshd"]}
+    with patch.object(f2b, "is_installed", return_value=True), \
+         patch.object(f2b, "get_status", return_value=status), \
+         patch.object(f2b, "reapply_permanent_bans", return_value=0), \
+         patch.object(f2b, "detect_ssh", return_value=f2b.SshInfo(["22"], False)):
+        response = signed_in.get("/fail2ban")
+    assert "not blocking them" in response.text
+    assert 'action="/fail2ban/repair"' in response.text
+
+
+def test_repair_forces_restart(signed_in):
+    token = _csrf(signed_in)
+    with patch.object(f2b, "apply_config") as apply:
+        response = signed_in.post("/fail2ban/repair", data={"csrf_token": token})
+    assert "notice=" in response.headers["location"]
+    assert apply.call_args.kwargs == {"force_restart": True}
 
 
 def test_install_whitelists_admin_ip_and_enqueues(signed_in, db):

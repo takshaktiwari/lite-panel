@@ -164,10 +164,10 @@ def test_is_ignored():
 # ---------------------------------------------------------------------------
 
 
-def _render_jail(db, ssh=None, banactions=("iptables-multiport", "iptables-allports")):
+def _render_jail(db, ssh=None):
     from app.services import renderer
 
-    ctx = f2b.build_context(f2b.get_settings(db), ssh or f2b.SshInfo(ports=["22"]), banactions)
+    ctx = f2b.build_context(f2b.get_settings(db), ssh or f2b.SshInfo(ports=["22"]))
     return renderer.render("fail2ban-jail.local.j2", ctx), ctx
 
 
@@ -181,7 +181,9 @@ def test_jail_render_defaults(db):
     assert "maxretry = 5" in text
     assert "findtime = 600" in text
     assert "bantime = 3600" in text
-    assert "banaction = iptables-multiport" in text
+    # The distribution's banaction must stand: overriding it made a running
+    # jail swap actions on reload and end up with none.
+    assert "banaction =" not in text.split("[sshd]")[0]
     # recidive off by default, manual jail always on and permanent
     recidive = text.split("[recidive]")[1].split("[lite-panel-manual]")[0]
     assert "enabled = false" in recidive
@@ -209,19 +211,12 @@ def test_dbpurgeage_covers_longest_ban(db):
     assert ctx["dbpurgeage"] == 365 * 86400
 
 
-def test_choose_banactions_prefers_iptables():
-    with patch.object(f2b, "which", side_effect=lambda p: "/usr/sbin/" + p):
-        assert f2b.choose_banactions() == ("iptables-multiport", "iptables-allports")
-    with patch.object(f2b, "which", side_effect=lambda p: "/usr/sbin/nft" if p == "nft" else None):
-        assert f2b.choose_banactions() == ("nftables-multiport", "nftables-allports")
-
-
 # ---------------------------------------------------------------------------
 # Applying config
 # ---------------------------------------------------------------------------
 
 
-def _fake_run(test_ok=True, running=True):
+def _fake_run(test_ok=True, running=True, actions="The jail sshd has the following actions:\niptables-multiport"):
     calls = []
 
     def fake(args, **kwargs):
@@ -232,30 +227,74 @@ def _fake_run(test_ok=True, running=True):
             return _result(0 if running else 255)
         if args[:2] == ["sshd", "-T"]:
             return _result(0, "port 22\n")
+        if args[:2] == ["fail2ban-client", "get"] and args[-1] == "actions":
+            return _result(0, actions)
         return _result(0, SSHD_STATUS.replace("sshd", f2b.MANUAL_JAIL))
 
     return fake, calls
 
 
-def test_apply_config_writes_files_and_reloads(db, f2b_dir):
+RESTART = ["systemctl", "restart", "fail2ban"]
+
+
+def test_apply_config_writes_files_and_restarts(db, f2b_dir):
     fake, calls = _fake_run()
-    with patch.object(f2b, "run", side_effect=fake), \
-         patch.object(f2b, "which", return_value="/usr/sbin/iptables"):
+    with patch.object(f2b, "run", side_effect=fake):
         f2b.apply_config(db)
 
     assert (f2b_dir / "jail.d" / "lite-panel.local").exists()
     assert (f2b_dir / "fail2ban.d" / "lite-panel.local").read_text().count("dbpurgeage = 604800") == 1
     assert (f2b_dir / "filter.d" / "lite-panel-manual.conf").exists()
-    assert ["fail2ban-client", "reload"] in calls
-
-
-def test_apply_config_starts_service_when_stopped(db, f2b_dir):
-    fake, calls = _fake_run(running=False)
-    with patch.object(f2b, "run", side_effect=fake), \
-         patch.object(f2b, "which", return_value="/usr/sbin/iptables"):
-        f2b.apply_config(db)
-    assert ["systemctl", "restart", "fail2ban"] in calls
+    assert RESTART in calls
+    # reload is what left the live jail with no actions; never use it.
     assert ["fail2ban-client", "reload"] not in calls
+    assert ["fail2ban-client", "get", "sshd", "actions"] in calls
+    assert ["fail2ban-client", "get", f2b.MANUAL_JAIL, "actions"] in calls
+
+
+def test_apply_config_skips_restart_when_nothing_changed(db, f2b_dir):
+    fake, calls = _fake_run()
+    with patch.object(f2b, "run", side_effect=fake):
+        f2b.apply_config(db)
+        calls.clear()
+        f2b.apply_config(db)
+    assert RESTART not in calls
+
+
+def test_apply_config_force_restart(db, f2b_dir):
+    fake, calls = _fake_run()
+    with patch.object(f2b, "run", side_effect=fake):
+        f2b.apply_config(db)
+        calls.clear()
+        f2b.apply_config(db, force_restart=True)
+    assert RESTART in calls
+
+
+def test_apply_config_fails_when_jail_has_no_actions(db, f2b_dir):
+    fake, _ = _fake_run(actions="No actions for jail sshd")
+    with patch.object(f2b, "run", side_effect=fake), \
+         pytest.raises(RuntimeError, match="no blocking action"):
+        f2b.apply_config(db)
+
+
+def test_apply_config_fails_when_daemon_never_comes_back(db, f2b_dir):
+    fake, _ = _fake_run(running=False)
+    with patch.object(f2b, "run", side_effect=fake), \
+         patch.object(f2b.time, "sleep"), \
+         patch.object(f2b.time, "monotonic", side_effect=[0, 0, 100]), \
+         pytest.raises(RuntimeError, match="did not come back"):
+        f2b.apply_config(db)
+
+
+def test_expected_jails(db):
+    assert f2b.expected_jails(f2b.get_settings(db)) == ["sshd", f2b.MANUAL_JAIL]
+    row = _update(db, sshd_enabled=False, recidive_enabled=True)
+    assert f2b.expected_jails(row) == [f2b.MANUAL_JAIL, "recidive"]
+
+
+def test_parse_jail_actions():
+    assert f2b.parse_jail_actions("The jail sshd has the following actions:\nnftables") == ["nftables"]
+    assert f2b.parse_jail_actions("No actions for jail sshd") == []
 
 
 def test_apply_config_rolls_back_on_failed_check(db, f2b_dir):
@@ -265,14 +304,13 @@ def test_apply_config_rolls_back_on_failed_check(db, f2b_dir):
 
     fake, calls = _fake_run(test_ok=False)
     with patch.object(f2b, "run", side_effect=fake), \
-         patch.object(f2b, "which", return_value="/usr/sbin/iptables"), \
          pytest.raises(RuntimeError, match="bad option"):
         f2b.apply_config(db)
 
     assert jail.read_text() == "previous good config\n"
     # Files that didn't exist before are removed again rather than left half-applied.
     assert not (f2b_dir / "fail2ban.d" / "lite-panel.local").exists()
-    assert ["fail2ban-client", "reload"] not in calls
+    assert RESTART not in calls
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +386,10 @@ def test_get_status_aggregates_jails():
                 return _result(0, SSHD_STATUS.replace("198.51.100.4 203.0.113.9", "192.0.2.50")
                                .replace("Total failed:\t57", "Total failed:\t0"))
             return _result(0, SSHD_STATUS)
+        if args[1] == "get" and args[-1] == "actions":
+            if args[2] == f2b.MANUAL_JAIL:
+                return _result(0, "No actions for jail " + args[2])
+            return _result(0, "The jail sshd has the following actions:\niptables-multiport")
         if args[1] == "get":
             return _result(0, "198.51.100.4 \t2026-09-24 10:00:00 + 3600 = 2026-09-24 11:00:00\n")
         return _result(0)
@@ -362,6 +404,7 @@ def test_get_status_aggregates_jails():
     assert ips["198.51.100.4"]["expires_at"] == "2026-09-24 11:00:00"
     assert ips["198.51.100.4"]["permanent"] is False
     assert ips["192.0.2.50"]["permanent"] is True
+    assert status["broken_jails"] == [f2b.MANUAL_JAIL]
 
 
 def test_get_status_when_stopped():

@@ -28,7 +28,8 @@ def fail2ban_page(
 ):
     installed = f2b.is_installed()
     settings = f2b.get_settings(db)
-    status = {"running": False, "jails": {}, "bans": [], "total_failed": 0, "total_banned": 0}
+    status = {"running": False, "jails": {}, "bans": [], "total_failed": 0,
+              "total_banned": 0, "broken_jails": []}
     ssh = f2b.SshInfo()
 
     if installed:
@@ -123,6 +124,20 @@ def save_settings(
 
     _audit(db, session, "fail2ban.settings")
     return _back(notice="Settings saved and applied.")
+
+
+@router.post("/repair", dependencies=[Depends(csrf_protect)])
+def repair(
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    try:
+        f2b.apply_config(db, force_restart=True)
+    except Exception as exc:  # noqa: BLE001
+        return _back(error=f"Repair failed: {exc}")
+
+    _audit(db, session, "fail2ban.repair")
+    return _back(notice="fail2ban restarted and is blocking again.")
 
 
 @router.post("/ban", dependencies=[Depends(csrf_protect)])
