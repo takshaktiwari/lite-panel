@@ -484,3 +484,44 @@ class SecurityScanSchedule(TimestampMixin, Base):
 
 
 
+
+
+# --------------------------------------------------------------------------
+# Fail2ban
+# --------------------------------------------------------------------------
+
+
+class Fail2banSettings(Base):
+    """The single row of fail2ban settings the panel renders its jail file from.
+
+    Durations are stored in seconds. Defaults are the recommended values an
+    admin gets on install without touching anything.
+    """
+
+    __tablename__ = "fail2ban_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sshd_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    maxretry: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    findtime: Mapped[int] = mapped_column(Integer, default=600, nullable=False)
+    bantime: Mapped[int] = mapped_column(Integer, default=3600, nullable=False)
+    # Growing bans (bantime.increment): each repeat ban doubles, up to maxtime.
+    increment_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    increment_maxtime: Mapped[int] = mapped_column(Integer, default=604800, nullable=False)
+    recidive_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Whitespace-separated IPs / CIDRs that are never banned (localhost is always added).
+    ignoreip: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+
+class Fail2banPermanentBan(TimestampMixin, Base):
+    """An IP the admin banned permanently.
+
+    Kept here rather than trusted to fail2ban's own database so the ban is
+    re-applied after a reinstall or a wiped fail2ban state.
+    """
+
+    __tablename__ = "fail2ban_permanent_bans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ip: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    note: Mapped[str] = mapped_column(String(255), default="", nullable=False)

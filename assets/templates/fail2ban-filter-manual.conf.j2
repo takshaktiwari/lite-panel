@@ -1,0 +1,10 @@
+# {{ banner }}
+# Filter for the lite-panel-manual jail. It watches a unit that never logs,
+# so bans only ever come from `fail2ban-client set lite-panel-manual banip`.
+
+[Definition]
+failregex = ^lite-panel manual ban <HOST>$
+ignoreregex =
+
+[Init]
+journalmatch = _SYSTEMD_UNIT=lite-panel-fail2ban-manual.service

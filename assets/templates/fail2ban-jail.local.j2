@@ -1,0 +1,42 @@
+# {{ banner }}
+# fail2ban jails driven by the panel's Fail2ban page. The packaged jail.conf
+# is left untouched; this file only overrides it, so removing it restores the
+# distribution defaults exactly.
+
+[DEFAULT]
+# Never banned. Localhost is always here so the server cannot ban itself.
+ignoreip = {{ ignoreip | join(" ") }}
+banaction = {{ banaction }}
+banaction_allports = {{ banaction_allports }}
+{% if settings.increment_enabled %}
+# Growing bans: each repeat ban for the same IP doubles, capped at maxtime.
+bantime.increment = true
+bantime.maxtime = {{ settings.increment_maxtime }}
+{% else %}
+bantime.increment = false
+{% endif %}
+
+[sshd]
+enabled = {{ "true" if settings.sshd_enabled else "false" }}
+port = {{ ssh_ports | join(",") }}
+# The journal works everywhere; /var/log/auth.log does not exist on Debian 12.
+backend = systemd
+maxretry = {{ settings.maxretry }}
+findtime = {{ settings.findtime }}
+bantime = {{ settings.bantime }}
+
+[recidive]
+# Repeat offenders banned several times in a day get one flat, long ban on
+# every port.
+enabled = {{ "true" if settings.recidive_enabled else "false" }}
+bantime.increment = false
+
+[lite-panel-manual]
+# Holds the IPs banned permanently from the panel. Its filter never matches
+# anything, so the only way in is an explicit banip.
+enabled = true
+filter = lite-panel-manual
+backend = systemd
+banaction = %(banaction_allports)s
+bantime = -1
+bantime.increment = false

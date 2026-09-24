@@ -1,0 +1,7 @@
+# {{ banner }}
+# fail2ban daemon settings. Ban history has to outlive the longest ban,
+# otherwise growing bans forget a repeat offender and start again from the
+# first step.
+
+[Definition]
+dbpurgeage = {{ dbpurgeage }}

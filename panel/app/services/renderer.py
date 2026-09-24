@@ -167,4 +167,14 @@ def rebuild_all(ctx=None) -> List[str]:
             except Exception as exc:  # noqa: BLE001
                 note(f"warning: could not render {site.domain}: {exc}")
 
+    from app.services import fail2ban as fail2ban_service
+
+    if fail2ban_service.is_installed():
+        with session_scope() as db:
+            try:
+                fail2ban_service.apply_config(db)
+                note("re-rendered fail2ban configuration")
+            except Exception as exc:  # noqa: BLE001
+                note(f"warning: could not render fail2ban: {exc}")
+
     return written

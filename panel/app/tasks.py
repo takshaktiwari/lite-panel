@@ -24,6 +24,7 @@ from app.services import renderer
 from app.services import sites as sites_service
 from app.services import backup as backup_service
 from app.services import security as security_service
+from app.services import fail2ban as fail2ban_service
 from app.validators import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -754,5 +755,29 @@ def rkhunter_scan(ctx) -> None:
                 ctx.log(f"  [{w['severity'].upper()}] {w['message']}")
         else:
             ctx.log("No rootkit warnings detected. System appears clean.")
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc
+
+
+# --------------------------------------------------------------------------
+# Security — fail2ban
+# --------------------------------------------------------------------------
+
+
+@register("fail2ban.install")
+def fail2ban_install(ctx) -> None:
+    """Install fail2ban and apply the panel's jail settings."""
+    try:
+        with session_scope() as db:
+            fail2ban_service.install(db, ctx.log)
+    except Exception as exc:
+        raise JobFailed(str(exc)) from exc
+
+
+@register("fail2ban.uninstall")
+def fail2ban_uninstall(ctx) -> None:
+    """Purge fail2ban; settings and permanent bans stay in the database."""
+    try:
+        fail2ban_service.uninstall(ctx.log)
     except Exception as exc:
         raise JobFailed(str(exc)) from exc

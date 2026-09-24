@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Fail2ban · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+  <div>
+    <h1>Fail2ban</h1>
+    <p class="muted">Blocks IPs that keep failing to log in over SSH, so brute-force attacks run out of attempts.</p>
+  </div>
+  <div>
+    {% if not installed %}
+    <form method="post" action="/fail2ban/install" style="margin:0;">
+      {{ ui.csrf(session) }}
+      <button type="submit" class="button primary" id="btn-install-fail2ban">Install fail2ban</button>
+    </form>
+    {% else %}
+    <button type="button" class="button" id="btn-uninstall-fail2ban" data-dialog-open="dlg-uninstall-fail2ban" style="color:var(--danger);">
+      Uninstall
+    </button>
+    {% endif %}
+  </div>
+</header>
+
+{% if not installed %}
+<div class="alert alert-notice">
+  <strong>fail2ban is not installed.</strong>
+  Installing it turns on SSH protection with the recommended settings below.
+  Your current IP (<code>{{ my_ip }}</code>) is added to the never-ban list automatically, so a typo can't lock you out.
+</div>
+{% else %}
+
+<div class="metrics">
+  <div class="metric">
+    <div class="metric-label">Status</div>
+    <div class="metric-value" style="display:flex;align-items:center;gap:8px;">
+      <span class="dot {{ 'ok' if status.running else 'off' }}"></span>
+      <span style="font-size:20px;">{{ 'Running' if status.running else 'Stopped' }}</span>
+    </div>
+    <div class="metric-detail muted">
+      {% if not status.running %}Save settings below to start it{% elif settings.sshd_enabled %}Protecting SSH (port {{ ssh.ports|join(', ') }}){% else %}SSH jail is off{% endif %}
+    </div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Banned Now</div>
+    <div class="metric-value">{{ status.bans|length }}</div>
+    <div class="metric-detail muted">IPs currently blocked</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Failed Attempts</div>
+    <div class="metric-value">{{ status.total_failed }}</div>
+    <div class="metric-detail muted">Since fail2ban last started</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Total Bans</div>
+    <div class="metric-value">{{ status.total_banned }}</div>
+    <div class="metric-detail muted">Since fail2ban last started</div>
+  </div>
+</div>
+
+{% if ssh.password_auth %}
+<div class="alert alert-notice">
+  <strong>Tip:</strong> SSH still accepts passwords. Fail2ban slows attackers down, but attacks spread across many IPs each get their own attempts.
+  Switching to key-only login is the stronger fix. Add your key on the <a href="/ssh">SSH Keys</a> page first.
+</div>
+{% endif %}
+
+{# ── Banned IPs ─────────────────────────────────────────────────────────── #}
+<section class="panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+    <div>
+      <h2 style="margin:0;font-size:16px;">Banned IPs</h2>
+      <p class="muted" style="margin:4px 0 0;font-size:12.5px;">Addresses blocked right now. Unban lifts every ban on that IP.</p>
+    </div>
+  </div>
+
+  <form method="post" action="/fail2ban/ban" id="form-ban-ip" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;margin-bottom:16px;">
+    {{ ui.csrf(session) }}
+    <div style="flex:1 1 200px;">
+      <label for="ban-ip">IP address</label>
+      <input type="text" id="ban-ip" name="ip" placeholder="203.0.113.7" required style="margin:0;">
+    </div>
+    <div style="flex:1 1 200px;">
+      <label for="ban-note">Note (optional)</label>
+      <input type="text" id="ban-note" name="note" maxlength="255" placeholder="Why it was banned" style="margin:0;">
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;margin:0 0 8px;font-weight:400;">
+      <input type="checkbox" name="permanent" value="1" style="width:auto;margin:0;">
+      Permanent (all ports)
+    </label>
+    <button type="submit" class="button primary" id="btn-ban-ip">Ban IP</button>
+  </form>
+  <p class="muted" style="font-size:12px;margin:-6px 0 14px;">
+    Without <em>Permanent</em>, the IP is blocked from SSH for {{ format_duration(settings.bantime) }}{% if settings.increment_enabled %}, growing with each repeat ban{% endif %}.
+  </p>
+
+  {% if status.bans %}
+  <table class="table" id="fail2ban-bans-table">
+    <thead>
+      <tr>
+        <th>IP</th>
+        <th>Reason</th>
+        <th>Banned At</th>
+        <th>Expires</th>
+        <th style="text-align:right;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in status.bans %}
+      <tr>
+        <td><code>{{ b.ip }}</code></td>
+        <td>
+          {% if b.jail == 'lite-panel-manual' %}
+            <span class="badge danger">Permanent</span>
+            {% if permanent_notes.get(b.ip) %}<span class="muted" style="font-size:12px;">{{ permanent_notes[b.ip] }}</span>{% endif %}
+          {% elif b.jail == 'recidive' %}
+            <span class="badge warn">Repeat offender</span>
+          {% else %}
+            <span class="badge info">SSH failures</span>
+          {% endif %}
+        </td>
+        <td class="muted" style="white-space:nowrap;">{{ b.banned_at or '—' }}</td>
+        <td class="muted" style="white-space:nowrap;">{{ 'Never' if b.permanent else (b.expires_at or '—') }}</td>
+        <td style="text-align:right;">
+          <form method="post" action="/fail2ban/unban" style="margin:0;" data-confirm="Unban {{ b.ip }}?">
+            {{ ui.csrf(session) }}
+            <input type="hidden" name="ip" value="{{ b.ip }}">
+            <button type="submit" class="button button-sm">Unban</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% elif status.running %}
+  <p class="muted empty">No IPs are banned right now.</p>
+  {% else %}
+  <p class="muted empty">fail2ban isn't running, so no bans are active.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{# ── Settings ───────────────────────────────────────────────────────────── #}
+<section class="panel">
+  <div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+    <h2 style="margin:0;font-size:16px;">Settings</h2>
+    <p class="muted" style="margin:4px 0 0;font-size:12.5px;">Recommended values are already set. Change only what you need.</p>
+  </div>
+
+  <form method="post" action="/fail2ban/settings" id="form-fail2ban-settings" class="form-with-sidebar">
+    {{ ui.csrf(session) }}
+    <div class="form-with-sidebar-main">
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <input type="checkbox" name="sshd_enabled" value="1" {{ 'checked' if settings.sshd_enabled }} style="width:auto;margin:0;">
+        Protect SSH
+      </label>
+
+      <label for="f2b-maxretry">Failed attempts before a ban</label>
+      <input type="number" id="f2b-maxretry" name="maxretry" min="1" max="100" value="{{ settings.maxretry }}" required>
+
+      <label for="f2b-findtime">…within this time window</label>
+      <select id="f2b-findtime" name="findtime">
+        {% for value, label in findtime_choices %}
+        <option value="{{ value }}" {{ 'selected' if value == settings.findtime }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <label for="f2b-bantime">Ban length</label>
+      <select id="f2b-bantime" name="bantime">
+        {% for value, label in bantime_choices %}
+        <option value="{{ value }}" {{ 'selected' if value == settings.bantime }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <input type="checkbox" name="increment_enabled" value="1" {{ 'checked' if settings.increment_enabled }} style="width:auto;margin:0;">
+        Growing bans: double the ban each time the same IP returns
+      </label>
+
+      <label for="f2b-ignoreip">Never ban these IPs</label>
+      <textarea id="f2b-ignoreip" name="ignoreip" rows="3" placeholder="One IP or CIDR range per line">{{ ignoreip_entries|join('\n') }}</textarea>
+      <p class="muted" style="font-size:12px;margin:-4px 0 14px;">
+        Localhost ({{ always_ignored|join(', ') }}) is always included. You're connected from <code>{{ my_ip }}</code>.
+      </p>
+
+      <details style="margin-bottom:14px;">
+        <summary style="cursor:pointer;font-size:13px;font-weight:500;margin-bottom:10px;">Advanced</summary>
+
+        <label for="f2b-maxtime">Longest a growing ban can get</label>
+        <select id="f2b-maxtime" name="increment_maxtime">
+          {% for value, label in maxtime_choices %}
+          <option value="{{ value }}" {{ 'selected' if value == settings.increment_maxtime }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <input type="checkbox" name="recidive_enabled" value="1" {{ 'checked' if settings.recidive_enabled }} style="width:auto;margin:0;">
+          Recidive: ban repeat offenders for 1 week on every port
+        </label>
+        <p class="muted" style="font-size:12px;margin:0;">Triggers when an IP is banned 5 times within a day.</p>
+      </details>
+
+      <button type="submit" class="button primary" id="btn-save-fail2ban">Save settings</button>
+    </div>
+
+    <div class="form-with-sidebar-info">
+      <p><strong>How it works:</strong> when one IP fails to log in <strong>{{ settings.maxretry }}</strong> times within <strong>{{ format_duration(settings.findtime) }}</strong>, it's blocked from SSH for <strong>{{ format_duration(settings.bantime) }}</strong>.</p>
+      {% if settings.increment_enabled %}
+      <p><strong>Growing bans</strong> are on: the next ban for the same IP lasts twice as long, up to {{ format_duration(settings.increment_maxtime) }}.</p>
+      {% endif %}
+      <p>The SSH port is detected automatically, so changing it on the SSH side just needs a save here.</p>
+      <p>Bans are kept separately from your UFW rules, so they don't clutter the <a href="/firewall">Firewall</a> page.</p>
+    </div>
+  </form>
+</section>
+
+{% if installed %}
+<dialog id="dlg-uninstall-fail2ban" class="dialog">
+  <form method="post" action="/fail2ban/uninstall" style="margin:0;">
+    {{ ui.csrf(session) }}
+    <h2 style="color:var(--danger);">Uninstall fail2ban</h2>
+    <p class="muted" style="margin:8px 0 14px;font-size:13px;line-height:1.5;">
+      SSH will no longer be protected from brute-force attempts, and every current ban is lifted.
+      Your settings and permanent bans are kept and come back if you reinstall.
+    </p>
+    <div class="dialog-actions">
+      <button type="button" class="button" data-close>Cancel</button>
+      <button type="submit" class="button primary" style="background:var(--danger);border-color:var(--danger);color:#fff;">Yes, uninstall</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

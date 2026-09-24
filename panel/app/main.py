@@ -22,6 +22,7 @@ from app.routers import (
     cron,
     dashboard,
     databases,
+    fail2ban,
     files,
     firewall,
     ftp,
@@ -111,6 +112,7 @@ def create_app() -> FastAPI:
     app.include_router(config.router)
     app.include_router(firewall.router)
     app.include_router(security.router)
+    app.include_router(fail2ban.router)
     app.include_router(cron.router)
     app.include_router(ssh_keys.router)
     app.include_router(logs.router)
