@@ -22,6 +22,7 @@ import fcntl
 import logging
 import os
 import pty
+import pwd
 import signal
 import struct
 import subprocess
@@ -47,6 +48,10 @@ _SHELL_ENV = {
 _KILL_GRACE_SECONDS = 2.0
 
 
+class TerminalUserError(RuntimeError):
+    """The requested login user can't be used (missing, or not permitted)."""
+
+
 class TerminalSession:
     """One PTY-backed shell process.
 
@@ -55,29 +60,72 @@ class TerminalSession:
     created it.
     """
 
-    def __init__(self, *, shell: str = "/bin/bash", cwd: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        *,
+        shell: str = "/bin/bash",
+        cwd: Optional[str] = None,
+        user: Optional[str] = None,
+    ) -> None:
         """``cwd=None`` (the default) inherits the daemon's own working
         directory rather than hardcoding a Linux-specific path -- callers on
         a real server pass ``cwd="/root"`` explicitly (see routers/terminal.py);
         leaving the default portable is what keeps this testable on macOS,
-        where ``/root`` doesn't exist."""
+        where ``/root`` doesn't exist.
+
+        ``user`` runs the shell as that system account instead of the
+        daemon's own (root).  The daemon drops to the account's uid/gid and
+        clears root's supplementary groups before exec, so the shell has
+        exactly that user's privileges -- the account's login shell setting
+        (site accounts use ``nologin``) is irrelevant because bash is
+        launched directly.  The name must already have been resolved from a
+        trusted source (a site record), never taken from the client.
+        """
+        env = dict(_SHELL_ENV)
+        identity: dict = {}
+        owner_uid: Optional[int] = None
+
+        if user:
+            try:
+                entry = pwd.getpwnam(user)
+            except KeyError:
+                raise TerminalUserError(f"The system user '{user}' does not exist.") from None
+            env.update(
+                HOME=entry.pw_dir,
+                USER=entry.pw_name,
+                LOGNAME=entry.pw_name,
+                SHELL=shell,
+            )
+            identity = {"user": entry.pw_uid, "group": entry.pw_gid}
+            # Only root may clear supplementary groups; anyone else is
+            # already unprivileged (and setgroups would just fail).
+            if os.geteuid() == 0:
+                identity["extra_groups"] = []
+                owner_uid = entry.pw_uid
+            cwd = cwd or entry.pw_dir
+
         master_fd, slave_fd = pty.openpty()
         self.master_fd = master_fd
         self._closed = False
 
         try:
+            if owner_uid is not None:
+                # The pty is created by root; hand the slave side to the user
+                # so programs that reopen /dev/tty (ssh, sudo, less) work.
+                os.fchown(slave_fd, owner_uid, -1)
             self.process = subprocess.Popen(
                 [shell, "-l"],
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
                 cwd=cwd,
-                env=dict(_SHELL_ENV),
+                env=env,
                 # New session/process-group leader so the shell (and anything
                 # it spawns) can be killed as a unit, and so it gets proper
                 # controlling-terminal behavior from the pty.
                 start_new_session=True,
                 close_fds=True,
+                **identity,
             )
         except Exception:
             os.close(master_fd)

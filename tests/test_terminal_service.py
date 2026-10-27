@@ -160,3 +160,49 @@ def test_close_always_kills_the_shells_own_process_group():
 
         with pytest.raises(ProcessLookupError):
             os.kill(session.process.pid, 0)
+
+
+# --------------------------------------------------------------------------
+# Running the shell as a specific account
+# --------------------------------------------------------------------------
+
+import getpass  # noqa: E402
+import pwd  # noqa: E402
+
+from app.services.terminal import TerminalUserError  # noqa: E402
+
+
+def test_user_session_gets_that_accounts_identity_in_its_environment():
+    me = pwd.getpwnam(getpass.getuser())
+    with TerminalSession(user=me.pw_name) as session:
+        session.write(b"echo U=$USER L=$LOGNAME H=$HOME; id -un\n")
+        output = _drain(session, timeout=2.0).decode(errors="replace")
+    assert f"U={me.pw_name}" in output
+    assert f"L={me.pw_name}" in output
+    assert f"H={me.pw_dir}" in output
+
+
+def test_user_session_starts_in_the_accounts_home_by_default():
+    me = pwd.getpwnam(getpass.getuser())
+    with TerminalSession(user=me.pw_name) as session:
+        session.write(b"pwd\n")
+        output = _drain(session, timeout=2.0).decode(errors="replace")
+    assert me.pw_dir in output
+
+
+def test_unknown_user_is_refused_before_any_shell_starts():
+    with pytest.raises(TerminalUserError, match="does not exist"):
+        TerminalSession(user="no-such-account-xyz")
+
+
+def test_user_session_still_does_not_leak_the_daemon_environment(monkeypatch):
+    monkeypatch.setenv("LITE_PANEL_SECRET_KEY", "super-secret-value")
+    with TerminalSession(user=getpass.getuser()) as session:
+        session.write(b"env\n")
+        output = _drain(session, timeout=2.0).decode(errors="replace")
+    assert "super-secret-value" not in output
+
+
+def test_root_style_session_without_user_is_unchanged():
+    with TerminalSession() as session:
+        assert session.is_alive()

@@ -35,14 +35,24 @@
   .terminal-banner a { color: var(--accent); }
 </style>
 
-<header class="page-head">
-  <h1>Terminal</h1>
-  <p class="muted">A real root shell on this server. Closes automatically after
-    {{ idle_timeout_minutes }} minutes of inactivity.</p>
+<header class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;">
+  <div>
+    <h1>Terminal</h1>
+    <p class="muted">A real shell on this server{% if login.user %} as <code>{{ login.user }}</code>, limited to that site's account{% else %} as <strong>root</strong>{% endif %}.
+      Closes automatically after {{ idle_timeout_minutes }} minutes of inactivity.</p>
+  </div>
+  <div style="min-width:260px;">
+    <label for="terminal-login" style="margin-bottom:3px;">Log in as</label>
+    <select id="terminal-login" data-terminal-login style="margin-bottom:0;">
+      {% for option in logins %}
+      <option value="{{ option.value }}" {{ 'selected' if option.value == login.value }}>{{ option.label }}</option>
+      {% endfor %}
+    </select>
+  </div>
 </header>
 
 <div class="terminal-wrap">
-  <div id="terminal-container"></div>
+  <div id="terminal-container" data-login-as="{{ login.value }}"></div>
   <div id="terminal-banner" class="terminal-banner"></div>
 </div>
 

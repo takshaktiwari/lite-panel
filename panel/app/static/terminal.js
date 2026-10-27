@@ -33,8 +33,21 @@
     return "'" + value.replace(/'/g, "'\\''") + "'";
   }
 
+  // Which account the shell runs as. The server resolves this name against
+  // its own site list; it is never used as a raw system username.
+  const loginAs = container.getAttribute("data-login-as") || "root";
+
+  const loginSelect = document.querySelector("[data-terminal-login]");
+  if (loginSelect) {
+    loginSelect.addEventListener("change", () => {
+      window.location.search = "?as=" + encodeURIComponent(loginSelect.value);
+    });
+  }
+
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(protocol + "//" + window.location.host + "/terminal/ws");
+  const socket = new WebSocket(
+    protocol + "//" + window.location.host + "/terminal/ws?as=" + encodeURIComponent(loginAs)
+  );
   socket.binaryType = "arraybuffer";
 
   socket.addEventListener("open", () => {
@@ -60,7 +73,11 @@
     term.write(new Uint8Array(event.data));
   });
 
-  socket.addEventListener("close", () => {
+  socket.addEventListener("close", (event) => {
+    if (event.code === 4404 && !banner.classList.contains("visible")) {
+      showBanner('That account is not available any more.<br><a href="/terminal">Open a new terminal</a>');
+      return;
+    }
     if (!banner.classList.contains("visible")) {
       showBanner('Terminal session ended.<br><a href="/terminal">Reload to start a new one</a>');
     }

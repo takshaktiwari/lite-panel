@@ -18,14 +18,15 @@ import threading
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from app import security
 from app.config import get_settings
-from app.database import SessionLocal
+from app.database import SessionLocal, get_session
 from app.deps import render, require_session
-from app.models import AuditLog, Session
-from app.services.terminal import TerminalSession
+from app.models import AuditLog, Session, Site
+from app.services.terminal import TerminalSession, TerminalUserError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -36,17 +37,63 @@ settings = get_settings()
 _READ_CHUNK = 65536
 
 
+ROOT_LOGIN = "root"
+
+
+def _site_logins(db: OrmSession) -> list:
+    """Every account a terminal can be opened as, root last.
+
+    Site accounts are looked up from the database rather than accepted as a
+    free-typed username, so a terminal can only ever be opened as root or as
+    an account the panel itself created for a site.
+    """
+    sites = db.scalars(select(Site).order_by(Site.name)).all()
+    logins = [
+        {
+            "value": site.name,
+            "label": f"{site.domain} ({site.system_user})",
+            "user": site.system_user,
+            "home": site.root_dir,
+        }
+        for site in sites
+    ]
+    logins.append({"value": ROOT_LOGIN, "label": "root (full server access)", "user": None, "home": "/root"})
+    return logins
+
+
+def _choose_login(logins: list, requested: Optional[str], cd: Optional[str]) -> dict:
+    """Pick the login: an explicit choice wins, then the site a ``?cd=`` path
+    sits inside (so a site's own "Terminal" button opens as that site's
+    user), otherwise root."""
+    by_value = {login["value"]: login for login in logins}
+    if requested and requested in by_value:
+        return by_value[requested]
+    if cd:
+        for login in logins:
+            home = login["home"]
+            if login["user"] and (cd == home or cd.startswith(home.rstrip("/") + "/")):
+                return login
+    return by_value[ROOT_LOGIN]
+
+
 @router.get("/terminal")
 def terminal_page(
     request: Request,
     session: Session = Depends(require_session),
+    db: OrmSession = Depends(get_session),
 ):
+    logins = _site_logins(db)
+    chosen = _choose_login(
+        logins, request.query_params.get("as"), request.query_params.get("cd")
+    )
     return render(
         request,
         "terminal.html",
         session=session,
         user=session.user,
         idle_timeout_minutes=settings.terminal_idle_timeout_minutes,
+        logins=logins,
+        login=chosen,
     )
 
 
@@ -113,17 +160,33 @@ async def terminal_ws(websocket: WebSocket) -> None:
         username = session.user.username
         user_id = session.user_id
         ip = client_ip_from_ws(websocket)
+
+        requested = websocket.query_params.get("as") or ROOT_LOGIN
+        login = next((l for l in _site_logins(db) if l["value"] == requested), None)
     finally:
         db.close()
 
+    if login is None:
+        await websocket.close(code=4404)
+        return
+
     await websocket.accept()
-    _log_event("terminal.open", user_id, username, ip)
+    _log_event("terminal.open", user_id, username, ip, login["value"])
 
     loop = asyncio.get_event_loop()
     # /root is where the daemon actually runs on a real (Linux) install; it
     # doesn't exist on macOS, so this falls back to the service's own
     # portable default there rather than failing every terminal in dev/CI.
-    term = TerminalSession(cwd="/root" if os.path.isdir("/root") else None)
+    try:
+        if login["user"]:
+            term = TerminalSession(user=login["user"], cwd=login["home"] if os.path.isdir(login["home"]) else None)
+        else:
+            term = TerminalSession(cwd="/root" if os.path.isdir("/root") else None)
+    except (TerminalUserError, OSError) as exc:
+        logger.warning("terminal for %s could not start: %s", login["value"], exc)
+        _log_event("terminal.failed", user_id, username, ip, login["value"])
+        await websocket.close(code=4404 if isinstance(exc, TerminalUserError) else 4500)
+        return
     last_activity = loop.time()
     idle_seconds = settings.terminal_idle_timeout_minutes * 60
 
@@ -226,7 +289,7 @@ async def terminal_ws(websocket: WebSocket) -> None:
             await websocket.close()
         except Exception:  # noqa: BLE001 - already closing/closed
             pass
-        _log_event("terminal.close", user_id, username, ip)
+        _log_event("terminal.close", user_id, username, ip, login["value"])
 
 
 def _handle_control_message(term: TerminalSession, raw: str) -> None:
@@ -249,10 +312,10 @@ def client_ip_from_ws(websocket: WebSocket) -> str:
     return (websocket.client.host if websocket.client else "unknown")[:45]
 
 
-def _log_event(action: str, user_id: int, username: str, ip: str) -> None:
+def _log_event(action: str, user_id: int, username: str, ip: str, login: str = ROOT_LOGIN) -> None:
     db = SessionLocal()
     try:
-        db.add(AuditLog(action=action, user_id=user_id, username=username, ip_address=ip))
+        db.add(AuditLog(action=action, user_id=user_id, username=username, ip_address=ip, target=login))
         db.commit()
     finally:
         db.close()
