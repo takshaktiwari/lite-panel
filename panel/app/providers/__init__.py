@@ -9,6 +9,6 @@ from app.providers.base import Provider, ProviderStatus, all_providers, get_prov
 
 # Importing the modules is what registers them.
 from app.providers import certbot, mariadb, nginx, php, vsftpd  # noqa: F401,E402
-from app.providers import composer, git, nodejs, redis, unzip  # noqa: F401,E402
+from app.providers import composer, git, nodejs, python, redis, unzip  # noqa: F401,E402
 
 __all__ = ["Provider", "ProviderStatus", "all_providers", "get_provider"]

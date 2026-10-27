@@ -16,6 +16,7 @@ from app.database import session_scope
 from app.jobs import JobFailed, register
 from app.models import BackupSchedule, CronJob, FtpAccount, InstalledProvider, Site, utcnow
 from app.providers import get_provider
+from app.services import apps as apps_service
 from app.services import cron as cron_service
 from app.services import databases as db_service
 from app.services import files as files_service
@@ -130,6 +131,10 @@ def create_site(ctx) -> None:
                 php_version=payload.get("php_version") or None,
                 subfolder=payload.get("subfolder", ""),
                 redirect_www=bool(payload.get("redirect_www", True)),
+                app_type=payload.get("app_type") or "web",
+                app_command=payload.get("app_command") or None,
+                app_port=payload.get("app_port") or None,
+                app_env=payload.get("app_env") or "",
             )
         except (ValidationError, RuntimeError) as exc:
             raise _fail(exc) from exc
@@ -190,6 +195,51 @@ def change_site_php(ctx) -> None:
             raise JobFailed("That site no longer exists.")
         try:
             sites_service.set_php_version(db, ctx, site, ctx.payload.get("php_version") or None)
+        except (ValidationError, RuntimeError) as exc:
+            raise _fail(exc) from exc
+
+
+@register("site.app_control")
+def control_site_app(ctx) -> None:
+    with session_scope() as db:
+        site = db.get(Site, ctx.payload["site_id"])
+        if site is None:
+            raise JobFailed("That site no longer exists.")
+        if not apps_service.is_app(site):
+            raise JobFailed("This site isn't a Node.js or Python application.")
+        try:
+            apps_service.control(ctx, site, ctx.payload["action"])
+        except (ValidationError, RuntimeError) as exc:
+            raise _fail(exc) from exc
+
+
+@register("site.app_install")
+def install_site_app_dependencies(ctx) -> None:
+    with session_scope() as db:
+        site = db.get(Site, ctx.payload["site_id"])
+        if site is None:
+            raise JobFailed("That site no longer exists.")
+        try:
+            apps_service.install_dependencies(ctx, site, build=bool(ctx.payload.get("build")))
+        except (ValidationError, RuntimeError) as exc:
+            raise _fail(exc) from exc
+
+
+@register("site.app_settings")
+def update_site_app_settings(ctx) -> None:
+    with session_scope() as db:
+        site = db.get(Site, ctx.payload["site_id"])
+        if site is None:
+            raise JobFailed("That site no longer exists.")
+        try:
+            apps_service.update_settings(
+                db,
+                ctx,
+                site,
+                command=ctx.payload["command"],
+                port=ctx.payload["port"],
+                env_text=ctx.payload.get("env", ""),
+            )
         except (ValidationError, RuntimeError) as exc:
             raise _fail(exc) from exc
 

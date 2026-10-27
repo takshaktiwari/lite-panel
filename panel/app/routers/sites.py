@@ -18,13 +18,23 @@ from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
 from app.models import AuditLog, BackupSchedule, CronJob, FtpAccount, Site, SiteDatabase, SshKey
 from app.providers import get_provider
+from app.services import apps as apps_service
 from app.services import backup as backup_service
 from app.services import databases as db_service
 from app.services import dns_check as dns_check_service
 from app.services import files as files_service
 from app.services import sites as sites_service
 from app.services import system as system_service
-from app.validators import ValidationError, validate_domain, validate_site_name
+from app.validators import (
+    RUNTIME_APP_TYPES,
+    ValidationError,
+    validate_app_command,
+    validate_app_env,
+    validate_app_port,
+    validate_app_type,
+    validate_domain,
+    validate_site_name,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sites")
@@ -50,6 +60,20 @@ def site_list(
     )
 
 
+def _runtime_context() -> dict:
+    """What the new-site form needs to offer Node.js / Python apps."""
+    return {
+        "runtimes": {
+            key: {
+                **info,
+                "installed": get_provider(info["provider"]).is_installed(),
+                "presets": apps_service.COMMAND_PRESETS[key],
+            }
+            for key, info in apps_service.RUNTIMES.items()
+        },
+    }
+
+
 @router.get("/new")
 def new_site_form(
     request: Request,
@@ -64,6 +88,7 @@ def new_site_form(
         nginx_ready=get_provider("nginx").is_installed(),
         certbot_ready=get_provider("certbot").is_installed(),
         sites_root=str(sites_service.sites_root()),
+        **_runtime_context(),
     )
 
 
@@ -75,12 +100,31 @@ def create_site(
     php_version: str = Form(""),
     redirect_www: str = Form(""),
     enable_ssl: str = Form(""),
+    app_type: str = Form("web"),
+    app_command: str = Form(""),
+    app_port: str = Form(""),
+    app_env: str = Form(""),
     session=Depends(require_session),
     db: OrmSession = Depends(get_session),
 ):
     php = get_provider("php")
 
     try:
+        app_type = validate_app_type(app_type)
+        if app_type in RUNTIME_APP_TYPES:
+            apps_service.require_runtime(app_type)
+            app_command = validate_app_command(
+                app_command or apps_service.default_command(app_type)
+            )
+            app_env = validate_app_env(app_env)
+            app_port = (
+                str(apps_service.check_port_free(db, app_port.strip()))
+                if app_port.strip()
+                else ""
+            )
+            php_version = ""
+        else:
+            app_command, app_port, app_env = "", "", ""
         domain = validate_domain(domain)
         # One field, typed right after the /var/www/ prefix shown in the
         # form: the first segment is the site's own folder (and where its
@@ -100,8 +144,16 @@ def create_site(
             certbot_ready=get_provider("certbot").is_installed(),
             sites_root=str(sites_service.sites_root()),
             error=str(exc),
-            form={"domain": domain, "folder": folder},
+            form={
+                "domain": domain,
+                "folder": folder,
+                "app_type": app_type,
+                "app_command": app_command,
+                "app_port": app_port,
+                "app_env": app_env,
+            },
             status_code=400,
+            **_runtime_context(),
         )
 
     if db.scalar(select(Site).where(Site.domain == domain)):
@@ -120,6 +172,10 @@ def create_site(
             "subfolder": subfolder,
             "redirect_www": bool(redirect_www),
             "enable_ssl": bool(enable_ssl),
+            "app_type": app_type,
+            "app_command": app_command or None,
+            "app_port": int(app_port) if app_port else None,
+            "app_env": app_env,
         },
         user_id=session.user_id,
     )
@@ -199,7 +255,24 @@ def site_detail(
         cert_expiry=certbot.cert_expiry(site.domain) if certbot.is_installed() and site.ssl_enabled else None,
         now=datetime.now(timezone.utc),
         socket=str(sites_service.socket_for(site.name)) if site.php_version else None,
+        **_app_context(site),
     )
+
+
+def _app_context(site: Site) -> dict:
+    if not apps_service.is_app(site):
+        return {"is_app": False}
+    info = apps_service.RUNTIMES[site.app_type]
+    return {
+        "is_app": True,
+        "app_label": info["label"],
+        "app_hint": info["hint"],
+        "app_presets": apps_service.COMMAND_PRESETS[site.app_type],
+        "app_runtime_ready": get_provider(info["provider"]).is_installed(),
+        "app_state": apps_service.state(site),
+        "app_unit": apps_service.unit_name(site.name),
+        "app_command_default": apps_service.default_command(site.app_type),
+    }
 
 
 @router.get("/{site_id}/dns-check")
@@ -252,6 +325,121 @@ def disk_usage(
     return JSONResponse({"bytes": total, "human": files_service.format_size(total)})
 
 
+@router.get("/{site_id}/app/status")
+def app_status(
+    site_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None or not apps_service.is_app(site):
+        return JSONResponse({"error": "That application no longer exists."}, status_code=404)
+    current = apps_service.state(site)
+    return JSONResponse({
+        "active": current.active,
+        "installed": current.installed,
+        "state": current.detail or ("active" if current.active else "inactive"),
+    })
+
+
+@router.get("/{site_id}/app/logs")
+def app_logs(
+    site_id: int,
+    lines: int = 100,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None or not apps_service.is_app(site):
+        return JSONResponse({"error": "That application no longer exists."}, status_code=404)
+    return JSONResponse({"logs": apps_service.recent_logs(site, lines)})
+
+
+@router.post("/{site_id}/app/control", dependencies=[Depends(csrf_protect)])
+def app_control(
+    site_id: int,
+    action: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    if not apps_service.is_app(site):
+        return _detail_error(site, "This site isn't a Node.js or Python application.")
+    if action not in ("start", "stop", "restart"):
+        return _detail_error(site, "Unknown action.")
+
+    job = enqueue(
+        db,
+        "site.app_control",
+        f"{action.capitalize()} app for {site.domain}",
+        payload={"site_id": site.id, "action": action},
+        user_id=session.user_id,
+    )
+    _audit(db, session, f"site.app_{action}", site.domain)
+    return job_redirect(job.id, f"/sites/{site.id}")
+
+
+@router.post("/{site_id}/app/install", dependencies=[Depends(csrf_protect)])
+def app_install(
+    site_id: int,
+    build: str = Form(""),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    if not apps_service.is_app(site):
+        return _detail_error(site, "This site isn't a Node.js or Python application.")
+
+    job = enqueue(
+        db,
+        "site.app_install",
+        f"Install dependencies for {site.domain}",
+        payload={"site_id": site.id, "build": bool(build)},
+        user_id=session.user_id,
+    )
+    _audit(db, session, "site.app_install", site.domain)
+    return job_redirect(job.id, f"/sites/{site.id}")
+
+
+@router.post("/{site_id}/app/settings", dependencies=[Depends(csrf_protect)])
+def app_settings(
+    site_id: int,
+    command: str = Form(""),
+    port: str = Form(""),
+    env: str = Form(""),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    if not apps_service.is_app(site):
+        return _detail_error(site, "This site isn't a Node.js or Python application.")
+
+    # Validate before queueing so a typo is reported on the page, not as a
+    # failed job.
+    try:
+        command = validate_app_command(command)
+        port_number = apps_service.check_port_free(db, port, site=site)
+        env = validate_app_env(env)
+    except ValidationError as exc:
+        return _detail_error(site, str(exc))
+
+    job = enqueue(
+        db,
+        "site.app_settings",
+        f"Update app settings for {site.domain}",
+        payload={"site_id": site.id, "command": command, "port": port_number, "env": env},
+        user_id=session.user_id,
+    )
+    _audit(db, session, "site.app_settings", site.domain)
+    return job_redirect(job.id, f"/sites/{site.id}")
+
+
 @router.post("/{site_id}/php", dependencies=[Depends(csrf_protect)])
 def change_php(
     site_id: int,
@@ -262,6 +450,8 @@ def change_php(
     site = db.get(Site, site_id)
     if site is None:
         return _back(error="That site no longer exists.")
+    if apps_service.is_app(site):
+        return _detail_error(site, "PHP isn't used by Node.js and Python sites.")
 
     job = enqueue(
         db,
@@ -426,6 +616,10 @@ def _clean_subfolder(value: str) -> str:
     for segment in segments:
         validate_filename(segment)
     return "/".join(segments)
+
+
+def _detail_error(site: Site, message: str):
+    return RedirectResponse(f"/sites/{site.id}?error={quote(message)}", status_code=303)
 
 
 def _back(*, error: Optional[str] = None):

@@ -6,7 +6,7 @@
   --bg: #f6f7f9;
   --surface: #ffffff;
   --border: #e2e5ea;
-  --text: #1a1d21;
+  --text: #2f353d;
   --muted: #6b7280;
   --accent: #2563eb;
   --accent-text: #ffffff;
@@ -55,7 +55,7 @@ html[data-theme="light"] {
   --bg: #f6f7f9;
   --surface: #ffffff;
   --border: #e2e5ea;
-  --text: #1a1d21;
+  --text: #2f353d;
   --muted: #6b7280;
   --accent: #2563eb;
   --accent-text: #ffffff;
@@ -190,7 +190,7 @@ code, .mono {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
-  padding: 4px 0 10px;
+  padding: 4px 0 28px;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
@@ -558,6 +558,8 @@ dialog.dialog.wide { max-width: 520px; }
 .checkbox-cell { width: 28px; }
 
 /* --- forms and buttons ------------------------------------------------- */
+
+[hidden] { display: none !important; }
 
 label { display: block; font-size: 12.5px; margin-bottom: 3px; font-weight: 500; }
 

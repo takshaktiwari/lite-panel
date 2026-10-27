@@ -218,6 +218,17 @@ class Site(TimestampMixin, Base):
     upload_limit_mb: Mapped[int] = mapped_column(Integer, default=128, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # "web" is the classic PHP / static site served straight from the
+    # webroot.  "node" and "python" run a long-lived process under systemd
+    # (``app_command``) that nginx reverse-proxies to ``app_port``.
+    app_type: Mapped[str] = mapped_column(
+        String(16), default="web", server_default="web", nullable=False
+    )
+    app_command: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    app_port: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # KEY=VALUE lines, rendered into a root-only environment file.
+    app_env: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     aliases: Mapped[List["SiteAlias"]] = relationship(
         back_populates="site", cascade="all, delete-orphan"
     )

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +28,8 @@ ALLOWED_LOG_DIRS = (
 )
 
 ALLOWED_SERVICES = frozenset({"nginx", "mariadb", "vsftpd", "lite-panel"})
+# A Node/Python site's own service (see app.services.apps).
+_APP_UNIT = re.compile(r"^lite-panel-app-[a-z0-9_-]+\.service$")
 
 
 @dataclass
@@ -181,7 +184,11 @@ def tail_journal(service: str, lines: int = 100) -> str:
     """Read the last N lines of systemd journal for an allowed service."""
     lines = max(1, min(lines, 1000))
     # Allow matching php-fpm versions like php8.3-fpm
-    if service not in ALLOWED_SERVICES and not (service.startswith("php") and service.endswith("-fpm")):
+    if (
+        service not in ALLOWED_SERVICES
+        and not (service.startswith("php") and service.endswith("-fpm"))
+        and not _APP_UNIT.match(service)
+    ):
         raise ValidationError(f"Access to journal for service '{service}' is not permitted.")
 
     journalctl = shutil.which("journalctl")

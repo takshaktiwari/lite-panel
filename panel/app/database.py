@@ -74,6 +74,12 @@ _ADDITIVE_COLUMNS: dict = {
     "backup_schedules": [
         ("keep_count", "INTEGER DEFAULT 7"),
     ],
+    "sites": [
+        ("app_type", "VARCHAR(16) NOT NULL DEFAULT 'web'"),
+        ("app_command", "TEXT"),
+        ("app_port", "INTEGER"),
+        ("app_env", "TEXT"),
+    ],
 }
 
 

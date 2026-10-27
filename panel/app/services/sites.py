@@ -22,14 +22,19 @@ from sqlalchemy.orm import Session as OrmSession
 from app.config import get_settings
 from app.models import Site
 from app.providers import get_provider
+from app.services import apps as apps_service
 from app.services import cron as cron_service
 from app.services import databases as db_service
 from app.services import renderer, tuning
 from app.shell import run
 from app.validators import (
     ValidationError,
+    RUNTIME_APP_TYPES,
     resolve_within,
     site_username,
+    validate_app_command,
+    validate_app_env,
+    validate_app_type,
     validate_domain,
     validate_php_version,
     validate_site_name,
@@ -92,11 +97,28 @@ def create_site(
     php_version: Optional[str] = None,
     subfolder: str = "",
     redirect_www: bool = True,
+    app_type: str = "web",
+    app_command: Optional[str] = None,
+    app_port: Optional[int] = None,
+    app_env: str = "",
 ) -> Site:
     """Create a site and everything it owns."""
     name = validate_site_name(name)
     domain = validate_domain(domain)
     username = site_username(name)
+    app_type = validate_app_type(app_type)
+    is_app = app_type in RUNTIME_APP_TYPES
+    if is_app:
+        # An application runs its own server; PHP-FPM has no part in it.
+        php_version = None
+        apps_service.require_runtime(app_type)
+        app_command = validate_app_command(app_command or apps_service.default_command(app_type))
+        app_env = validate_app_env(app_env or "")
+        app_port = (
+            apps_service.check_port_free(db, app_port) if app_port else apps_service.allocate_port(db)
+        )
+    else:
+        app_command, app_port, app_env = None, None, None
     if php_version:
         php_version = validate_php_version(php_version)
 
@@ -123,12 +145,17 @@ def create_site(
         webroot=str(webroot),
         php_version=php_version,
         redirect_www=redirect_www,
+        app_type=app_type,
+        app_command=app_command,
+        app_port=app_port,
+        app_env=app_env,
     )
 
     ctx.log(f"Creating site {domain}")
     _create_system_user(ctx, username, root_dir)
     _create_directories(ctx, site)
-    _write_placeholder_page(site)
+    if not is_app:
+        _write_placeholder_page(site)
 
     db.add(site)
     db.flush()  # assign the id before config is rendered against it
@@ -139,7 +166,14 @@ def create_site(
     _reload_services(ctx, site)
 
     db.commit()
-    ctx.log(f"Site {domain} is live at http://{domain}")
+    if is_app:
+        ctx.log(
+            f"Site {domain} is set up as a {apps_service.runtime_label(app_type)} app on "
+            f"port {app_port}. Upload your code to {site.webroot}, install dependencies "
+            "and start it from the site page."
+        )
+    else:
+        ctx.log(f"Site {domain} is live at http://{domain}")
     return site
 
 
@@ -245,6 +279,8 @@ def render_site(site: Site) -> None:
             "acme_root": str(ACME_ROOT),
             "www_redirect_only": www_redirect_only,
             "www_https_redirect": www_redirect_only and www_certified,
+            "app_port": site.app_port if apps_service.is_app(site) else None,
+            "app_label": apps_service.runtime_label(site.app_type),
         },
     )
     nginx.enable_site(site.name)
@@ -277,6 +313,9 @@ def render_site(site: Site) -> None:
     else:
         _remove_all_pools(site)
 
+    if apps_service.is_app(site):
+        apps_service.render_files(site)
+
     _ = php  # provider held for symmetry; socket path is derived above
 
 
@@ -306,6 +345,8 @@ def set_php_version(db: OrmSession, ctx, site: Site, version: Optional[str]) -> 
     The operation per-site PHP versions exist for, and the one a single shared
     FPM pool cannot offer at all.
     """
+    if apps_service.is_app(site):
+        raise ValidationError("PHP isn't used by Node.js and Python sites.")
     previous = site.php_version
     if version:
         version = validate_php_version(version)
@@ -419,6 +460,12 @@ def delete_site(db: OrmSession, ctx, site: Site, *, remove_files: bool = False,
     version = site.php_version
 
     ctx.log(f"Deleting site {domain}")
+
+    if apps_service.is_app(site):
+        try:
+            apps_service.teardown(ctx, site)
+        except Exception as exc:  # noqa: BLE001 - a missing unit must not block deletion
+            ctx.log(f"note: {exc}")
 
     get_provider("nginx").remove_site(name)
     _remove_all_pools(site)

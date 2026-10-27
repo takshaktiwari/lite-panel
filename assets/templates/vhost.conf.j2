@@ -7,7 +7,51 @@
 # {{ banner }}
 # Site: {{ site.name }} ({{ site.domain }})
 
+{% set is_app = app_port is defined and app_port %}
+{% if is_app %}
+# Upgrade WebSocket connections only when the client asks for one. The map is
+# named per site because map variables are global across the whole http block.
+map $http_upgrade $lp_connection_{{ site.name | replace('-', '_') }} {
+    default upgrade;
+    ''      close;
+}
+
+{% endif %}
 {% macro serve() %}
+{% if is_app %}
+    access_log /var/log/nginx/{{ site.name }}.access.log;
+    error_log  /var/log/nginx/{{ site.name }}.error.log;
+
+    client_max_body_size {{ site.upload_limit_mb }}M;
+
+    # {{ app_label }} application: lite-panel runs it under systemd on
+    # 127.0.0.1:{{ app_port }} and nginx proxies to it.
+    location / {
+        proxy_pass http://127.0.0.1:{{ app_port }};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $lp_connection_{{ site.name | replace('-', '_') }};
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_redirect off;
+    }
+
+    # Dotfiles are configuration and version-control data, never content --
+    # except the ACME challenge directory, which must stay reachable.
+    location ~ /\.(?!well-known) {
+        deny all;
+    }
+
+    add_header X-Content-Type-Options "nosniff" always;
+
+    # User-editable override — managed by lite-panel config editor.
+    include /etc/nginx/custom/lite-panel-{{ site.name }}-custom.conf;
+{% else %}
     root {{ site.webroot }};
     index index.php index.html index.htm;
 
@@ -56,6 +100,7 @@
     # Add custom nginx directives (e.g. rewrites, extra headers, cache rules).
     # This file is never overwritten by the panel; only you control its content.
     include /etc/nginx/custom/lite-panel-{{ site.name }}-custom.conf;
+{% endif %}
 {% endmacro %}
 
 {% if www_redirect_only %}

@@ -13,14 +13,20 @@
       <div><dt>Home directory</dt><dd>{{ site.root_dir }}</dd></div>
       <div><dt>Disk usage</dt><dd id="disk-usage-value" data-site-id="{{ site.id }}">Calculating…</dd></div>
       <div>
-        <dt>Webroot</dt>
+        <dt>{{ 'App folder' if is_app else 'Webroot' }}</dt>
         <dd style="display:flex;align-items:center;gap:8px;">
           {{ site.webroot }}
           <button type="button" class="icon-button" id="edit-webroot" title="Change document path"
                   style="width:22px;height:22px;font-size:12px;">✎</button>
         </dd>
       </div>
+      {% if is_app %}
+      <div><dt>Type</dt><dd>{{ app_label }} application</dd></div>
+      <div><dt>Proxied to</dt><dd>127.0.0.1:{{ site.app_port }}</dd></div>
+      <div><dt>Service</dt><dd>{{ app_unit }}</dd></div>
+      {% else %}
       <div><dt>FPM socket</dt><dd>{{ socket or '—' }}</dd></div>
+      {% endif %}
       <div><dt>SSL</dt><dd>{{ 'Enabled' if site.ssl_enabled else 'Disabled' }}</dd></div>
     </dl>
     <p style="margin-top:12px;display:flex;gap:8px;">
@@ -31,6 +37,47 @@
   </section>
 
   <div style="display:flex;flex-direction:column;gap:20px;">
+    {% if is_app %}
+    <section class="panel" id="app-panel" data-site-id="{{ site.id }}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h2 style="margin:0;">{{ app_label }} application</h2>
+        <span id="app-state-badge" class="badge {{ 'success' if app_state.active else '' }}">{{ 'running' if app_state.active else 'stopped' }}</span>
+      </div>
+      {% if not app_runtime_ready %}
+      <div class="alert alert-notice">{{ app_label }} isn't installed on this server. <a href="/stack">Install it from the Stack page</a>.</div>
+      {% endif %}
+      <p class="muted" style="font-size:12.5px;margin-top:0;">
+        Runs as <code>{{ site.system_user }}</code> under systemd, restarts on crash and on server boot once started.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+        {% for action, label in (('start', 'Start'), ('restart', 'Restart'), ('stop', 'Stop')) %}
+        <form method="post" action="/sites/{{ site.id }}/app/control" style="margin:0;">
+          {{ ui.csrf(session) }}
+          <input type="hidden" name="action" value="{{ action }}">
+          <button class="button {{ 'primary' if action == 'start' }}" type="submit">{{ label }}</button>
+        </form>
+        {% endfor %}
+      </div>
+      <form method="post" action="/sites/{{ site.id }}/app/install" style="margin:0;">
+        {{ ui.csrf(session) }}
+        <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 6px;font-weight:600;">Dependencies</h3>
+        <p class="muted" style="font-size:12.5px;margin:0 0 8px;">
+          {% if site.app_type == 'node' %}
+          Runs <code>npm ci</code> (or <code>npm install</code>) in the app folder.
+          {% else %}
+          Creates <code>.venv</code> in the app folder and runs <code>pip install -r requirements.txt</code>.
+          {% endif %}
+        </p>
+        {% if site.app_type == 'node' %}
+        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
+          <input type="checkbox" name="build" value="1" style="width:auto;margin:0;">
+          Also run <code>npm run build</code>
+        </label>
+        {% endif %}
+        <button class="button" type="submit">Install dependencies</button>
+      </form>
+    </section>
+    {% else %}
     <section class="panel">
       <h2>PHP version</h2>
       <form method="post" action="/sites/{{ site.id }}/php" style="display:flex;gap:10px;align-items:flex-end;">
@@ -46,6 +93,7 @@
         <button class="button primary" type="submit" style="margin-bottom:14px;">Apply</button>
       </form>
     </section>
+    {% endif %}
 
     <section class="panel">
       <h2>SSL</h2>
@@ -84,6 +132,38 @@
     </section>
   </div>
 </div>
+
+{% if is_app %}
+<section class="panel">
+  <h2>Application settings</h2>
+  <form method="post" action="/sites/{{ site.id }}/app/settings" style="max-width:640px;">
+    {{ ui.csrf(session) }}
+    <label for="app-preset-select">Start command preset</label>
+    <select id="app-preset-select" data-app-preset aria-label="Command presets">
+      <option value="">Choose a preset…</option>
+      {% for preset in app_presets %}
+      <option value="{{ preset.command }}">{{ preset.label }}</option>
+      {% endfor %}
+    </select>
+    <label for="app-command">Start command</label>
+    <input type="text" id="app-command" name="command" value="{{ site.app_command or app_command_default }}" required spellcheck="false" autocomplete="off">
+    <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">{{ app_hint }} Runs from <code>{{ site.webroot }}</code>; <code>{PORT}</code> is replaced with the port below.</p>
+    <label for="app-port">Port</label>
+    <input type="text" id="app-port" name="port" inputmode="numeric" value="{{ site.app_port }}" required>
+    <label for="app-env">Environment variables <span class="muted">(one KEY=value per line; stored root-only)</span></label>
+    <textarea id="app-env" name="env" rows="6" spellcheck="false" placeholder="DATABASE_URL=...">{{ site.app_env or '' }}</textarea>
+    <button class="button primary" type="submit">Save{{ ' and restart' if app_state.active }}</button>
+  </form>
+</section>
+
+<section class="panel" id="app-logs-panel" data-site-id="{{ site.id }}">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <h2 style="margin:0;">Application logs</h2>
+    <button type="button" class="button" id="app-logs-refresh" style="font-size:12px;padding:3px 10px;">Refresh</button>
+  </div>
+  <pre id="app-logs-output" style="max-height:340px;overflow:auto;margin:0;font-size:12px;white-space:pre-wrap;">Loading…</pre>
+</section>
+{% endif %}
 
 <section class="panel" id="dns-check-panel" data-site-id="{{ site.id }}" data-domain="{{ site.domain }}">
   <h2>DNS propagation</h2>
@@ -292,7 +372,7 @@
   <form method="post" action="/sites/{{ site.id }}/webroot">
     {{ ui.csrf(session) }}
     <h2>Change document path</h2>
-    <p class="muted">The folder nginx serves {{ site.domain }} from. Must stay inside <code>{{ site.root_dir }}</code> -- PHP can't reach outside it either.</p>
+    <p class="muted">The folder {{ 'your app runs from' if is_app else 'nginx serves ' ~ site.domain ~ ' from' }}. Must stay inside <code>{{ site.root_dir }}</code>{% if not is_app %} -- PHP can't reach outside it either{% endif %}.</p>
     <label for="webroot-dialog-path">Document path</label>
     <input type="text" id="webroot-dialog-path" name="webroot" value="{{ site.webroot }}" required>
     <div class="dialog-actions">
@@ -304,6 +384,7 @@
 
 {% include "databases/_modals.html" %}
 
+{% if is_app %}<script src="/static/site-app.js"></script>{% endif %}
 <script src="/static/dns-check.js"></script>
 <script src="/static/webroot-edit.js"></script>
 <script src="/static/disk-usage.js"></script>

@@ -266,6 +266,107 @@ def validate_cron_command(value: str) -> str:
 
 
 # --------------------------------------------------------------------------
+# Application sites (Node / Python)
+# --------------------------------------------------------------------------
+
+APP_TYPES = ("web", "node", "python")
+RUNTIME_APP_TYPES = ("node", "python")
+
+_MAX_APP_COMMAND_LEN = 500
+_MAX_APP_ENV_LEN = 8000
+_ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+
+# Ports the panel hands out itself, and ports that already belong to
+# something on a panel-managed box.
+APP_PORT_MIN = 1024
+APP_PORT_MAX = 65535
+RESERVED_APP_PORTS = frozenset({3306, 5432, 6379, 8443, 8765, 8766, 11211, 27017})
+# Variables the panel owns; letting the operator redefine them would
+# desynchronise the app from the port nginx proxies to.
+MANAGED_ENV_KEYS = frozenset({"PORT", "HOST"})
+
+
+def validate_app_type(value: str) -> str:
+    value = _clean(value, "app type").lower() or "web"
+    if value not in APP_TYPES:
+        raise ValidationError("App type must be PHP / static, Node.js or Python.")
+    return value
+
+
+def validate_app_command(value: str) -> str:
+    """The command a Node / Python site runs under systemd.
+
+    Like a cron command this is meant to execute arbitrary programs, and
+    the site's own unprivileged system user is the isolation boundary, so
+    the only things refused are multi-line input and absurd lengths.
+    """
+    value = _clean(value, "start command")
+    if not value:
+        raise ValidationError("A start command is required, e.g. npm start.")
+    if len(value) > _MAX_APP_COMMAND_LEN:
+        raise ValidationError(f"Start command must be at most {_MAX_APP_COMMAND_LEN} characters.")
+    return value
+
+
+def validate_app_port(value) -> int:
+    try:
+        port = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValidationError("Port must be a number.") from None
+    if not APP_PORT_MIN <= port <= APP_PORT_MAX:
+        raise ValidationError(f"Port must be between {APP_PORT_MIN} and {APP_PORT_MAX}.")
+    if port in RESERVED_APP_PORTS:
+        raise ValidationError(f"Port {port} is reserved for another service.")
+    return port
+
+
+def parse_app_env(text: str) -> list:
+    """Parse ``KEY=VALUE`` lines into ``[(key, value), ...]``.
+
+    Blank lines and ``#`` comments are skipped.  Values may be wrapped in
+    matching quotes, which are stripped.  Raises on a malformed line so a
+    typo is reported instead of silently dropping a setting.
+    """
+    if text is None:
+        return []
+    if len(text) > _MAX_APP_ENV_LEN:
+        raise ValidationError("Environment variables are too long.")
+    if "\x00" in text:
+        raise ValidationError("Environment variables contain invalid characters.")
+
+    pairs = []
+    seen = set()
+    for number, raw in enumerate(text.replace("\r\n", "\n").split("\n"), start=1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+        key, sep, value = line.partition("=")
+        key = key.strip()
+        if not sep or not _ENV_KEY.match(key):
+            raise ValidationError(
+                f"Environment line {number} must look like KEY=value "
+                "(letters, digits and underscores in the name)."
+            )
+        if key in MANAGED_ENV_KEYS:
+            raise ValidationError(f"{key} is set by the panel and cannot be overridden.")
+        if key in seen:
+            raise ValidationError(f"{key} is defined more than once.")
+        seen.add(key)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        pairs.append((key, value))
+    return pairs
+
+
+def validate_app_env(text: str) -> str:
+    """Validate and normalise an environment block; returns the cleaned text."""
+    return "\n".join(f"{key}={value}" for key, value in parse_app_env(text))
+
+
+# --------------------------------------------------------------------------
 # Filesystem containment
 # --------------------------------------------------------------------------
 

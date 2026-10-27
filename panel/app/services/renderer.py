@@ -92,6 +92,20 @@ def render_to_file(
     return True
 
 
+def render_to_file_text(target: Path, content: str, *, mode: int = 0o644) -> bool:
+    """Like :func:`render_to_file` for content that is already rendered."""
+    target = Path(target)
+    if target.exists():
+        try:
+            if target.read_text(encoding="utf-8") == content:
+                return False
+        except (OSError, UnicodeDecodeError):
+            pass
+    write_atomic(target, content, mode=mode)
+    logger.info("rendered %s", target)
+    return True
+
+
 def write_atomic(target: Path, content: str, *, mode: int = 0o644) -> None:
     """Write via a temporary file in the same directory, then rename.
 
