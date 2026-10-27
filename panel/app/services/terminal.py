@@ -103,6 +103,9 @@ class TerminalSession:
                 identity["extra_groups"] = []
                 owner_uid = entry.pw_uid
             cwd = cwd or entry.pw_dir
+            if not os.path.isdir(cwd):
+                # A home that was removed shouldn't make the terminal unusable.
+                cwd = "/"
 
         master_fd, slave_fd = pty.openpty()
         self.master_fd = master_fd
