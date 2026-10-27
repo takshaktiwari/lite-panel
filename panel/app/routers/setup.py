@@ -52,6 +52,7 @@ def wizard(
         os_name=system.os_release_name(),
         php_available=available,
         php_installed=php.installed_versions(),
+        php_repo=php.repository_status(),
         # Newest version pre-selected, but every one on offer comes from apt.
         suggested_php=available[-1] if available else None,
         tuning=tuning.summary(),

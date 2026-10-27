@@ -39,10 +39,20 @@
       </label>
       {% endfor %}
     </div>
+    {% if php_repo.present %}
+    <p class="muted" style="margin-top:4px;">The extra PHP repository is already configured, so every version it carries is listed above.</p>
+    {% elif php_repo.supported %}
     <p class="muted" style="margin-top:4px;">
       Only one version yet? Finish setup, then visit
       <a href="/stack">Stack</a> to add the PHP repository and unlock more.
     </p>
+    {% else %}
+    <p class="muted" style="margin-top:4px;">
+      Only the PHP version bundled with {{ os_name or 'this OS' }} is available. The third-party PHP
+      repository that provides older and newer versions doesn't publish packages for this OS release yet,
+      so more versions can't be added here. Use an Ubuntu 24.04 / 22.04 or Debian 12 server to get several versions side by side.
+    </p>
+    {% endif %}
   {% else %}
     <p class="muted">Could not detect any installable PHP version on this machine.</p>
   {% endif %}
