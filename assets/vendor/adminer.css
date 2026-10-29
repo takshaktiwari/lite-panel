@@ -245,6 +245,14 @@ legend { color: var(--muted); font-size: 12px; padding: 0 6px; }
 .footer > div > fieldset:not(:has(input[name=truncate])) input[type=submit] {
   padding: 3px 11px; font-size: 13px;
 }
+/* "Whole result" (select every row on every page) and "Modify / Save" (inline
+   cell editing) are hidden: the per-row "edit" link and the Export pill cover
+   what is needed, and a Save button with no visible edit mode only confuses. */
+.footer > div > fieldset:has(input[type=checkbox][name=all]),
+.footer > div > fieldset.jsonly,
+#table thead a[href*="modify=1"] { display: none !important; }
+.footer > div > fieldset:has(input[type=checkbox][name=all]) { display: none !important; }
+
 /* Page numbers */
 .footer > div > fieldset > a { padding: 1px 7px; border-radius: 4px; }
 .footer > div > fieldset > a:hover { background: var(--accent-soft); text-decoration: none; }
