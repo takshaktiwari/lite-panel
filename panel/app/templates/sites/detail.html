@@ -223,32 +223,36 @@
   <p class="muted">No workers yet.</p>
   {% endfor %}
 
-  <details {{ 'open' if not worker_rows }}>
+  <details>
     <summary style="cursor:pointer;font-weight:600;font-size:13px;">Add a worker</summary>
-    <form method="post" action="/sites/{{ site.id }}/workers/add" style="margin-top:10px;max-width:640px;">
+    <form method="post" action="/sites/{{ site.id }}/workers/add" style="margin-top:10px;">
       {{ ui.csrf(session) }}
-      <label for="worker-preset">Preset</label>
-      <select id="worker-preset" data-worker-preset aria-label="Worker presets">
-        <option value="">Choose a preset…</option>
-        {% for preset in worker_presets %}
-        <option value="{{ preset.command }}" data-name="{{ preset.name }}" data-processes="{{ preset.processes }}">{{ preset.label }}</option>
-        {% endfor %}
-      </select>
-      <label for="worker-name">Name</label>
-      <input type="text" id="worker-name" name="name" placeholder="queue" required maxlength="24" autocomplete="off">
-      <label for="worker-command">Command</label>
-      <input type="text" id="worker-command" name="command" required spellcheck="false" autocomplete="off">
-      <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">{% if not is_app %}<code>{PHP}</code> is the site's PHP.{% endif %} Runs in <code>{{ workers_workdir }}</code>. <a href="/docs/workers#add">Details</a></p>
-      <div style="display:flex;gap:12px;">
-        <div style="flex:1;">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <div style="flex:2 1 220px;">
+          <label for="worker-preset">Preset</label>
+          <select id="worker-preset" data-worker-preset aria-label="Worker presets">
+            <option value="">Choose a preset…</option>
+            {% for preset in worker_presets %}
+            <option value="{{ preset.command }}" data-name="{{ preset.name }}" data-processes="{{ preset.processes }}">{{ preset.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="flex:1 1 160px;">
+          <label for="worker-name">Name</label>
+          <input type="text" id="worker-name" name="name" placeholder="queue" required maxlength="24" autocomplete="off">
+        </div>
+        <div style="flex:0 1 110px;">
           <label for="worker-processes">Processes</label>
           <input type="number" id="worker-processes" name="processes" min="1" max="{{ worker_max_processes }}" value="1" required>
         </div>
-        <div style="flex:1;">
+        <div style="flex:0 1 140px;">
           <label for="worker-stop-timeout">Stop timeout (s)</label>
           <input type="number" id="worker-stop-timeout" name="stop_timeout" min="5" max="3600" value="{{ worker_default_timeout }}" required>
         </div>
       </div>
+      <label for="worker-command">Command</label>
+      <input type="text" id="worker-command" name="command" required spellcheck="false" autocomplete="off">
+      <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">{% if not is_app %}<code>{PHP}</code> is the site's PHP.{% endif %} Runs in <code>{{ workers_workdir }}</code>. <a href="/docs/workers#add">Details</a></p>
       <button class="button primary" type="submit">Add and start</button>
     </form>
   </details>
