@@ -360,8 +360,8 @@ fieldset:has(input[name=truncate]) > div > p label {
   fieldset:has(input[name=truncate]) > div > p {
     order: 4;
     flex: 1 1 100%;
-    margin: 4px 0 0; padding: 12px 0 0;
-    border-left: 0; border-top: 1px solid var(--border);
+    margin: 6px 0 0; padding: 0;
+    border: 0;
   }
 }
 @media (max-width: 860px) {
