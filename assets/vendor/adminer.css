@@ -311,7 +311,36 @@ form#form > p > input[type=submit]:first-child:hover,
 #content form > p > input[type=submit]:only-of-type:hover,
 .layout + p > input[type=submit]:hover { filter: brightness(1.08); color: #fff; }
 input[name=drop], input[name=truncate] { color: var(--danger); }
-input[name=drop]:hover, input[name=truncate]:hover { border-color: var(--danger); color: var(--danger); }
+input[name=drop]:hover, input[name=truncate]:hover {
+  background: var(--danger); border-color: var(--danger); color: #fff;
+}
+
+/* Tables page, "Selected (n)" box: maintenance buttons on the left, the
+   destructive ones on the right, and "move / copy" as a second, separate row. */
+fieldset:has(input[name=truncate]) { padding: 14px 18px 18px; }
+fieldset:has(input[name=truncate]) > div {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  max-width: 820px;
+}
+fieldset:has(input[name=truncate]) > div::before {
+  content: "Apply to the selected tables";
+  flex: 0 0 100%;
+  margin-bottom: 2px;
+  color: var(--muted); font-size: 12px;
+}
+fieldset:has(input[name=truncate]) input[name=truncate] { margin-left: auto; }
+fieldset:has(input[name=truncate]) > div > p {
+  flex: 1 1 100%;
+  margin: 8px 0 0; padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  color: var(--muted); font-size: 13px;
+}
+fieldset:has(input[name=truncate]) > div > p select { min-width: 200px; color: var(--text); }
+fieldset:has(input[name=truncate]) > div > p label {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-left: 6px; color: var(--text);
+}
 
 /* ---- SQL highlighting & help ------------------------------------------ */
 pre, #help {
