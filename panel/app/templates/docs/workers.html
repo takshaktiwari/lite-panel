@@ -49,7 +49,7 @@
 <ul>
   <li><strong>Start / Restart / Stop</strong> per worker. Stop also keeps it from starting at boot until you start it again.</li>
   <li><strong>Restart all</strong> restarts every worker of the site.</li>
-  <li><strong>Logs</strong> shows the most recent output of all of a worker's processes. Also available in the <a href="/logs">Logs</a> page's journal view for the unit.</li>
+  <li><strong>Logs</strong> shows the most recent output of all of a worker's processes. From a terminal: <code>journalctl -u 'lite-panel-worker-&lt;site&gt;.&lt;name&gt;@*' -f</code>.</li>
   <li><strong>Edit or remove</strong> changes the command, process count or stop timeout (a running worker is restarted to apply it), or deletes the worker and its units.</li>
   <li>Changing the site's PHP version restarts its running <code>{PHP}</code> workers on the new version. Deleting the site removes all its workers.</li>
 </ul>
