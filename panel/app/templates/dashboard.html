@@ -24,13 +24,17 @@
     {{ ui.meter("Disk", info.disk.percent, "%d / %d GB · Breakdown →" % (info.disk.used_mb // 1024, info.disk.total_mb // 1024)) }}
   </a>
   {% if info.swap.total_mb %}
-    {{ ui.meter("Swap", info.swap.percent, "%d / %d MB" % (info.swap.used_mb, info.swap.total_mb)) }}
+  <a href="/swap" style="text-decoration:none;color:inherit;display:block;" title="Manage swap">
+    {{ ui.meter("Swap", info.swap.percent, "%d / %d MB · Manage →" % (info.swap.used_mb, info.swap.total_mb)) }}
+  </a>
   {% else %}
+  <a href="/swap" style="text-decoration:none;color:inherit;display:block;" title="Set up swap">
   <div class="metric">
     <div class="metric-label">Swap</div>
     <div class="metric-value">None</div>
-    <div class="metric-detail muted">Not configured</div>
+    <div class="metric-detail muted">Not configured · Set up →</div>
   </div>
+  </a>
   {% endif %}
 </section>
 

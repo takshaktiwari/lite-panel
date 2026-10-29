@@ -42,6 +42,7 @@ GROUPS = [
             ("stack", "Stack", "Install and remove nginx, PHP, MariaDB, Node.js, Python and other components."),
             ("terminal", "Terminal", "A web shell as root or as any site's user."),
             ("monitor", "Monitor", "Live and historical CPU, memory, disk and process information."),
+            ("swap", "Swap", "Add, resize or remove swap so memory spikes don't kill services."),
             ("logs", "Logs", "Read nginx, PHP, database, panel and application logs."),
             ("config-editor", "Config editor", "Edit php.ini, nginx.conf and per-site nginx overrides safely."),
             ("jobs", "Jobs", "Every change the panel makes runs as a job with a live log."),

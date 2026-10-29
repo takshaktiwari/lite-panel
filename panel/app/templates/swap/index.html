@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Swap · {{ app_name }}{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <h1>Swap</h1>
+  <p class="muted">Disk space the server can use as overflow memory, so a short spike doesn't kill MariaDB or PHP. <a href="/docs/swap">Guide</a></p>
+</header>
+
+{% if not status.supported %}
+<div class="alert alert-error">Swap can't be managed here: it needs a Linux server with <code>swapon</code> and <code>mkswap</code>.</div>
+{% endif %}
+
+<section class="metrics">
+  <div class="metric">
+    <div class="metric-label">Swap</div>
+    <div class="metric-value">{{ status.total_mb ~ ' MB' if status.total_mb else 'None' }}</div>
+    <div class="metric-detail muted">{{ status.used_mb }} MB in use</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Memory (RAM)</div>
+    <div class="metric-value">{{ status.ram_mb }} MB</div>
+    <div class="metric-detail muted">Recommended swap: {{ status.recommended_mb }} MB</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Free disk</div>
+    <div class="metric-value">{{ (status.free_disk_mb // 1024) }} GB</div>
+    <div class="metric-detail muted">on the main volume</div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Swappiness</div>
+    <div class="metric-value">{{ status.swappiness if status.swappiness is not none else '—' }}</div>
+    <div class="metric-detail muted">0 – 100</div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>{{ 'Resize swap file' if status.managed_active else 'Set up swap' }}</h2>
+  <form method="post" action="/swap/set" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;max-width:520px;">
+    {{ ui.csrf(session) }}
+    <div style="flex:1;min-width:200px;">
+      <label for="swap-size">Size</label>
+      <select id="swap-size" name="size_mb" style="margin-bottom:0;">
+        {% for size in size_choices %}
+        {% set too_big = status.free_disk_mb and (size + 1024) > status.free_disk_mb %}
+        <option value="{{ size }}" {{ 'disabled' if too_big }}
+                {{ 'selected' if size == status.recommended_mb }}>
+          {{ (size // 1024) ~ ' GB' if size >= 1024 else size ~ ' MB' }}{{ ' (recommended)' if size == status.recommended_mb }}{{ ' — not enough disk' if too_big }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="button primary" type="submit" {{ 'disabled' if not status.supported }}>
+      {{ 'Resize' if status.managed_active else 'Create swap' }}
+    </button>
+  </form>
+  <p class="muted" style="font-size:12.5px;margin-top:10px;">Creates <code>/swapfile</code> and keeps it after reboots. <a href="/docs/swap#create">Details</a></p>
+
+  {% if status.managed_active %}
+  <form method="post" action="/swap/remove" style="margin-top:14px;">
+    {{ ui.csrf(session) }}
+    <button class="button" type="submit" style="color:var(--danger);"
+            data-confirm="Turn off and delete the swap file? Anything stored in it moves back into RAM first.">Remove swap file</button>
+  </form>
+  {% elif status.swapfile_exists %}
+  <p class="muted" style="font-size:12.5px;">A <code>/swapfile</code> exists but isn't active. Creating swap replaces it.</p>
+  {% endif %}
+
+  {% if status.other_devices %}
+  <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:18px 0 6px;font-weight:600;">Other swap on this server</h3>
+  <table class="table">
+    <thead><tr><th>Device</th><th>Type</th><th>Size</th><th>Used</th></tr></thead>
+    <tbody>
+      {% for d in status.other_devices %}
+      <tr><td><code>{{ d.name }}</code></td><td class="muted">{{ d.kind }}</td><td>{{ d.size_mb }} MB</td><td>{{ d.used_mb }} MB</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted" style="font-size:12.5px;">Not managed by the panel; change it from the command line.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Swappiness</h2>
+  <form method="post" action="/swap/swappiness" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;max-width:520px;">
+    {{ ui.csrf(session) }}
+    <div style="flex:1;min-width:200px;">
+      <label for="swappiness">How eagerly to use swap (0–100)</label>
+      <input type="text" id="swappiness" name="value" inputmode="numeric" value="{{ status.swappiness if status.swappiness is not none else 60 }}" style="margin-bottom:0;">
+    </div>
+    <button class="button" type="submit" {{ 'disabled' if not status.supported }}>Save</button>
+  </form>
+  <p class="muted" style="font-size:12.5px;margin-top:10px;">Servers usually run well at 10. <a href="/docs/swap#swappiness">What it means</a></p>
+</section>
+{% endblock %}

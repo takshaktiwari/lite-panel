@@ -36,6 +36,7 @@ from app.routers import (
     sites,
     ssh_keys,
     stack,
+    swap,
     terminal,
 )
 from app.security import purge_expired_sessions
@@ -123,6 +124,7 @@ def create_app() -> FastAPI:
     app.include_router(terminal.router)
     app.include_router(backup.router)
     app.include_router(docs.router)
+    app.include_router(swap.router)
 
     @app.get("/health", include_in_schema=False)
     def health_check():

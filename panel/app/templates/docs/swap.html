@@ -1,0 +1,50 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What swap is</h2>
+<p>Swap is disk space the operating system can use as overflow memory. When RAM fills up, the kernel moves rarely-used data to swap instead of killing a process. It is much slower than RAM, so it is <strong>insurance, not extra memory</strong>: it keeps MariaDB or PHP alive during a short spike (a large import, a build, a backup) rather than letting the kernel's out-of-memory killer stop them.</p>
+<p>The <a href="/dashboard">Dashboard</a> shows <em>Swap: None</em> when none is configured. The <a href="/swap">Swap</a> page in the sidebar lets you set it up at any time.</p>
+
+<h2 id="need">Do you need it?</h2>
+<table>
+  <tr><th>Server RAM</th><th>Recommendation</th></tr>
+  <tr><td>512&nbsp;MB or less</td><td>Essential. The installer adds 1&nbsp;GB automatically.</td></tr>
+  <tr><td>1–2&nbsp;GB</td><td>Strongly recommended (2&nbsp;GB).</td></tr>
+  <tr><td>4&nbsp;GB and up</td><td>Optional safety net; 2&nbsp;GB is plenty.</td></tr>
+</table>
+<p>The installer only adds swap on very small servers, which is why a larger server shows "None" until you add it here. The recommended size on the page is calculated from the server's RAM (capped at 2&nbsp;GB).</p>
+
+<h2 id="create">Setting it up</h2>
+<ol>
+  <li>Open <a href="/swap">Swap</a>.</li>
+  <li>Choose a size. Sizes that would not leave 1&nbsp;GB of free disk are disabled.</li>
+  <li>Click <em>Create swap</em>. A <a href="/docs/jobs">job</a> creates <code>/swapfile</code>, formats it, turns it on and adds it to <code>/etc/fstab</code> so it comes back after a reboot.</li>
+</ol>
+<p>The page then shows the new size, and the Dashboard's Swap card switches from "None" to a usage meter.</p>
+
+<h2 id="resize">Resizing and removing</h2>
+<ul>
+  <li><strong>Resize:</strong> pick a new size and click <em>Resize</em>. The old file is switched off (anything in it moves back to RAM first), replaced, and switched on again.</li>
+  <li><strong>Remove:</strong> <em>Remove swap file</em> turns it off, deletes the file and removes the <code>/etc/fstab</code> entry.</li>
+</ul>
+<div class="callout warn"><strong class="callout-title">Resizing or removing needs free RAM</strong>Turning swap off moves its contents back into memory. If swap is heavily used and RAM is nearly full, the job fails with an error and nothing is changed; try again when the server is quieter.</div>
+
+<h2 id="managed">What the panel manages</h2>
+<p>Only the single <code>/swapfile</code> it creates. If the server already has other swap (a swap partition, or a file you made by hand) it is listed on the page but never touched, and the panel's file is added alongside it.</p>
+
+<h2 id="swappiness">Swappiness</h2>
+<p>Swappiness (0–100) tells the kernel how eagerly to use swap. The Linux default is 60. On a web server it is usually better to keep data in RAM and use swap only when needed, so <strong>10</strong> is a common choice. Lower values use swap later; higher values use it sooner. Saving applies immediately and persists across reboots (<code>/etc/sysctl.d/99-lite-panel-swap.conf</code>).</p>
+
+<h2 id="problems">Troubleshooting</h2>
+<ul>
+  <li><strong>"Swap can't be managed":</strong> the page needs a Linux server with <code>swapon</code> and <code>mkswap</code>.</li>
+  <li><strong>Creation fails on a container or some VPS types:</strong> some container platforms (LXC/OpenVZ) do not allow swap from inside the guest. Ask the provider, or enable swap in the host settings.</li>
+  <li><strong>"Not enough free disk":</strong> free some space (see <a href="/docs/monitor#disk">Monitor → disk breakdown</a>) or choose a smaller size.</li>
+</ul>
+
+<h2 id="manual">By hand (without the panel)</h2>
+<pre>sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab</pre>
+{% endblock %}

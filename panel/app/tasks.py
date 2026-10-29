@@ -25,6 +25,7 @@ from app.services import renderer
 from app.services import sites as sites_service
 from app.services import backup as backup_service
 from app.services import security as security_service
+from app.services import swap as swap_service
 from app.services import fail2ban as fail2ban_service
 from app.validators import ValidationError
 
@@ -831,3 +832,32 @@ def fail2ban_uninstall(ctx) -> None:
         fail2ban_service.uninstall(ctx.log)
     except Exception as exc:
         raise JobFailed(str(exc)) from exc
+
+
+# --------------------------------------------------------------------------
+# Swap
+# --------------------------------------------------------------------------
+
+
+@register("swap.set")
+def set_swap(ctx) -> None:
+    try:
+        swap_service.set_size(ctx, ctx.payload["size_mb"])
+    except (ValidationError, RuntimeError) as exc:
+        raise _fail(exc) from exc
+
+
+@register("swap.remove")
+def remove_swap(ctx) -> None:
+    try:
+        swap_service.remove(ctx)
+    except (ValidationError, RuntimeError) as exc:
+        raise _fail(exc) from exc
+
+
+@register("swap.swappiness")
+def set_swappiness(ctx) -> None:
+    try:
+        swap_service.set_swappiness(ctx, ctx.payload["value"])
+    except (ValidationError, RuntimeError) as exc:
+        raise _fail(exc) from exc
