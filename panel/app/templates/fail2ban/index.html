@@ -6,7 +6,7 @@
 <header class="page-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
   <div>
     <h1>Fail2ban</h1>
-    <p class="muted">Blocks IPs that keep failing to log in over SSH, so brute-force attacks run out of attempts.</p>
+    <p class="muted">Blocks IPs that keep failing SSH logins. <a href="/docs/fail2ban">Learn more</a></p>
   </div>
   <div>
     {% if not installed %}
@@ -74,8 +74,7 @@
 
 {% if ssh.password_auth %}
 <div class="alert alert-notice">
-  <strong>Tip:</strong> SSH still accepts passwords. Fail2ban slows attackers down, but attacks spread across many IPs each get their own attempts.
-  Switching to key-only login is the stronger fix. Add your key on the <a href="/ssh">SSH Keys</a> page first.
+  <strong>Tip:</strong> SSH still accepts passwords; key-only login is stronger — add a key on <a href="/ssh">SSH Keys</a> first. <a href="/docs/fail2ban#how">Why</a>
 </div>
 {% endif %}
 
@@ -219,11 +218,7 @@
 
     <div class="form-with-sidebar-info">
       <p><strong>How it works:</strong> when one IP fails to log in <strong>{{ settings.maxretry }}</strong> times within <strong>{{ format_duration(settings.findtime) }}</strong>, it's blocked from SSH for <strong>{{ format_duration(settings.bantime) }}</strong>.</p>
-      {% if settings.increment_enabled %}
-      <p><strong>Growing bans</strong> are on: the next ban for the same IP lasts twice as long, up to {{ format_duration(settings.increment_maxtime) }}.</p>
-      {% endif %}
-      <p>The SSH port is detected automatically, so changing it on the SSH side just needs a save here.</p>
-      <p>Bans are kept separately from your UFW rules, so they don't clutter the <a href="/firewall">Firewall</a> page.</p>
+      <p><a href="/docs/fail2ban#settings">What each setting does</a></p>
     </div>
   </form>
 </section>

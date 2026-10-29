@@ -431,16 +431,7 @@
 <script src="/static/security.js"></script>
 
 {# ── Info box ────────────────────────────────────────────────────────────── #}
-<div class="alert alert-notice" style="display:flex;gap:10px;align-items:flex-start;margin-top:16px;">
-  <div>
-    <strong>About Security Scanners:</strong>
-    <ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;line-height:1.6;" class="muted">
-      <li><strong>LMD (Linux Malware Detect):</strong> Scans website files under <code>/var/www</code> for PHP web shells, backdoors, and injected malware. Flagged files can be quarantined (recoverable) or deleted.</li>
-      <li><strong>rkhunter:</strong> Checks system binaries, hidden processes, and OS-level rootkits. Run periodically as a security audit.</li>
-      <li>Neither tool runs continuous background daemons, keeping memory and CPU usage at 0% when idle.</li>
-    </ul>
-  </div>
-</div>
+<p class="muted" style="margin-top:16px;font-size:12.5px;">How scanning works, and what to do with findings: <a href="/docs/malware-scan">Malware scan guide</a>.</p>
 
 {# ── Modals: Uninstall Confirmation Dialogs ─────────────────────────────── #}
 <dialog id="dlg-uninstall-maldet" class="dialog">

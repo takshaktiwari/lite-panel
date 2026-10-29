@@ -1,0 +1,26 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What it is</h2>
+<p>The <a href="/terminal">Terminal</a> is a real shell on the server in your browser, so you can run <code>git</code>, <code>composer</code>, <code>npm</code>, <code>php artisan</code>, <code>tail -f</code> and so on without a separate SSH client. It supports full-screen programs such as <code>vim</code>, <code>htop</code> and <code>less</code>, and resizes with the window.</p>
+
+<h2 id="login">Log in as</h2>
+<p>The <strong>Log in as</strong> menu at the top picks which account the shell runs as:</p>
+<table>
+  <tr><th>Choice</th><th>You get</th></tr>
+  <tr><td>A site (<code>domain (site_user)</code>)</td><td>A shell as that site's user, starting in its folder. It can only touch that site's files, which is what you want for deploying code, running <code>composer install</code>, <code>npm</code>, migrations and queue workers.</td></tr>
+  <tr><td><strong>root</strong> (last in the list)</td><td>Full control of the server: install packages, edit system files, restart services. Use deliberately.</td></tr>
+</table>
+<p>Changing the menu opens a fresh shell as the new account. The terminal opens as <strong>root</strong> by default, except when you arrive from a site's <em>Terminal</em> button, which opens as that site's user.</p>
+<div class="callout tip"><strong class="callout-title">Prefer the site user</strong>Files created while logged in as root are owned by root, and the website then cannot write to them. Working as the site user avoids that whole class of permission problem.</div>
+
+<h2 id="behaviour">Behaviour and limits</h2>
+<ul>
+  <li>The session closes after <strong>20 minutes without input</strong>. Reload the page to start a new one.</li>
+  <li>Closing the tab ends the shell and everything started from it. For long-running work use a tool such as <code>tmux</code>, a <a href="/docs/cron">cron job</a>, or a <a href="/docs/node-python">managed application service</a>.</li>
+  <li>The shell does not inherit the panel's secret settings.</li>
+  <li>Opening and closing a terminal, and which account was used, are recorded in the audit log.</li>
+</ul>
+
+<h2 id="security">Security</h2>
+<p>Only a logged-in panel administrator can open a terminal, and the connection only accepts requests from the panel's own page. Treat panel access like root access to the box.</p>
+{% endblock %}

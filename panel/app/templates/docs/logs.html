@@ -1,0 +1,30 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<p>The <a href="/logs">Logs</a> page shows the most recent lines of the server's logs, so you can debug without SSH.</p>
+
+<h2 id="sources">What you can read</h2>
+<table>
+  <tr><th>Source</th><th>Use it to…</th></tr>
+  <tr><td>Nginx error / access log (server-wide)</td><td>See request failures and traffic.</td></tr>
+  <tr><td>Site logs (pick a site)</td><td>Per-site nginx error and access logs, and the PHP error log for PHP sites. First stop for a 500 error.</td></tr>
+  <tr><td>Application service (Node.js / Python sites)</td><td>Output of your app: crashes and stack traces. Also shown on the site page.</td></tr>
+  <tr><td>MariaDB journal and slow-query log</td><td>Find database errors and slow queries.</td></tr>
+  <tr><td>FTP server log</td><td>Check logins and transfers.</td></tr>
+  <tr><td>Lite-panel logs</td><td>The panel's own log, its nginx error log and its service journal.</td></tr>
+</table>
+
+<h2 id="using">Using the viewer</h2>
+<ul>
+  <li><strong>Lines</strong> — choose how many of the latest lines to load.</li>
+  <li><strong>Filter</strong> — type text to keep only matching lines (for example an IP address or <code>500</code>).</li>
+  <li><strong>Auto-refresh</strong> — tail the log live while you reproduce a problem.</li>
+</ul>
+<p>Only a fixed list of log locations can be read, so the page cannot be used to open arbitrary files.</p>
+
+<h2 id="debugging">Debugging recipes</h2>
+<ul>
+  <li><strong>White page / 500 on a PHP site:</strong> site → PHP error log.</li>
+  <li><strong>502 / 504:</strong> nginx error log for the site; for apps, the application log and that the service is running.</li>
+  <li><strong>Certificate won't issue:</strong> check DNS and the nginx error log, then retry <a href="/docs/sites#ssl">Enable HTTPS</a>.</li>
+</ul>
+{% endblock %}

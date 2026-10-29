@@ -1,0 +1,59 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="requirements">Requirements</h2>
+<ul>
+  <li><strong>OS:</strong> Ubuntu 20.04 / 22.04 / 24.04 (or newer) or Debian 11 / 12.</li>
+  <li><strong>Server:</strong> a fresh VPS with root or sudo access. 1&nbsp;GB RAM is recommended; 512&nbsp;MB works because the installer adds a swap file automatically on very small servers.</li>
+  <li><strong>Network:</strong> ports <code>80</code> and <code>443</code> for your websites, and <code>8443</code> for the panel itself, must be reachable (see <a href="#network">Network access</a>).</li>
+</ul>
+
+<h2 id="install">Install</h2>
+<p>Run one command as root (or with <code>sudo</code>) on the server:</p>
+<pre>curl -fsSL https://raw.githubusercontent.com/takshaktiwari/lite-panel/main/install.sh | sudo bash</pre>
+<p>The installer is safe to run again; every step checks whether it is already done and skips itself. It will:</p>
+<ol>
+  <li>Check that the OS is Ubuntu or Debian.</li>
+  <li>Install base packages: nginx, python3-venv, php-cli, openssl, git and curl.</li>
+  <li>Add a 1&nbsp;GB swap file if the server has 512&nbsp;MB RAM or less and no swap.</li>
+  <li>Clone the panel to <code>/opt/lite-panel</code> and create its Python virtualenv.</li>
+  <li>Generate a random secret key and write <code>/etc/lite-panel/panel.env</code>.</li>
+  <li>Create a self-signed TLS certificate (valid 10 years) so the panel is HTTPS from the first minute.</li>
+  <li>Write and enable the panel's nginx site.</li>
+  <li>Install and start two systemd services: <code>lite-panel</code> (the panel) and <code>lite-panel-adminer</code> (the database browser).</li>
+  <li>Create the SQLite database and an <code>admin</code> account with a random password.</li>
+  <li>Run a health check and print the login details.</li>
+</ol>
+
+<p>When it finishes it prints a box like this. <strong>Copy the password now</strong>; it is shown once.</p>
+<pre>Panel URL  : https://&lt;server-address&gt;:8443/
+Username   : admin
+Password   : &lt;random-generated&gt;</pre>
+
+<div class="callout warn">
+  <strong class="callout-title">The address printed may be a private one</strong>
+  On cloud servers (AWS, for example) the installer can print the server's <em>private</em> address (such as
+  <code>172.31.x.x</code>), which only works from inside the cloud network. Use the server's <strong>public</strong> IP instead:
+  <code>https://PUBLIC-IP:8443/</code>.
+</div>
+
+<h2 id="network">Network access</h2>
+<p>The panel listens on port <strong>8443</strong>. Two things can stop you reaching it, and neither is a panel fault:</p>
+<ol>
+  <li><strong>Cloud firewall / security group.</strong> On AWS, Google Cloud, Azure, DigitalOcean and similar providers, inbound ports are closed by default. Add inbound rules for TCP <code>8443</code> (restrict to your own IP for safety), <code>80</code> and <code>443</code>. This is the most common reason a fresh install "doesn't work".</li>
+  <li><strong>Server firewall (UFW).</strong> If UFW is active on the server, allow the same ports from the <a href="/docs/firewall">Firewall</a> page or with <code>sudo ufw allow 8443/tcp</code>.</li>
+</ol>
+
+<h2 id="certificate">The browser certificate warning</h2>
+<p>Until you have a domain, the panel uses a self-signed certificate, so the browser shows a warning. This is expected. Choose <em>Advanced → Proceed</em>. The connection is still encrypted. A domain is not needed to use the panel, only to put real certificates on your <em>websites</em> (see <a href="/docs/sites#ssl">Sites → HTTPS</a>).</p>
+
+<h2 id="login">Logging in</h2>
+<p>Sign in with the <code>admin</code> account. After five failed attempts the login is locked for 15 minutes. Sessions last 12 hours. There is a single administrator account.</p>
+<ul>
+  <li><strong>Change the password:</strong> click the gear icon at the bottom of the sidebar → <em>Change password</em>.</li>
+  <li><strong>Lost the password:</strong> run <code>sudo lite-panel reset-password --username admin</code> on the server. See <a href="/docs/cli">Command line</a>.</li>
+  <li><strong>Dark mode:</strong> the moon icon next to your name toggles the theme.</li>
+</ul>
+
+<h2 id="next">What next?</h2>
+<p>Follow the <a href="/docs/quick-start">Quick start</a> to set up the server and publish your first site.</p>
+{% endblock %}

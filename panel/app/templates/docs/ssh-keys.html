@@ -1,0 +1,25 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="why">Why keys</h2>
+<p>An SSH key pair replaces a password: the private key stays on your computer and the server only holds the public key. It is far harder to attack than a password. Once keys work, you can turn off password logins for SSH (see <a href="/docs/fail2ban">Fail2ban</a> for why that matters).</p>
+
+<h2 id="accounts">Which account a key is for</h2>
+<p>Keys are attached to a system account: <strong>root</strong> (full server administration) or an individual <strong>site user</strong> (<code>site_&lt;name&gt;</code>). A site-user key lets a developer connect as <code>ssh site_name@server</code> and land in that site's folder with no access to other sites. Giving a site user a key also lets that account log in over SSH with a normal shell.</p>
+
+<h2 id="generate">Generate a key pair on the server</h2>
+<ol>
+  <li>Open <a href="/ssh">SSH</a>, choose the account and the key type (<strong>Ed25519</strong> is recommended; RSA 4096-bit is available for older systems), then click <em>Generate SSH key pair</em>.</li>
+  <li>Download the <strong>private key</strong> when it is offered. <strong>It is shown once and not kept by the panel.</strong> Save it somewhere safe.</li>
+  <li>On your computer restrict the file and connect:
+<pre>chmod 600 my-key.pem
+ssh -i my-key.pem root@server-ip   # or site_name@server-ip</pre>
+  </li>
+</ol>
+
+<h2 id="import">Import an existing public key</h2>
+<p>If you already have a key (<code>~/.ssh/id_ed25519.pub</code> on your computer), paste its contents under <em>Import existing public key</em>. This is the best option: your private key never leaves your machine.</p>
+
+<h2 id="manage">Authorized keys</h2>
+<p>The list shows every key the panel manages with its fingerprint. View the public key, or delete a key to revoke that access immediately.</p>
+<div class="callout"><strong class="callout-title">Locked out?</strong>Keys are added to the account's <code>authorized_keys</code>. If you lose the only key, log in through the provider's console and fix it there.</div>
+{% endblock %}

@@ -46,9 +46,7 @@
       {% if not app_runtime_ready %}
       <div class="alert alert-notice">{{ app_label }} isn't installed on this server. <a href="/stack">Install it from the Stack page</a>.</div>
       {% endif %}
-      <p class="muted" style="font-size:12.5px;margin-top:0;">
-        Runs as <code>{{ site.system_user }}</code> under systemd, restarts on crash and on server boot once started.
-      </p>
+      <p class="muted" style="font-size:12.5px;margin-top:0;">Runs as <code>{{ site.system_user }}</code>. <a href="/docs/node-python">Guide</a></p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
         {% for action, label in (('start', 'Start'), ('restart', 'Restart'), ('stop', 'Stop')) %}
         <form method="post" action="/sites/{{ site.id }}/app/control" style="margin:0;">
@@ -61,13 +59,6 @@
       <form method="post" action="/sites/{{ site.id }}/app/install" style="margin:0;">
         {{ ui.csrf(session) }}
         <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 6px;font-weight:600;">Dependencies</h3>
-        <p class="muted" style="font-size:12.5px;margin:0 0 8px;">
-          {% if site.app_type == 'node' %}
-          Runs <code>npm ci</code> (or <code>npm install</code>) in the app folder.
-          {% else %}
-          Creates <code>.venv</code> in the app folder and runs <code>pip install -r requirements.txt</code>.
-          {% endif %}
-        </p>
         {% if site.app_type == 'node' %}
         <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
           <input type="checkbox" name="build" value="1" style="width:auto;margin:0;">
@@ -147,10 +138,10 @@
     </select>
     <label for="app-command">Start command</label>
     <input type="text" id="app-command" name="command" value="{{ site.app_command or app_command_default }}" required spellcheck="false" autocomplete="off">
-    <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">{{ app_hint }} Runs from <code>{{ site.webroot }}</code>; <code>{PORT}</code> is replaced with the port below.</p>
+    <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">Use <code>{PORT}</code> for the port. <a href="/docs/node-python#settings">Details</a></p>
     <label for="app-port">Port</label>
     <input type="text" id="app-port" name="port" inputmode="numeric" value="{{ site.app_port }}" required>
-    <label for="app-env">Environment variables <span class="muted">(one KEY=value per line; stored root-only)</span></label>
+    <label for="app-env">Environment variables</label>
     <textarea id="app-env" name="env" rows="6" spellcheck="false" placeholder="DATABASE_URL=...">{{ site.app_env or '' }}</textarea>
     <button class="button primary" type="submit">Save{{ ' and restart' if app_state.active }}</button>
   </form>

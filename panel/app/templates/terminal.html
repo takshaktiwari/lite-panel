@@ -25,7 +25,7 @@
     align-items: center;
     justify-content: center;
     background: rgba(13, 15, 18, 0.92);
-    color: #d6dae0;
+    color: #e2e8f0;
     font: 13px var(--mono);
     text-align: center;
     padding: 24px;
@@ -38,8 +38,7 @@
 <header class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;">
   <div>
     <h1>Terminal</h1>
-    <p class="muted">A real shell on this server{% if login.user %} as <code>{{ login.user }}</code>, limited to that site's account{% else %} as <strong>root</strong>{% endif %}.
-      Closes automatically after {{ idle_timeout_minutes }} minutes of inactivity.</p>
+    <p class="muted">A shell on this server{% if login.user %} as <code>{{ login.user }}</code>{% else %} as <strong>root</strong>{% endif %}. <a href="/docs/terminal">Guide</a></p>
   </div>
   <div style="min-width:260px;">
     <label for="terminal-login" style="margin-bottom:3px;">Log in as</label>

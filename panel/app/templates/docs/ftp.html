@@ -1,0 +1,33 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="setup">Setup</h2>
+<p>Install <strong>FTP (vsftpd)</strong> from <a href="/stack">Stack</a> or the Setup wizard. Then open these ports in your cloud firewall and in the panel's <a href="/docs/firewall">Firewall</a>:</p>
+<ul>
+  <li>TCP <code>21</code> (FTP control)</li>
+  <li>TCP <code>30000–30100</code> (passive data connections)</li>
+</ul>
+<div class="callout warn">Plain FTP is not encrypted. For sensitive work prefer SFTP with <a href="/docs/ssh-keys">SSH keys</a>, and use FTP only when a tool requires it.</div>
+
+<h2 id="accounts">Two kinds of account</h2>
+<table>
+  <tr><th>Kind</th><th>Description</th></tr>
+  <tr><td><strong>Linked to a site</strong></td><td>If the path you choose is a site's own folder, the login <em>is</em> that site's system user (<code>site_&lt;name&gt;</code>) with a password. File ownership is already correct, so nothing needs adjusting. A site has at most one.</td></tr>
+  <tr><td><strong>Standalone</strong></td><td>For any other folder (for example a subfolder or an unrelated directory). A dedicated system user is created that owns that folder, and you choose its username.</td></tr>
+</table>
+
+<h2 id="create">Creating an account</h2>
+<ol>
+  <li>Open <a href="/ftp">FTP</a> and click <em>Create FTP account</em>.</li>
+  <li>Pick the path (a site's folder, or type a custom path under the sites root).</li>
+  <li>For a custom path, enter a username. For a site folder the username is filled in for you.</li>
+  <li>Set a password and submit. Connect with host = your server's IP, the shown username, and the password.</li>
+</ol>
+<p>The account is jailed to its folder: it cannot see anything above it.</p>
+
+<h2 id="manage">Managing accounts</h2>
+<ul>
+  <li><strong>Change password</strong> — sets a new one.</li>
+  <li><strong>Delete</strong> — removes the login. The folder and its files are <em>never</em> touched.</li>
+</ul>
+<p>The site page also has an <em>FTP</em> section that links here for that site.</p>
+{% endblock %}

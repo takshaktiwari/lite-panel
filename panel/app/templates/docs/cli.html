@@ -1,0 +1,44 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="command">The lite-panel command</h2>
+<p>The installer adds a global <code>lite-panel</code> command (<code>/usr/local/bin/lite-panel</code>). Run it with <code>sudo</code> on the server.</p>
+<table>
+  <tr><th>Command</th><th>Purpose</th></tr>
+  <tr><td><code>sudo lite-panel reset-password --username admin</code></td><td>Resets the admin password to a generated 24-character one and signs out all sessions.</td></tr>
+  <tr><td><code>sudo lite-panel reset-password --username admin --password "…"</code></td><td>Sets a specific password (at least 12 characters).</td></tr>
+  <tr><td><code>sudo lite-panel rebuild</code></td><td>Re-renders every panel-managed config file from the database. Same as <em>Rebuild</em> on the Stack page.</td></tr>
+  <tr><td><code>sudo lite-panel generate-password --length 24</code></td><td>Prints a random password.</td></tr>
+  <tr><td><code>lite-panel create-admin --username NAME</code></td><td>Creates an administrator account.</td></tr>
+  <tr><td><code>lite-panel init-db</code></td><td>Creates any missing database tables.</td></tr>
+</table>
+
+<h2 id="services">Services</h2>
+<table>
+  <tr><th>Service</th><th>What it is</th></tr>
+  <tr><td><code>lite-panel</code></td><td>The panel (uvicorn on <code>127.0.0.1:8765</code>).</td></tr>
+  <tr><td><code>lite-panel-adminer</code></td><td>The Adminer PHP server on <code>127.0.0.1:8766</code>.</td></tr>
+  <tr><td><code>nginx</code></td><td>Serves the panel on port 8443 and all your websites on 80/443.</td></tr>
+  <tr><td><code>lite-panel-app-&lt;site&gt;</code></td><td>One per Node.js / Python site.</td></tr>
+</table>
+<pre>sudo systemctl status lite-panel            # state
+sudo systemctl restart lite-panel           # restart after a config change
+sudo journalctl -u lite-panel -f            # live panel logs
+sudo journalctl -u lite-panel-adminer -f    # Adminer logs
+sudo journalctl -u lite-panel-app-shop -f   # one application's logs</pre>
+
+<h2 id="paths">Where things live</h2>
+<table>
+  <tr><th>Path</th><th>Contents</th></tr>
+  <tr><td><code>/opt/lite-panel</code></td><td>The panel's code and Python virtualenv.</td></tr>
+  <tr><td><code>/etc/lite-panel/panel.env</code></td><td>Secret key and path settings.</td></tr>
+  <tr><td><code>/etc/lite-panel/apps/</code></td><td>Root-only environment files for application sites.</td></tr>
+  <tr><td><code>/var/lib/lite-panel/panel.db</code></td><td>The panel's SQLite database (sites, jobs, schedules, settings).</td></tr>
+  <tr><td><code>/var/log/lite-panel/</code></td><td>The panel's own logs.</td></tr>
+  <tr><td><code>/var/www/&lt;site&gt;</code></td><td>Each site's files.</td></tr>
+  <tr><td><code>/var/backups/lite-panel/&lt;site&gt;</code></td><td>Backup archives.</td></tr>
+  <tr><td><code>/etc/nginx/sites-available/</code></td><td>Panel-generated virtual hosts (<code>lite-panel-*</code>).</td></tr>
+  <tr><td><code>/etc/nginx/custom/</code></td><td>Your per-site nginx overrides.</td></tr>
+  <tr><td><code>/etc/systemd/system/lite-panel-app-*.service</code></td><td>Application services.</td></tr>
+</table>
+<div class="callout"><strong class="callout-title">Back up the panel's own data</strong>The SQLite database at <code>/var/lib/lite-panel/panel.db</code> is the source of truth for the panel's configuration. Include it, with <code>/etc/lite-panel</code>, in any server-level backup; <em>Rebuild</em> can then recreate every generated file.</div>
+{% endblock %}

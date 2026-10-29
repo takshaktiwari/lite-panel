@@ -1,0 +1,39 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="overview">Overview</h2>
+<pre>Browser ──HTTPS :8443──▶ nginx ──▶ lite-panel (uvicorn, 127.0.0.1:8765)
+                          │             └─ SQLite database, job worker
+                          └──▶ Adminer (php -S, 127.0.0.1:8766), behind the panel login
+
+Visitors ──:80/:443──▶ nginx ──▶ PHP-FPM pool per site  (PHP sites)
+                              └─▶ 127.0.0.1:&lt;port&gt; app   (Node.js / Python sites)</pre>
+<p>The panel is a small Python (FastAPI) application. It never binds a public port: nginx terminates TLS, enforces the login in front of Adminer, and proxies to the panel on loopback.</p>
+
+<h2 id="principles">Design principles</h2>
+<ul>
+  <li><strong>The database is the source of truth.</strong> Configuration files the panel owns (nginx hosts, PHP pools, services) are rendered from its database and can be rebuilt at any time. The panel only writes files it owns, using its own <code>lite-panel-</code> names, and never edits vendor config in place.</li>
+  <li><strong>Atomic writes.</strong> Files are written to a temporary file and renamed, so a crash cannot leave a half-written config.</li>
+  <li><strong>Nothing is hidden.</strong> Everything the panel does is ordinary package installs, config files and systemd units you can inspect and change.</li>
+  <li><strong>Discovery, not guessing.</strong> Available PHP and Node.js versions come from the system at runtime.</li>
+  <li><strong>Isolation per site.</strong> Each site has its own system user, folder permissions and PHP pool or application service.</li>
+</ul>
+
+<h2 id="security">Security</h2>
+<ul>
+  <li>Every user-supplied value goes through strict validators before it is used.</li>
+  <li>Every system command is run as an argument list, never through a shell string, so input cannot become a command. (The web terminal is the one deliberate exception and is only available to a logged-in admin.)</li>
+  <li>Adminer is reachable only with a valid panel session and is pinned to the local MariaDB.</li>
+  <li>The panel sends strict security headers (HSTS, <code>X-Frame-Options: DENY</code>, <code>X-Content-Type-Options</code>, a Content-Security-Policy).</li>
+  <li>Forms are protected by CSRF tokens; sessions expire after 12 hours; five failed logins lock the account for 15 minutes.</li>
+  <li>Database, FTP and generated SSH private-key passwords are shown once and not stored.</li>
+  <li>Application environment variables are kept in a root-only file.</li>
+  <li>Sensitive actions are recorded in an audit log.</li>
+</ul>
+
+<h2 id="limits">Scope (what it is not)</h2>
+<ul>
+  <li>Nginx only (no Apache).</li>
+  <li>Single administrator account (no roles).</li>
+  <li>No email / SMTP management.</li>
+</ul>
+{% endblock %}

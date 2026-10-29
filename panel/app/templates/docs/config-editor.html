@@ -1,0 +1,29 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What it edits</h2>
+<p>The <a href="/config">Config editor</a> lets you change a small, safe set of server files in the browser:</p>
+<table>
+  <tr><th>File</th><th>Typical reasons</th></tr>
+  <tr><td><code>php.ini</code> for each installed PHP version (FPM)</td><td>Raise <code>upload_max_filesize</code>, <code>post_max_size</code>, <code>memory_limit</code>, <code>max_execution_time</code>.</td></tr>
+  <tr><td><code>nginx.conf</code> (global nginx)</td><td>Server-wide nginx settings.</td></tr>
+  <tr><td>Per-site nginx override</td><td>Rewrites, extra headers, caching rules, redirects for <em>one</em> site. The panel never overwrites this file.</td></tr>
+</table>
+
+<h2 id="safety">How saving works</h2>
+<p>Saving is designed so a typo cannot take the server down:</p>
+<ol>
+  <li>The current file is <strong>backed up first</strong> (the last 5 backups are kept).</li>
+  <li>Your change is <strong>validated</strong> (nginx's own config test, PHP's own check) before it is applied.</li>
+  <li>The service is <strong>reloaded</strong>.</li>
+  <li>If validation or the reload fails, the backup is <strong>restored automatically</strong> and you see the error.</li>
+</ol>
+
+<h2 id="examples">Examples</h2>
+<h3>Allow bigger uploads in PHP</h3>
+<p>Config → PHP → set <code>upload_max_filesize = 64M</code> and <code>post_max_size = 64M</code>. Also check the site's upload limit (nginx <code>client_max_body_size</code> defaults to 128&nbsp;MB).</p>
+<h3>Redirect an old URL (per-site override)</h3>
+<pre>rewrite ^/old-page$ /new-page permanent;</pre>
+<h3>Add a header</h3>
+<pre>add_header X-My-Header "value" always;</pre>
+<div class="callout">Anything the panel generates itself (virtual hosts, PHP pools, services) is overwritten by <em>Rebuild</em>. Put your own nginx changes in the per-site override file; it is the one place that is always preserved.</div>
+{% endblock %}

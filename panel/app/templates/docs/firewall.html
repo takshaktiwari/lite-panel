@@ -1,0 +1,49 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What it does</h2>
+<p>The <a href="/firewall">Firewall</a> page manages <strong>UFW</strong> (Uncomplicated Firewall), the standard firewall on Ubuntu and Debian. A firewall decides which network ports on the server are reachable from the internet. If UFW is not installed the page tells you; install it with <code>sudo apt install ufw</code>.</p>
+<div class="callout warn">
+  <strong class="callout-title">Two firewalls</strong>
+  Cloud providers (AWS security groups, Google Cloud VPC rules, DigitalOcean cloud firewalls…) have their <em>own</em> firewall in front of the server. A port must be open in <strong>both</strong> to be reachable. A "closed port" that you opened in the panel but cannot reach is usually blocked there.
+</div>
+
+<h2 id="status">Enabling and disabling</h2>
+<p>The toggle turns UFW on or off. While it is off the rules are saved but not enforced. When you turn it on the panel makes sure <strong>SSH is allowed first</strong> so you cannot lock yourself out of the server. (This safeguard covers the standard SSH port 22. If you run SSH on a different port, add a rule for it yourself <em>before</em> enabling the firewall.)</p>
+
+<h2 id="policy">Default policy</h2>
+<ul>
+  <li><strong>Deny incoming</strong> (recommended): everything not explicitly allowed is blocked. SSH (port 22) is allowed automatically first if it is not already.</li>
+  <li><strong>Allow incoming</strong>: every port is open unless denied. Only use for troubleshooting.</li>
+</ul>
+<p>Outgoing traffic is allowed by default so the server can reach package repositories and APIs.</p>
+
+<h2 id="presets">Common ports</h2>
+<p>The page lists the ports a typical server needs, with a one-click <em>Add rule</em>:</p>
+<table>
+  <tr><th>Port</th><th>Service</th><th>When to open</th></tr>
+  <tr><td>22/tcp</td><td>SSH</td><td>Always (remote administration, and the web terminal's alternative).</td></tr>
+  <tr><td>80/tcp</td><td>HTTP</td><td>Websites, and Let's Encrypt validation.</td></tr>
+  <tr><td>443/tcp</td><td>HTTPS</td><td>Websites over TLS.</td></tr>
+  <tr><td>8443/tcp</td><td>Lite-panel</td><td>The panel itself. Prefer allowing it only from your own IP.</td></tr>
+  <tr><td>21/tcp and 30000–30100/tcp</td><td>FTP and its passive data ports</td><td>Only if you use FTP.</td></tr>
+</table>
+
+<h2 id="rules">Adding a rule</h2>
+<table>
+  <tr><th>Field</th><th>Meaning</th></tr>
+  <tr><td>Port</td><td>A port (<code>8443</code>) or range (<code>30000:30100</code>).</td></tr>
+  <tr><td>Protocol</td><td>TCP, UDP or both.</td></tr>
+  <tr><td>From</td><td>Leave as <em>Anywhere</em>, or enter an IP / network (for example your office IP) to restrict who can connect.</td></tr>
+  <tr><td>Action</td><td><strong>Allow</strong>, <strong>Deny</strong>, or <strong>Limit</strong> (allow but rate-limit repeated connections, good for SSH).</td></tr>
+  <tr><td>Comment</td><td>A note for your future self.</td></tr>
+</table>
+<p>The <em>Active rules</em> table lists everything in UFW; delete a rule from its row.</p>
+
+<h2 id="keep-closed">Ports that should stay closed</h2>
+<ul>
+  <li><strong>3306</strong> (MariaDB): the panel uses a local socket. If you need remote access, allow only specific client IPs.</li>
+  <li><strong>8765 / 8766</strong> (panel daemon and Adminer): bound to localhost; nginx proxies to them.</li>
+  <li><strong>6379 / 11211</strong> (Redis, Memcached): internal services; never expose them.</li>
+  <li>Ports used by your Node.js / Python apps (3001 …): only nginx talks to them locally; do not open them.</li>
+</ul>
+{% endblock %}

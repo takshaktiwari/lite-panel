@@ -1,0 +1,85 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="how">How it works</h2>
+<p>A PHP site is "files served by PHP-FPM". A Node.js or Python application is different: it is a <strong>long-running process</strong> that listens on a local port. Two pieces make that production-ready, and the panel manages both:</p>
+<ol>
+  <li><strong>A systemd service</strong> (<code>lite-panel-app-&lt;site&gt;.service</code>) runs your start command in the background as the site's own unprivileged user, restarts it if it crashes, and starts it at boot.</li>
+  <li><strong>An nginx reverse proxy</strong> receives requests for your domain on ports 80/443 and forwards them to <code>127.0.0.1:&lt;port&gt;</code>, including WebSocket connections. HTTPS, the <code>www</code> redirect and custom nginx rules work exactly as for other sites.</li>
+</ol>
+<p>The application itself never listens publicly; only nginx does.</p>
+
+<h2 id="prerequisites">Before you start</h2>
+<ul>
+  <li>Install the runtime from <a href="/stack">Stack</a>: <strong>Node.js</strong> (pick a major version) or <strong>Python</strong> (installs venv, pip and build tools). The New site form tells you when one is missing.</li>
+  <li>Your app must listen on the port given in the <code>PORT</code> environment variable (the panel also sets <code>HOST=127.0.0.1</code>). For Python, put <code>{PORT}</code> in the start command.</li>
+</ul>
+
+<h2 id="create">Creating an application site</h2>
+<ol>
+  <li><a href="/sites/new">Sites → New site</a>, enter the domain, set <em>Site type</em> to <em>Node.js application</em> or <em>Python application</em>.</li>
+  <li>Choose a <strong>start command</strong> preset (or type your own). Leave the port blank to have one assigned (3001, 3002, …).</li>
+  <li>Optionally add <strong>environment variables</strong>, one <code>KEY=value</code> per line.</li>
+  <li>Click <em>Create site</em>. The service and proxy are set up but <strong>not started yet</strong>, because there is no code to run.</li>
+</ol>
+
+<h2 id="deploy">Deploying your code</h2>
+<ol>
+  <li>Upload the project to the site's <strong>app folder</strong> (shown on the site page, normally <code>/var/www/&lt;site&gt;</code>) with the file manager, FTP, or <code>git clone</code> in the terminal.</li>
+  <li>On the site page click <strong>Install dependencies</strong>.
+    <ul>
+      <li><em>Node.js:</em> runs <code>npm ci</code> when <code>package-lock.json</code> exists, otherwise <code>npm install</code>. Tick <em>Also run npm run build</em> for frameworks that need a build step (Next.js, NestJS, …).</li>
+      <li><em>Python:</em> creates a virtualenv at <code>.venv</code> in the app folder and runs <code>pip install -r requirements.txt</code>. Each app has its own packages, so two apps never conflict.</li>
+    </ul>
+  </li>
+  <li>Click <strong>Start</strong>. The panel waits a couple of seconds and checks that the process stayed up; if it crashed immediately you see the log lines that explain why.</li>
+  <li>Visit your domain.</li>
+</ol>
+<p>After uploading new code, run <em>Install dependencies</em> again if the packages changed, then <strong>Restart</strong>.</p>
+
+<h2 id="controls">Controls</h2>
+<table>
+  <tr><th>Action</th><th>What it does</th></tr>
+  <tr><td>Start</td><td>Enables the service (so it also starts at boot) and starts it.</td></tr>
+  <tr><td>Restart</td><td>Restarts the process. Use after deploying code or changing settings.</td></tr>
+  <tr><td>Stop</td><td>Stops it and disables it, so it stays off after a reboot.</td></tr>
+</table>
+<p>The status badge shows <em>running</em> or <em>stopped</em> and refreshes by itself.</p>
+
+<h2 id="settings">Application settings</h2>
+<ul>
+  <li><strong>Start command</strong> — run from the app folder under <code>bash</code>. <code>{PORT}</code> is replaced by the port; <code>$PORT</code> also works. Presets cover common setups.</li>
+  <li><strong>Port</strong> — 1024–65535, unique per site; a few ports used by other services are reserved.</li>
+  <li><strong>Environment variables</strong> — written to a root-only file (<code>/etc/lite-panel/apps/&lt;site&gt;.env</code>). <code>PORT</code> and <code>HOST</code> are managed by the panel and cannot be overridden. Node.js apps also get <code>NODE_ENV=production</code> and Python apps <code>PYTHONUNBUFFERED=1</code> unless you set your own.</li>
+</ul>
+<p>Saving restarts a running app so the change takes effect.</p>
+
+<h2 id="presets">Start command examples</h2>
+<table>
+  <tr><th>Framework</th><th>Command</th></tr>
+  <tr><td>Node.js (package.json start script)</td><td><code>npm start</code></td></tr>
+  <tr><td>Express / plain Node</td><td><code>node server.js</code></td></tr>
+  <tr><td>Next.js (after <code>npm run build</code>)</td><td><code>npm run start -- -p {PORT} -H 127.0.0.1</code></td></tr>
+  <tr><td>Flask</td><td><code>gunicorn app:app --bind 127.0.0.1:{PORT}</code></td></tr>
+  <tr><td>Django</td><td><code>gunicorn project.wsgi --bind 127.0.0.1:{PORT}</code></td></tr>
+  <tr><td>FastAPI</td><td><code>uvicorn main:app --host 127.0.0.1 --port {PORT}</code></td></tr>
+</table>
+<div class="callout">Gunicorn and Uvicorn must be listed in your <code>requirements.txt</code> so <em>Install dependencies</em> puts them in the virtualenv.</div>
+
+<h2 id="logs">Logs and troubleshooting</h2>
+<p>The <em>Application logs</em> panel on the site page shows the service's recent output (also under <a href="/docs/logs">Logs</a>). Typical problems:</p>
+<ul>
+  <li><strong>502 Bad Gateway:</strong> the app is stopped or crashed. Check the status badge and logs; start it.</li>
+  <li><strong>App exits right after Start:</strong> usually a missing dependency or a wrong start command. The error is shown in the job log.</li>
+  <li><strong>App runs but the page is wrong:</strong> make sure it listens on <code>127.0.0.1</code> and the assigned port, not a hard-coded one.</li>
+  <li><strong>Command not found:</strong> Node tools in <code>node_modules/.bin</code> and Python tools in <code>.venv/bin</code> are on the service's <code>PATH</code>; install dependencies first.</li>
+</ul>
+
+<h2 id="notes">Good to know</h2>
+<ul>
+  <li>The site type cannot be changed after creation.</li>
+  <li>Node.js runs one major version system-wide (switching it on the Stack page affects all Node sites).</li>
+  <li>The service runs as the site's user with <code>NoNewPrivileges</code> and a private <code>/tmp</code>.</li>
+  <li>Deleting the site stops and removes its service.</li>
+  <li>For a React / Vue / Angular front-end that is just built files, choose a <strong>PHP / static</strong> site with PHP set to <em>None</em> instead; no service is needed.</li>
+</ul>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<p>The <a href="/monitor">Monitor</a> page answers "is the server healthy and what is using it?" without logging in over SSH.</p>
+
+<h2 id="live">Live metrics</h2>
+<p>Updated every few seconds:</p>
+<ul>
+  <li><strong>CPU</strong> — overall use, core count and load average. Sustained load above the core count means the server is saturated.</li>
+  <li><strong>Memory</strong> — used versus total RAM (and swap). Frequent swap use means you need more RAM or fewer processes.</li>
+  <li><strong>Disk</strong> — used space on the main volume.</li>
+  <li><strong>Network</strong> — current download and upload speed.</li>
+</ul>
+
+<h2 id="history">Historical usage</h2>
+<p>The panel records lightweight snapshots in the background and keeps <strong>7 days</strong> of history, shown as charts. Use it to find out <em>when</em> a slowdown happened.</p>
+
+<h2 id="disk">Disk usage breakdown</h2>
+<p>Shows storage by category and the largest directories, so you can find what is filling the disk (usually logs, backups or uploads). The scan runs in the background and may take a moment on large disks.</p>
+
+<h2 id="processes">Top processes</h2>
+<p>A live list sorted by resource use. You can <strong>kill</strong> a runaway process from here. Killing system processes can break the server, so only stop what you recognise.</p>
+
+<h2 id="use-cases">Common uses</h2>
+<ul>
+  <li><strong>Site suddenly slow:</strong> check CPU and memory, then the top processes (often a stuck PHP worker or a heavy script).</li>
+  <li><strong>Disk full:</strong> open the disk breakdown, then clean logs or old <a href="/docs/backups">backups</a>.</li>
+  <li><strong>Choosing a server size:</strong> watch a week of history before upgrading.</li>
+</ul>
+{% endblock %}

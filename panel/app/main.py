@@ -22,6 +22,7 @@ from app.routers import (
     cron,
     dashboard,
     databases,
+    docs,
     fail2ban,
     files,
     firewall,
@@ -121,6 +122,7 @@ def create_app() -> FastAPI:
     app.include_router(internal.router)
     app.include_router(terminal.router)
     app.include_router(backup.router)
+    app.include_router(docs.router)
 
     @app.get("/health", include_in_schema=False)
     def health_check():

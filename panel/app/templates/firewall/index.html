@@ -70,7 +70,7 @@
 <section class="panel">
   <h2>Common & Essential Server Ports</h2>
   <p class="muted" style="margin-top:-6px;font-size:13px;margin-bottom:14px;">
-    Quick reference for services running on this server. Click <strong>"Add rule"</strong> to quickly allow a port.
+    Click <strong>Add rule</strong> to allow a port. <a href="/docs/firewall">Firewall guide</a>
   </p>
 
   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;">
@@ -139,14 +139,7 @@
     </tbody>
   </table>
 
-  <details style="margin-top:14px;font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;">
-    <summary style="cursor:pointer;font-weight:500;">🔒 Ports that should remain closed to the public</summary>
-    <ul style="margin:8px 0 0;padding-left:20px;line-height:1.6;" class="muted">
-      <li><strong>Port 3306 (MariaDB/MySQL):</strong> Keep closed. Lite-Panel connects via local unix socket. If remote database access is needed, allow only specific client IPs.</li>
-      <li><strong>Port 8765 (Lite-Panel daemon) & 8766 (Adminer):</strong> Bound to 127.0.0.1. Nginx terminates TLS on 443 and proxies internally.</li>
-      <li><strong>Port 6379 (Redis) / 11211 (Memcached):</strong> Internal cache services should only bind to localhost.</li>
-    </ul>
-  </details>
+  <p class="muted" style="margin-top:14px;font-size:12.5px;">Keep database, Redis and app ports closed. <a href="/docs/firewall#keep-closed">Which ports and why</a></p>
 </section>
 
 <!-- Add New Rule -->

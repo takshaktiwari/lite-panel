@@ -1,0 +1,48 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="cant-reach">I can't open the panel</h2>
+<ul>
+  <li><strong>Use the public IP.</strong> The installer may print a private address (<code>10.x</code>, <code>172.16–31.x</code>, <code>192.168.x</code>) that only works inside the cloud network. Use <code>https://PUBLIC-IP:8443/</code>.</li>
+  <li><strong>Open port 8443 in the cloud firewall</strong> (AWS security group, etc.) and, if UFW is active, on the server too. A timeout means a firewall; "connection refused" means nothing is listening.</li>
+  <li><strong>Browser certificate warning</strong> is normal (self-signed). Choose Advanced → Proceed.</li>
+  <li>On the server: <code>sudo systemctl status lite-panel nginx</code> and <code>sudo journalctl -u lite-panel -n 50</code>.</li>
+</ul>
+
+<h2 id="password">I lost the admin password</h2>
+<pre>sudo lite-panel reset-password --username admin</pre>
+
+<h2 id="php-one">Only one PHP version is offered</h2>
+<p>See <a href="/docs/stack#php">Stack → PHP versions</a>. It is almost always an OS release the third-party PHP repository does not support yet.</p>
+
+<h2 id="http-errors">A site shows an error</h2>
+<table>
+  <tr><th>Symptom</th><th>Likely cause and fix</th></tr>
+  <tr><td>502 Bad Gateway (PHP)</td><td>PHP-FPM is down or the site's PHP version was removed. Change the site's PHP version or reinstall it on Stack.</td></tr>
+  <tr><td>502 Bad Gateway (Node/Python)</td><td>The app is stopped or crashed. Open the site page, read the application logs, fix, then Start.</td></tr>
+  <tr><td>403 Forbidden</td><td>Wrong document path, missing <code>index</code> file, or permissions. Check the webroot and file modes.</td></tr>
+  <tr><td>404 on every page except /</td><td>The framework needs its front controller; make sure the document path points at <code>public</code> (Laravel) and the site is PHP.</td></tr>
+  <tr><td>413 Request Entity Too Large</td><td>Upload exceeds the limit. Raise <code>client_max_body_size</code> in the site's nginx override and PHP's <code>upload_max_filesize</code>/<code>post_max_size</code>.</td></tr>
+  <tr><td>"Permission denied" in the app</td><td>The folder is not writable by the site user. Fix ownership/permissions (and avoid doing file work as root).</td></tr>
+</table>
+<p>Always check <a href="/docs/logs">Logs</a> first; the cause is usually stated there.</p>
+
+<h2 id="ssl">HTTPS won't issue</h2>
+<ul>
+  <li>The domain's <code>A</code> record must already point at this server (use <em>Check DNS propagation</em>).</li>
+  <li>Ports 80 and 443 must be open in both firewalls; Let's Encrypt connects to port 80.</li>
+  <li>Let's Encrypt limits repeated requests per domain; wait and retry.</li>
+  <li>The site is still served over HTTP; you can retry <em>Enable HTTPS</em> any time.</li>
+</ul>
+
+<h2 id="job-failed">A job failed</h2>
+<p>Open it from <a href="/jobs">Jobs</a> and read the last lines: they state the cause (missing package, DNS, invalid value). Fix it and run the action again; jobs are safe to repeat.</p>
+
+<h2 id="ftp">FTP connects but listing hangs</h2>
+<p>The passive ports are blocked. Open TCP <code>30000–30100</code> in the cloud firewall and UFW (see <a href="/docs/ftp">FTP</a>).</p>
+
+<h2 id="locked-out">Locked out of SSH</h2>
+<p>Use your provider's web console to log in, then check <a href="/docs/fail2ban">Fail2ban</a> bans (<code>sudo fail2ban-client status sshd</code>) and the firewall (<code>sudo ufw status</code>).</p>
+
+<h2 id="rebuild">Config seems out of sync</h2>
+<p>Run <em>Rebuild</em> on the Stack page or <code>sudo lite-panel rebuild</code> to regenerate everything from the database.</p>
+{% endblock %}

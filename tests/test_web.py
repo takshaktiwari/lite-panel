@@ -146,8 +146,19 @@ def test_security_headers_are_applied(signed_in):
 
 
 def test_api_docs_are_not_exposed(client):
-    for path in ("/docs", "/redoc", "/openapi.json"):
+    """FastAPI's auto-generated Swagger/ReDoc/OpenAPI pages stay disabled.
+
+    ``/docs`` is the panel's own user documentation: it exists, but sits behind
+    the login like every other page, so a signed-out visitor is redirected
+    rather than shown anything (and it is not Swagger).
+    """
+    for path in ("/redoc", "/openapi.json"):
         assert client.get(path).status_code == 404
+
+    response = client.get("/docs")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+    assert "swagger" not in response.text.lower()
 
 
 # --------------------------------------------------------------------------

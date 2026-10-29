@@ -1,0 +1,40 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What a backup contains</h2>
+<p>A backup is one compressed archive (<code>.tar.gz</code>, gzip level 9) for one site, holding:</p>
+<ul>
+  <li><code>files/</code> — the site's whole folder;</li>
+  <li><code>db/&lt;database&gt;.sql</code> — a SQL dump of every database linked to the site.</li>
+</ul>
+<p>You can include files, databases, or both. Archives are stored on the server in <code>/var/backups/lite-panel/&lt;site&gt;/</code> and named like <code>shop_full_2026-10-27_0200.tar.gz</code>.</p>
+<div class="callout warn"><strong class="callout-title">Backups on the same server are not disaster protection</strong>If the server is lost, so are its backups. Download important archives regularly, or copy <code>/var/backups/lite-panel</code> off the server.</div>
+
+<h2 id="manual">Creating a backup now</h2>
+<ol>
+  <li>Open <a href="/backup">Backup</a> (or the Backups section of a site's page).</li>
+  <li>Choose the site and what to include, then run the backup. It runs as a <a href="/docs/jobs">job</a>.</li>
+</ol>
+
+<h2 id="schedules">Scheduled backups</h2>
+<p>Create a schedule to back a site up automatically:</p>
+<table>
+  <tr><th>Setting</th><th>Options</th></tr>
+  <tr><td>Frequency</td><td>Daily, twice daily (every 12 hours), weekly (pick the day), monthly (pick the day of month)</td></tr>
+  <tr><td>Time</td><td>Hour and minute, in <strong>UTC</strong></td></tr>
+  <tr><td>Include</td><td>Files and/or databases</td></tr>
+  <tr><td>Keep</td><td>How many archives to retain (default 7). Older ones are deleted automatically after each run.</td></tr>
+</table>
+<p>You can pause a schedule, run it immediately, or delete it. The next run time is shown for each schedule.</p>
+
+<h2 id="download">Downloading and deleting</h2>
+<p>The <em>Backup Archives</em> list shows size and date for each archive, with <em>Download</em> and <em>Delete</em>.</p>
+
+<h2 id="restore">Restoring</h2>
+<p>Restoring is deliberately manual so nothing is overwritten by accident:</p>
+<ol>
+  <li>Download the archive (or use it in place on the server).</li>
+  <li>Extract it: <code>tar -xzf shop_full_2026-10-27_0200.tar.gz</code> in a scratch folder.</li>
+  <li>Copy what you need from <code>files/</code> back into the site folder.</li>
+  <li>Import <code>db/&lt;name&gt;.sql</code> through <a href="/docs/databases">Databases → Import</a> or Adminer.</li>
+</ol>
+{% endblock %}

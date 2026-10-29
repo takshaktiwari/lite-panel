@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title if page else 'Documentation' }} · Docs · {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="docs">
+  <nav class="docs-nav" aria-label="Documentation">
+    <a href="/docs" class="{{ 'active' if not doc_current }}">Overview</a>
+    {% for group, items in doc_groups %}
+    <h4>{{ group }}</h4>
+    {% for slug, title, _summary in items %}
+    <a href="/docs/{{ slug }}" class="{{ 'active' if slug == doc_current }}">{{ title }}</a>
+    {% endfor %}
+    {% endfor %}
+  </nav>
+
+  <article class="docs-content">
+    {% if page %}
+    <p class="docs-crumbs muted"><a href="/docs">Documentation</a> / {{ page.group }}</p>
+    <h1>{{ page.title }}</h1>
+    <p class="docs-lead muted">{{ page.summary }}</p>
+    {% endif %}
+
+    {% block doc %}{% endblock %}
+
+    {% if page %}
+    <div class="docs-pager">
+      {% if previous_page %}<a href="/docs/{{ previous_page.slug }}"><small>← Previous</small>{{ previous_page.title }}</a>{% else %}<span></span>{% endif %}
+      {% if next_page %}<a href="/docs/{{ next_page.slug }}" style="text-align:right;"><small>Next →</small>{{ next_page.title }}</a>{% endif %}
+    </div>
+    {% endif %}
+  </article>
+</div>
+{% endblock %}

@@ -78,6 +78,12 @@ sudo bash /opt/lite-panel/install.sh --force-reinstall
 
 ---
 
+## Documentation
+
+Full documentation lives inside the panel: open **Documentation** in the sidebar (or `/docs`). It covers installation, every module (sites, Node.js & Python apps, databases, files, FTP, backups, cron, firewall, Fail2ban, malware scanning and more), the command line, architecture and troubleshooting.
+
+---
+
 ## After installation
 
 ### First steps in the UI

@@ -1,0 +1,43 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<p>This walkthrough takes a fresh server to a live website. Each step links to the page that explains it in full.</p>
+
+<h2 id="step-1">1. Run the setup wizard</h2>
+<p>The <a href="/setup">Setup</a> page detects your OS and RAM and installs what a typical site needs:</p>
+<ul>
+  <li><strong>PHP</strong> — tick the versions you want. Only versions that can really be installed on this machine are listed. See <a href="/docs/stack#php">Stack → PHP</a> for why you may see just one.</li>
+  <li><strong>MariaDB</strong> (databases, with Adminer), <strong>SSL</strong> (Let's Encrypt via certbot) and <strong>FTP</strong> (vsftpd) — optional, tick what you need. Each can also be added later from the <a href="/stack">Stack</a> page.</li>
+</ul>
+<p>Click <em>Set up server</em>. A <a href="/docs/jobs">job</a> runs with a live log. PHP-FPM worker counts, OPcache and MariaDB memory are sized automatically from the server's RAM.</p>
+
+<h2 id="step-2">2. Point your domain at the server</h2>
+<p>At your domain registrar or DNS host, create an <code>A</code> record for the domain (and <code>www</code>) pointing at the server's public IP. DNS can take minutes to hours to spread. The site page has a <em>Check DNS propagation</em> button that tests it from several public resolvers.</p>
+
+<h2 id="step-3">3. Create the site</h2>
+<p>Go to <a href="/sites/new">Sites → New site</a>, enter the domain, choose the <strong>site type</strong> (PHP / static, Node.js or Python) and click <em>Create site</em>. See <a href="/docs/sites">Sites</a> and <a href="/docs/node-python">Node.js &amp; Python apps</a>.</p>
+
+<h2 id="step-4">4. Upload your code</h2>
+<p>Use the <a href="/docs/files">file manager</a>, <a href="/docs/ftp">FTP</a>, or the <a href="/docs/terminal">terminal</a> (for example <code>git clone</code>) to put the project in the site's folder, <code>/var/www/&lt;site&gt;</code>.</p>
+
+<h2 id="step-5">5. Database (if the app needs one)</h2>
+<p>On <a href="/databases">Databases</a>, create a database and user and link it to the site. The password is shown once; copy it into your app's configuration. See <a href="/docs/databases">Databases</a>.</p>
+
+<h2 id="step-6">6. Turn on HTTPS</h2>
+<p>Once DNS points here, open the site and click <em>Enable HTTPS</em>. A free Let's Encrypt certificate is issued and renews automatically.</p>
+
+<h2 id="step-7">7. Protect the server</h2>
+<ul>
+  <li>Turn on the <a href="/docs/firewall">Firewall</a> and allow only the ports you need.</li>
+  <li>Install <a href="/docs/fail2ban">Fail2ban</a> to stop SSH brute-force attempts.</li>
+  <li>Set up <a href="/docs/backups">scheduled backups</a>.</li>
+</ul>
+
+<div class="callout tip">
+  <strong class="callout-title">Common recipes</strong>
+  <ul>
+    <li><strong>Laravel / WordPress:</strong> PHP site; point the document path at <code>public</code> for Laravel. See <a href="/docs/sites#document-path">Document path</a>.</li>
+    <li><strong>React / Vue / static build:</strong> a PHP/static site with PHP set to <em>None</em>; upload the built <code>dist</code> or <code>build</code> folder contents.</li>
+    <li><strong>Next.js, Express, NestJS:</strong> a Node.js site. <strong>Flask, Django, FastAPI:</strong> a Python site. See <a href="/docs/node-python">Node.js &amp; Python apps</a>.</li>
+  </ul>
+</div>
+{% endblock %}

@@ -3,7 +3,7 @@
 {% block title %}New site · {{ app_name }}{% endblock %}
 
 {% block content %}
-<header class="page-head"><p class="muted"><a href="/sites">← Sites</a></p><h1>New site</h1></header>
+<header class="page-head"><p class="muted"><a href="/sites">← Sites</a></p><h1>New site</h1><p class="muted">Not sure which type to pick? <a href="/docs/sites#create">Read the guide</a>.</p></header>
 
 {% if not nginx_ready %}
 <div class="alert alert-error">Nginx isn't installed yet. <a href="/setup">Run setup</a> first.</div>
@@ -16,20 +16,17 @@
   <input type="text" id="domain" name="domain" placeholder="example.com" required
          value="{{ form.domain if form else '' }}" autofocus>
 
-  <label for="folder">Website folder <span class="muted">(optional — derived from the domain)</span></label>
+  <label for="folder">Website folder <span class="muted">(optional)</span></label>
   <div class="input-group">
     <span class="input-group-text">{{ sites_root }}/</span>
     <input type="text" id="folder" name="folder" placeholder="example" value="{{ form.folder if form else '' }}">
   </div>
-  <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">
-    This is where your site's files live. Add a subfolder if your app needs one — e.g.
-    type <code>example/public</code> to serve from a "public" folder — most sites don't need this.
-  </p>
+  <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">Defaults to the domain name.</p>
 
   {% set current_type = (form.app_type if form and form.app_type else 'web') %}
   <label for="app_type">Site type</label>
   <select id="app_type" name="app_type" data-site-type>
-    <option value="web" {{ 'selected' if current_type == 'web' }}>PHP / static site (Laravel, WordPress, React build…)</option>
+    <option value="web" {{ 'selected' if current_type == 'web' }}>PHP / static site</option>
     {% for key, rt in runtimes.items() %}
     <option value="{{ key }}" {{ 'selected' if current_type == key }}>{{ rt.label }} application{{ '' if rt.installed else ' — not installed' }}</option>
     {% endfor %}
@@ -59,7 +56,7 @@
     {% endif %}
     {% endfor %}
 
-    <label for="app_preset">Start command preset</label>
+    <label for="app_preset">Preset</label>
     {% for key, rt in runtimes.items() %}
     <select data-preset-for="{{ key }}" aria-label="{{ rt.label }} command presets" hidden>
       <option value="">Choose a preset…</option>
@@ -74,22 +71,18 @@
            value="{{ form.app_command if form else '' }}" autocomplete="off" spellcheck="false">
     {% for key, rt in runtimes.items() %}
     <p class="muted" data-hint-for="{{ key }}" data-default-command="{{ rt.command }}" style="margin:-8px 0 14px;font-size:12.5px;" hidden>
-      {{ rt.hint }} Leave blank to use <code>{{ rt.command }}</code>. <code>{PORT}</code> is replaced with the app's port.
+      Blank uses <code>{{ rt.command }}</code>. <a href="/docs/node-python#presets">Examples</a>
     </p>
     {% endfor %}
 
-    <label for="app_port">Port <span class="muted">(optional — assigned automatically)</span></label>
+    <label for="app_port">Port <span class="muted">(optional)</span></label>
     <input type="text" id="app_port" name="app_port" inputmode="numeric" placeholder="3001"
            value="{{ form.app_port if form else '' }}">
 
-    <label for="app_env">Environment variables <span class="muted">(optional, one KEY=value per line)</span></label>
+    <label for="app_env">Environment variables <span class="muted">(optional)</span></label>
     <textarea id="app_env" name="app_env" rows="4" spellcheck="false"
               placeholder="DATABASE_URL=postgres://...&#10;SECRET_KEY=change-me">{{ form.app_env if form else '' }}</textarea>
-    <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">
-      nginx will proxy this domain to the app, which runs as its own system user and
-      restarts automatically if it crashes. After the site is created, upload your code
-      and use <strong>Install dependencies</strong> and <strong>Start</strong> on the site page.
-    </p>
+    <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">One <code>KEY=value</code> per line. <a href="/docs/node-python">How apps are deployed</a></p>
   </div>
 
   <label style="display:flex;align-items:center;gap:8px;font-weight:normal;margin-bottom:8px;">
@@ -102,13 +95,10 @@
     Enable HTTPS and redirect to it always
   </label>
   {% if certbot_ready %}
-  <p class="muted" style="margin:4px 0 0;font-size:12.5px;">
-    Needs the domain's DNS already pointed at this server. If it isn't yet, the site is
-    still created over plain HTTP — use "Enable SSL" on the site page once DNS is ready.
-  </p>
+  <p class="muted" style="margin:4px 0 0;font-size:12.5px;">Needs DNS pointing here. <a href="/docs/sites#ssl">Details</a></p>
   {% else %}
   <p class="muted" style="margin:4px 0 0;font-size:12.5px;">
-    <a href="/stack">Install SSL support</a> from the Stack page to enable this.
+    <a href="/stack">Install SSL support</a> first.
   </p>
   {% endif %}
 

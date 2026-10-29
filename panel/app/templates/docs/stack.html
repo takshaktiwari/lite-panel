@@ -1,0 +1,45 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What the Stack is</h2>
+<p>The <a href="/stack">Stack</a> page lists every component the panel can install, and lets you install or remove each independently. Nothing is fixed at install time: the panel asks the server's package manager what is really available and offers only that. The panel's own Python runtime is installed by the installer and is not managed here.</p>
+
+<h2 id="components">Server components</h2>
+<table>
+  <tr><th>Component</th><th>What it gives you</th></tr>
+  <tr><td>Nginx</td><td>The web server. Required for any site. Installed by the panel installer.</td></tr>
+  <tr><td>PHP</td><td>Several versions side by side, each site picks one. Managed per version, with extensions.</td></tr>
+  <tr><td>MariaDB</td><td>Database server, plus Adminer for browsing. See <a href="/docs/databases">Databases</a>.</td></tr>
+  <tr><td>SSL (certbot)</td><td>Free Let's Encrypt certificates and automatic renewal. See <a href="/docs/sites#ssl">Sites → HTTPS</a>.</td></tr>
+  <tr><td>FTP (vsftpd)</td><td>FTP access per site. See <a href="/docs/ftp">FTP</a>.</td></tr>
+</table>
+
+<h2 id="tools">Common tools</h2>
+<p>General packages that applications often need. They do not affect the components above.</p>
+<table>
+  <tr><th>Tool</th><th>Notes</th></tr>
+  <tr><td>Git</td><td>Clone and pull projects from the terminal.</td></tr>
+  <tr><td>Composer</td><td>PHP dependency manager (needed by Laravel and most modern PHP apps).</td></tr>
+  <tr><td>Node.js</td><td>Includes npm. Needed for Node.js sites and for building front-end assets. See below.</td></tr>
+  <tr><td>Python</td><td>Python 3 with venv, pip and build tools, for Python sites. The system <code>python3</code> itself is never removed.</td></tr>
+  <tr><td>Redis</td><td>In-memory cache and queue store. Keep its port closed to the public.</td></tr>
+  <tr><td>Unzip</td><td>Needed to extract zip files.</td></tr>
+</table>
+
+<h2 id="php">PHP versions</h2>
+<p>Tick the versions to install; every version appears as an option on the New site form and the site page. Each version has a <em>manage</em> page for <strong>extensions</strong> (add or remove modules such as <code>gd</code>, <code>imagick</code>, <code>redis</code>). Core modules the panel needs cannot be removed.</p>
+<h3>"I only see one PHP version"</h3>
+<p>Ubuntu and Debian ship only one PHP version themselves. More versions come from a third-party repository (<em>ondrej/php</em> on Ubuntu, <em>Sury</em> on Debian). The page shows an <em>Add PHP repository</em> button when your OS release is supported, and one click unlocks the older and newer versions.</p>
+<div class="callout warn">
+  <strong class="callout-title">Brand-new OS releases</strong>
+  A just-released Ubuntu or Debian version often has no build in that repository yet (for example Ubuntu 26.04 at the time of writing). The panel detects this and tells you; only the version bundled with the OS can be installed. This is not something the panel can fix. Use Ubuntu 24.04 / 22.04 or Debian 12 to get several versions side by side, or wait for the repository to add your release; the panel re-checks every time.
+</div>
+
+<h2 id="node">Node.js</h2>
+<p>Node.js comes from NodeSource and only one major version runs system-wide at a time. Choosing a different major <em>switches the whole server</em> to it, so every Node.js site then uses that version. Pick the major your apps need (for example 20 or 22).</p>
+
+<h2 id="install">Installing and removing</h2>
+<p>Each install or removal runs as a <a href="/docs/jobs">job</a> with a live log. Removing a component does not delete your sites or databases, but sites that depend on it will stop working until it is installed again.</p>
+
+<h2 id="rebuild">Rebuild configuration</h2>
+<p><em>Rebuild</em> regenerates every panel-managed config file (nginx virtual hosts, PHP pools, application services, Fail2ban settings) from the panel's database. Use it after restoring a backup of the panel, after resizing the server (tuning is recalculated from RAM), or if a config file was changed by hand and you want the panel's version back. The same is available as <code>sudo lite-panel rebuild</code>.</p>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What cron jobs are</h2>
+<p>A cron job runs a command on a schedule: clearing caches, running a Laravel scheduler, importing feeds, sending reports. The <a href="/cron">Cron</a> page manages them without editing crontab by hand. The panel owns the schedule: it regenerates each user's crontab from its own list, so what you see is what runs.</p>
+
+<h2 id="runs-as">Who it runs as</h2>
+<table>
+  <tr><th>Choice</th><th>Runs as</th><th>Use for</th></tr>
+  <tr><td>A site (<code>domain (site_user)</code>)</td><td>That site's unprivileged user</td><td>Anything about the application: <code>php artisan schedule:run</code>, scripts in the site folder. <strong>Prefer this.</strong></td></tr>
+  <tr><td>Server (root)</td><td>root</td><td>Server-wide maintenance only (package updates, system backups). It has full access to everything.</td></tr>
+</table>
+
+<h2 id="create">Creating a job</h2>
+<ol>
+  <li>Click <em>+ New cron job</em>.</li>
+  <li>Choose <em>Runs as</em>, an optional description, and the <em>Schedule</em>: pick a preset (every minute, every 5 minutes, hourly, daily, weekly …) or <em>Custom</em> to enter the five cron fields (minute, hour, day of month, month, weekday).</li>
+  <li>Enter the command and save.</li>
+</ol>
+<h3>Examples</h3>
+<table>
+  <tr><th>Goal</th><th>Schedule</th><th>Command</th></tr>
+  <tr><td>Laravel scheduler</td><td>Every minute</td><td><code>cd /var/www/shop &amp;&amp; php artisan schedule:run &gt;&gt; /dev/null 2&gt;&amp;1</code></td></tr>
+  <tr><td>WordPress cron</td><td>Every 5 minutes</td><td><code>cd /var/www/blog &amp;&amp; php wp-cron.php</code></td></tr>
+  <tr><td>Node script nightly</td><td>Daily 02:00</td><td><code>cd /var/www/app &amp;&amp; node scripts/cleanup.js</code></td></tr>
+</table>
+<p>Use full paths and <code>cd</code> into the project first: cron runs with a minimal environment.</p>
+
+<h2 id="manage">Managing jobs</h2>
+<ul>
+  <li><strong>Edit</strong> a job's schedule, command or description.</li>
+  <li><strong>Enable / disable</strong> without deleting it.</li>
+  <li><strong>Delete</strong> it. Deleting a site also removes its jobs.</li>
+</ul>
+<div class="callout">The cron service must be installed on the server. The page warns you when it is not; jobs are saved but do not run until it is.</div>
+{% endblock %}

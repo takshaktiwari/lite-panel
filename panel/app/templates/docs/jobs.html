@@ -1,0 +1,21 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What a job is</h2>
+<p>Anything that changes the server (installing PHP, creating a site, a backup, issuing a certificate, extracting a zip, starting an app) runs as a <strong>job</strong> in the background instead of inside your web request. That is why a slow operation never times out your browser and why you can leave the page.</p>
+
+<h2 id="watching">Watching a job</h2>
+<p>After you submit an action you are taken to the job's page, which streams the command output live. Statuses are <em>pending</em>, <em>running</em>, <em>success</em> and <em>failed</em>. Some jobs show a progress bar.</p>
+<ul>
+  <li><strong>On success</strong> the page sends you back to where you started.</li>
+  <li><strong>On failure</strong> it stays put so you can read the error. Most errors say exactly what is wrong (a missing runtime, a DNS problem, a bad command).</li>
+</ul>
+
+<h2 id="history">Job history</h2>
+<p>The <a href="/jobs">Jobs</a> page lists every operation that was run, with start and finish times. Open any entry to read its full log later. This is the first place to look when something "did not work".</p>
+
+<h2 id="notes">Good to know</h2>
+<ul>
+  <li>Jobs run one at a time, in the order submitted.</li>
+  <li>If the panel is restarted while a job runs, that job is marked failed on the next start rather than hanging forever; simply run the action again.</li>
+</ul>
+{% endblock %}

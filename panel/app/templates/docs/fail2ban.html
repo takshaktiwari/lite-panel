@@ -1,0 +1,40 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What it does</h2>
+<p>Anything on the internet that listens on SSH is constantly probed by bots guessing passwords. <strong>Fail2ban</strong> watches the login log and, when one IP fails too many times, blocks it at the firewall for a while. The <a href="/fail2ban">Fail2ban</a> page installs and manages it.</p>
+
+<h2 id="install">Installing</h2>
+<p>Click <em>Install</em>. SSH protection is switched on with the recommended settings, and <strong>your current IP is added to the never-ban list automatically</strong> so a mistyped password cannot lock you out. The panel verifies after installing that the protection can actually block (if a rule could not be attached, the page shows a warning and a <em>Repair</em> button).</p>
+
+<h2 id="how">How banning works</h2>
+<p>With the defaults, when an IP fails <strong>5 times within 10 minutes</strong> it is blocked from SSH for <strong>1 hour</strong>. With <em>growing bans</em> on, every repeat offence doubles the ban, up to a maximum of 1 week. The SSH port is detected automatically, so if you move SSH to another port just save the settings here again.</p>
+
+<h2 id="settings">Settings</h2>
+<table>
+  <tr><th>Setting</th><th>Meaning</th></tr>
+  <tr><td>Failed attempts before a ban</td><td>How many failures trigger a ban (default 5).</td></tr>
+  <tr><td>…within this time window</td><td>The period those failures must fall in (default 10 minutes).</td></tr>
+  <tr><td>Ban length</td><td>How long a ban lasts (default 1 hour).</td></tr>
+  <tr><td>Growing bans</td><td>Double the ban each time the same IP returns.</td></tr>
+  <tr><td>Longest a growing ban can get</td><td>The cap (default 1 week).</td></tr>
+  <tr><td>Never ban these IPs</td><td>Trusted addresses: yours, your office, monitoring. Add one per line.</td></tr>
+  <tr><td>Recidive</td><td>Optionally ban repeat offenders for 1 week on <em>every</em> port, not just SSH.</td></tr>
+</table>
+<p>Changes are checked with fail2ban's own test before they are applied, and rolled back if they would break it.</p>
+
+<h2 id="status">Status and banned IPs</h2>
+<p>The page shows whether fail2ban is running, total failed attempts and bans, and every IP blocked right now with when the ban expires.</p>
+<ul>
+  <li><strong>Unban</strong> lifts every ban on an address (useful if a colleague got blocked).</li>
+  <li><strong>Ban an IP manually</strong> blocks it from SSH for the ban length, or choose <strong>Permanent</strong> to block it on all ports forever. Permanent bans are stored by the panel and re-applied if fail2ban's own state is ever lost.</li>
+</ul>
+
+<h2 id="repair">Repair</h2>
+<p>If the page says fail2ban is "detecting attacks but not blocking them", a jail has no block action. <em>Repair</em> restarts fail2ban to fix this; existing bans are restored.</p>
+
+<div class="callout tip">
+  <strong class="callout-title">The stronger fix: SSH keys</strong>
+  Fail2ban slows attackers but attacks spread over many IPs each get their own attempts. Adding your <a href="/docs/ssh-keys">SSH key</a> and then disabling SSH password login removes password guessing altogether.
+</div>
+<p>Uninstalling removes fail2ban and its panel-managed configuration.</p>
+{% endblock %}

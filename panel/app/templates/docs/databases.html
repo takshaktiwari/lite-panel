@@ -1,0 +1,40 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="setup">Setup</h2>
+<p>Databases use <strong>MariaDB</strong>. Install it once from <a href="/stack">Stack</a> (or in the Setup wizard); it also installs <strong>Adminer</strong>, the browser-based database tool. The panel talks to MariaDB over its local unix socket, so the database is never exposed to the internet.</p>
+
+<h2 id="create">Creating a database</h2>
+<ol>
+  <li>Open <a href="/databases">Databases</a> and choose <em>Create database</em>.</li>
+  <li>Enter a name, and optionally link it to a site (it then appears on that site's page and in its backups).</li>
+  <li>Choose the database user: <em>Create new user</em> (a strong password is suggested) or <em>Select existing user</em> to give another user access.</li>
+  <li>Submit. The database and user are created and granted privileges.</li>
+</ol>
+<div class="callout warn">
+  <strong class="callout-title">The password is shown once</strong>
+  Passwords are never stored. Copy it into your application's configuration immediately. If you lose it, set a new one with <em>Change password</em>.
+</div>
+<p>In your application use host <code>localhost</code> (or <code>127.0.0.1</code>), the database name and the user you created.</p>
+
+<h2 id="manage">Managing databases and users</h2>
+<table>
+  <tr><th>Action</th><th>Meaning</th></tr>
+  <tr><td>Open in Adminer</td><td>Browse tables and rows, run queries, edit data. Adminer is only reachable while you are logged in to the panel and always connects to this server's MariaDB.</td></tr>
+  <tr><td>Export</td><td>Downloads a compressed SQL dump (<code>.sql.gz</code>) made with <code>mysqldump</code>.</td></tr>
+  <tr><td>Import</td><td>Uploads a <code>.sql</code> or <code>.sql.gz</code> file into the database. Large files are uploaded in chunks and imported as a background <a href="/docs/jobs">job</a>.</td></tr>
+  <tr><td>Change password</td><td>Sets a new password for the database user.</td></tr>
+  <tr><td>Assign / change user</td><td>Moves the database to a different (new or existing) user.</td></tr>
+  <tr><td>Delete</td><td>Drops the database and its user. Cannot be undone.</td></tr>
+</table>
+<p>Databases that exist in MariaDB but were not created through the panel are listed separately so you can see them.</p>
+
+<h2 id="use-cases">Common tasks</h2>
+<h3>Move a site from another host</h3>
+<ol>
+  <li>Create the database and user here.</li>
+  <li>Import the <code>.sql</code> or <code>.sql.gz</code> dump from the old host.</li>
+  <li>Update the app's configuration (e.g. <code>.env</code> or <code>wp-config.php</code>) with the new credentials.</li>
+</ol>
+<h3>Use a database from outside the server</h3>
+<p>Port 3306 is closed by design. Prefer an SSH tunnel; if you must open it, allow only your client's IP on the <a href="/docs/firewall">Firewall</a> page.</p>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "docs/_layout.html" %}
+
+{% block doc %}
+<h1>Documentation</h1>
+<p class="docs-lead muted">Everything lite-panel can do, how each part works, and how to set it up. New here? Start with
+  <a href="/docs/installation">Installation</a> and the <a href="/docs/quick-start">Quick start</a>.</p>
+
+<div class="callout">
+  <strong class="callout-title">What lite-panel is</strong>
+  A small, self-hosted control panel for an Ubuntu or Debian server. It manages websites (PHP, static, Node.js and
+  Python), databases, SSL certificates, FTP, backups, cron jobs, the firewall and more, from one web page. Everything it
+  does is a plain, visible change to the server, and you can always do the same thing by hand over SSH.
+</div>
+
+{% for group, items in doc_groups %}
+<h2>{{ group }}</h2>
+<div class="docs-cards">
+  {% for slug, title, summary in items %}
+  <a class="docs-card" href="/docs/{{ slug }}"><strong>{{ title }}</strong><span>{{ summary }}</span></a>
+  {% endfor %}
+</div>
+{% endfor %}
+{% endblock %}

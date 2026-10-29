@@ -1,0 +1,31 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="scope">What it can reach</h2>
+<p>The <a href="/files">file manager</a> works inside <code>/var/www</code>, where all sites live. It cannot go outside that folder, so it cannot be used to browse the rest of the server (use the <a href="/docs/terminal">terminal</a> for that). Sites you open from the Sites list land in their own folder.</p>
+
+<h2 id="browse">Browsing</h2>
+<p>Click a folder to open it; the breadcrumb at the top jumps back up. Select several rows with the checkboxes to act on many items at once. Folder sizes are calculated on demand so large trees do not slow the page.</p>
+
+<h2 id="actions">Actions</h2>
+<table>
+  <tr><th>Action</th><th>Notes</th></tr>
+  <tr><td>New folder / new file</td><td>Create items in the current folder.</td></tr>
+  <tr><td>Upload</td><td>Drag and drop or choose files. Uploads are sent in chunks with a progress bar, up to 1&nbsp;GB per file. If a file already exists you are asked whether to replace it.</td></tr>
+  <tr><td>Download</td><td>Download any file from its row menu. To download a folder, archive it first and download the zip.</td></tr>
+  <tr><td>View / edit</td><td>Opens text files in a code editor with syntax highlighting. Files up to 1&nbsp;MB are editable; larger files can be viewed in part.</td></tr>
+  <tr><td>Rename / duplicate / move / copy</td><td>Available per item and for a selection (move and copy ask for the destination folder).</td></tr>
+  <tr><td>Archive / extract</td><td>Create a zip from files or folders (up to 1&nbsp;GB of source data) and extract zips in place. Extracting runs as a <a href="/docs/jobs">job</a> with a progress bar.</td></tr>
+  <tr><td>Permissions (chmod)</td><td>Set a mode such as <code>644</code> for files or <code>755</code> for folders, for one item, a selection, or recursively.</td></tr>
+  <tr><td>Delete</td><td>Single or bulk; asks for confirmation. Not recoverable.</td></tr>
+</table>
+
+<h2 id="ownership">Ownership and permissions</h2>
+<p>Each site's files belong to its own system user, so the website runs with the right access. Files you upload through the panel are owned for that site. If an application reports "permission denied" writing to a folder (for example <code>storage</code> or <code>uploads</code>), give that folder write permission such as <code>775</code> recursively, rather than <code>777</code>.</p>
+
+<h2 id="tips">Tips</h2>
+<ul>
+  <li>Upload a project as a zip and extract it, instead of uploading thousands of small files.</li>
+  <li>To work as the site user on the command line, use the site's <em>Terminal</em> button or pick the site in the <a href="/docs/terminal">Terminal</a> page.</li>
+  <li>Edit configuration files for nginx or PHP in the <a href="/docs/config-editor">Config editor</a>, not here; it validates the change first.</li>
+</ul>
+{% endblock %}

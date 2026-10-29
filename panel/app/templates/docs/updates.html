@@ -1,0 +1,16 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="update">Updating the panel</h2>
+<p>The <a href="/setup">Setup</a> page shows the version you are running and checks GitHub for newer releases. When one is available a banner appears at the top of every page. Click <em>View &amp; Update</em>, review the release notes, and confirm. The panel downloads the release and restarts itself; sites keep running during the update.</p>
+<div class="callout tip">Take a quick <a href="/docs/backups">backup</a> of important sites, and keep a copy of <code>/var/lib/lite-panel/panel.db</code>, before major version updates.</div>
+
+<h2 id="rerun">Re-running the installer</h2>
+<p>The installer is idempotent. To repair a broken install:</p>
+<pre>sudo bash /opt/lite-panel/install.sh</pre>
+<p>To start the panel's own install from scratch:</p>
+<pre>sudo bash /opt/lite-panel/install.sh --force-reinstall</pre>
+
+<h2 id="uninstall">Uninstalling</h2>
+<pre>sudo bash /opt/lite-panel/uninstall.sh</pre>
+<p>This removes the panel, its services and its nginx site. <strong>Your websites' files, databases and installed packages are left alone.</strong> Review what the uninstaller offers about site files before using any option that deletes data, and keep backups.</p>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What a site is</h2>
+<p>A site is one domain with everything it owns, created together and removed together:</p>
+<ul>
+  <li>a dedicated <strong>system user</strong> named <code>site_&lt;name&gt;</code> (the real isolation: one site cannot read another's files);</li>
+  <li>a folder at <code>/var/www/&lt;name&gt;</code>, readable only by that user (mode 750);</li>
+  <li>an <strong>nginx</strong> virtual host;</li>
+  <li>for PHP sites, its own <strong>PHP-FPM pool</strong> running as that user, on the PHP version you chose;</li>
+  <li>for Node.js and Python sites, a <strong>systemd service</strong> and a reverse proxy (see <a href="/docs/node-python">Node.js &amp; Python apps</a>);</li>
+  <li>optionally an FTP login, SSH keys, cron jobs, databases and backups linked to it.</li>
+</ul>
+
+<h2 id="create">Creating a site</h2>
+<p>Open <a href="/sites/new">Sites → New site</a>.</p>
+<table>
+  <tr><th>Field</th><th>Meaning</th></tr>
+  <tr><td>Domain</td><td>The hostname, e.g. <code>example.com</code> or <code>blog.example.com</code>. Lowercase letters, digits and hyphens.</td></tr>
+  <tr><td>Website folder</td><td>Where the files live, under <code>/var/www/</code>. Optional: left blank it is derived from the domain. Type <code>example/public</code> to serve from a <code>public</code> subfolder while the site itself stays at <code>/var/www/example</code>.</td></tr>
+  <tr><td>Site type</td><td><strong>PHP / static</strong> (Laravel, WordPress, plain HTML, React/Vue builds), <strong>Node.js</strong> or <strong>Python</strong> application.</td></tr>
+  <tr><td>PHP version</td><td>PHP / static sites only. Choose <em>None</em> for pure static content.</td></tr>
+  <tr><td>Redirect www</td><td>Send <code>www.example.com</code> to <code>example.com</code> (on by default).</td></tr>
+  <tr><td>Enable HTTPS</td><td>Try to get a certificate right away. If DNS is not ready yet, the site is still created over plain HTTP and you can enable HTTPS later.</td></tr>
+</table>
+<p>Creating a site runs as a <a href="/docs/jobs">job</a>. A placeholder page is written for PHP / static sites so you can confirm it works.</p>
+
+<h2 id="detail">The site page</h2>
+<p>Click a domain in the Sites list. The page shows:</p>
+<ul>
+  <li><strong>Overview</strong> — system user, home directory, disk usage, webroot, SSL state, with shortcuts to the file manager, logs and a terminal as that site's user.</li>
+  <li><strong>PHP version</strong> (PHP sites) or <strong>Application</strong> controls (Node.js / Python).</li>
+  <li><strong>SSL</strong>, <strong>DNS propagation</strong>, <strong>Databases</strong>, <strong>Backups</strong>, <strong>Cron jobs</strong>, <strong>FTP</strong>, <strong>SSH access</strong> and <strong>Delete site</strong>.</li>
+</ul>
+
+<h2 id="php">Changing the PHP version</h2>
+<p>Pick another installed version and click <em>Apply</em>. The panel removes the old pool, creates a new one on the new version and restarts PHP-FPM. Different sites can run different versions side by side. Install more versions on the <a href="/docs/stack#php">Stack</a> page.</p>
+
+<h2 id="document-path">Document path (webroot)</h2>
+<p>The pencil icon next to <em>Webroot</em> changes the folder nginx serves. It must stay inside the site's home directory. Typical values:</p>
+<ul>
+  <li>Laravel: <code>/var/www/shop/public</code></li>
+  <li>WordPress / plain PHP: the site folder itself</li>
+  <li>React / Vue build: the folder containing <code>index.html</code></li>
+  <li>Node.js / Python: the folder the application runs from (the "App folder")</li>
+</ul>
+
+<h2 id="ssl">HTTPS (SSL)</h2>
+<ol>
+  <li>Install <em>SSL (Let's Encrypt)</em> from the Stack page (once per server).</li>
+  <li>Make sure the domain's <code>A</code> record points at this server.</li>
+  <li>On the site page click <em>Enable HTTPS</em>, optionally giving an email for expiry notices.</li>
+</ol>
+<p>The panel requests the certificate through the webroot challenge, switches the site to HTTPS and redirects HTTP to it. Certificates renew automatically, and the site page shows the expiry date. If <code>www</code> has no DNS record yet, the certificate covers only the bare domain; the panel notices this and keeps <code>www</code> as a plain redirect. <em>Disable HTTPS</em> turns it off but keeps the certificate.</p>
+
+<h2 id="dns">Checking DNS</h2>
+<p><em>Check DNS propagation</em> asks several public resolvers what the domain resolves to and compares it with this server's public IP, so you can tell whether a certificate request will succeed.</p>
+
+<h2 id="delete">Deleting a site</h2>
+<p>Type the domain to confirm. By default <strong>files are kept</strong> on disk and linked databases are <strong>detached, not dropped</strong> (they stay on the Databases page). Tick the boxes to delete files and/or databases as well. Deleting removes the nginx config, the PHP pool or application service, the FTP login, cron jobs and the system user.</p>
+<div class="callout danger"><strong class="callout-title">Not recoverable</strong>Deleting files or databases cannot be undone. Take a <a href="/docs/backups">backup</a> first.</div>
+
+<h2 id="custom-nginx">Custom nginx rules</h2>
+<p>Each site includes an override file the panel never overwrites. Edit it from the <a href="/docs/config-editor">Config editor</a> to add rewrites, headers or cache rules.</p>
+{% endblock %}
