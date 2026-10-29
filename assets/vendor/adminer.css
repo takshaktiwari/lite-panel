@@ -315,31 +315,61 @@ input[name=drop]:hover, input[name=truncate]:hover {
   background: var(--danger); border-color: var(--danger); color: #fff;
 }
 
-/* Tables page, "Selected (n)" box: maintenance buttons on the left, the
-   destructive ones on the right, and "move / copy" as a second, separate row. */
-fieldset:has(input[name=truncate]) { padding: 14px 18px 18px; }
+/* Tables page, "Selected (n)" box.  Three groups, left to right on a wide
+   screen: maintenance buttons, move / copy to another database, and the
+   destructive buttons at the far right.  Below 1500px the move / copy group
+   drops to its own row so nothing is squeezed.  The group captions are
+   generated (English only); the buttons themselves stay as Adminer renders. */
+fieldset:has(input[name=truncate]) {
+  display: block; width: 100%; box-sizing: border-box;
+  padding: 6px 14px 12px;
+  margin: 0;
+}
+fieldset:has(input[name=truncate]) legend { padding: 0 6px; }
 fieldset:has(input[name=truncate]) > div {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  max-width: 820px;
 }
-fieldset:has(input[name=truncate]) > div::before {
-  content: "Apply to the selected tables";
-  flex: 0 0 100%;
-  margin-bottom: 2px;
-  color: var(--muted); font-size: 12px;
+fieldset:has(input[name=truncate]) a { display: none; } /* "?" links to MySQL docs */
+fieldset:has(input[name=truncate]) input[type=submit] { padding: 3px 11px; font-size: 13px; }
+
+fieldset:has(input[name=truncate]) > div::before,
+fieldset:has(input[name=truncate]) > div::after {
+  color: var(--muted);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
 }
-fieldset:has(input[name=truncate]) input[name=truncate] { margin-left: auto; }
+fieldset:has(input[name=truncate]) > div::before { content: "Maintenance"; order: -1; margin-right: 2px; }
+fieldset:has(input[name=truncate]) > div::after  { content: "Danger"; order: 2; margin-left: auto; margin-right: 2px; color: var(--danger); }
+fieldset:has(input[name=truncate]) input[name=truncate],
+fieldset:has(input[name=truncate]) input[name=drop] { order: 3; }
+
 fieldset:has(input[name=truncate]) > div > p {
-  flex: 1 1 100%;
-  margin: 8px 0 0; padding-top: 14px;
-  border-top: 1px solid var(--border);
+  order: 1;
+  flex: 0 1 auto;
+  margin: 0 0 0 10px; padding: 0 0 0 18px;
+  border: 0; border-left: 1px solid var(--border);
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   color: var(--muted); font-size: 13px;
 }
-fieldset:has(input[name=truncate]) > div > p select { min-width: 200px; color: var(--text); }
+fieldset:has(input[name=truncate]) > div > p select { min-width: 180px; padding: 3px 8px; color: var(--text); }
 fieldset:has(input[name=truncate]) > div > p label {
   display: inline-flex; align-items: center; gap: 5px;
-  margin-left: 6px; color: var(--text);
+  margin-left: 4px; color: var(--text);
+}
+@media (max-width: 1499px) {
+  /* Row 1: maintenance + danger.  Row 2: move / copy. */
+  fieldset:has(input[name=truncate]) > div > p {
+    order: 4;
+    flex: 1 1 100%;
+    margin: 4px 0 0; padding: 12px 0 0;
+    border-left: 0; border-top: 1px solid var(--border);
+  }
+}
+@media (max-width: 860px) {
+  /* Narrow: each group on its own line. */
+  fieldset:has(input[name=truncate]) > div::after { flex: 0 0 100%; margin: 6px 0 0; }
+  fieldset:has(input[name=truncate]) input[name=truncate],
+  fieldset:has(input[name=truncate]) input[name=drop] { margin-left: 0; }
+  fieldset:has(input[name=truncate]) > div > p select { min-width: 0; flex: 1 1 160px; }
 }
 
 /* ---- SQL highlighting & help ------------------------------------------ */
@@ -364,3 +394,20 @@ body.nojs > form:first-of-type #content, #content > form[action=""] { }
 #content h2:first-child { margin-top: 0; }
 form > #content table.layout { margin-bottom: 4px; }
 .version { color: var(--muted); }
+
+/* ---- small screens ---------------------------------------------------- */
+@media (max-width: 860px) {
+  :root { --side: 200px; }
+  #content { padding-left: 16px; padding-right: 16px; }
+  #lang { display: none; }
+  #breadcrumb { max-width: calc(100% - var(--side) - 100px); padding: 0 14px; }
+  p.logout, .logout { right: 10px; }
+}
+@media (max-width: 560px) {
+  :root { --side: 0px; }
+  #menu { position: static; width: auto; height: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  #menu h1 { height: var(--bar); }
+  body::before, #breadcrumb { display: none; }
+  p.logout, .logout { position: static; height: auto; padding: 8px 16px; }
+  #content { margin-left: 0; padding-top: 16px; }
+}
