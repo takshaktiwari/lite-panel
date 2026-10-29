@@ -23,6 +23,7 @@ Group=www-data
 # -t points at assets/vendor/ which contains:
 #   index.php  — the credentials() override that pins the server to localhost
 #   adminer.php — the vendored upstream (untouched)
+#   adminer.css — lite-panel theme; Adminer loads it automatically from this folder
 ExecStart=/usr/bin/php -d upload_max_filesize=1024M -d post_max_size=1024M -d memory_limit=1024M -d max_execution_time=300 -d max_input_time=300 -S 127.0.0.1:8766 -t /opt/lite-panel/assets/vendor
 
 Restart=on-failure

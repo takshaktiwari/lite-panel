@@ -1,0 +1,267 @@
+/* lite-panel theme for Adminer.
+ *
+ * Adminer loads adminer.css from its own folder when it exists (see css() in
+ * adminer.php), so the vendored upstream file stays untouched.  Colors match
+ * the panel's tokens (static/style.css); light/dark follows the system
+ * setting, the same default the panel uses.
+ */
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e2e5ea;
+  --text: #2f353d;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.08);
+  --ok: #16a34a;
+  --danger: #dc2626;
+  --radius: 6px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --surface: #1c1f24;
+    --border: #2c3037;
+    --text: #f8fafc;
+    --muted: #cbd5e1;
+    --accent: #3b82f6;
+    --accent-soft: rgba(59, 130, 246, 0.12);
+    --ok: #22c55e;
+    --danger: #ef4444;
+    color-scheme: dark;
+  }
+}
+
+html { background: var(--bg); }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+a { color: var(--accent); text-decoration: none; }
+a:visited { color: var(--accent); }
+a:hover, a:focus { text-decoration: underline; color: var(--accent); }
+code, pre, textarea.sqlarea, .jush {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+code { background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; }
+
+h1, h2, h3 { color: var(--text); background: none; border: 0; }
+h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 16px;
+  padding: 0;
+}
+h3 { font-size: 15px; font-weight: 600; }
+p { margin: 0 0 12px; }
+
+/* ---- sidebar ---------------------------------------------------------- */
+#menu {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  color: var(--text);
+  margin: 0;
+  padding: 0;
+  width: 240px;
+}
+#menu h1 {
+  margin: 0;
+  padding: 16px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+#menu h1 a, #menu h1 a:visited { color: var(--text); }
+#menu .version { color: var(--muted); font-size: 11px; font-weight: normal; }
+#menu p, #menu #dbs { padding: 12px 18px 0; margin: 0; }
+#menu p.links { padding-bottom: 4px; }
+#menu p.links a {
+  display: inline-block;
+  margin: 0 8px 6px 0;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12.5px;
+}
+#menu p.links a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+#menu p.links a.active, #menu p.links a.current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+#menu #dbs select { width: 100%; }
+#tables { margin: 8px 0 0; padding: 0 10px 12px; list-style: none; }
+#tables li { margin: 0; padding: 0; }
+#menu a { background: transparent; }
+#tables li a { padding: 3px 8px; border-radius: 4px; }
+#tables li a.select { color: var(--text); }
+#tables li a.structure { color: var(--muted); font-size: 12.5px; }
+#tables li a.active, #tables li a.select:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  text-decoration: none;
+}
+#logins, #logout { padding: 12px 18px; margin: 0; }
+#logout input[type=submit] { width: 100%; }
+
+/* ---- content ---------------------------------------------------------- */
+#content { margin-left: 240px; padding: 24px 28px 48px; }
+#breadcrumb {
+  margin: 0 0 14px;
+  padding: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+}
+#breadcrumb a { color: var(--accent); }
+p.links { margin: 0 0 14px; }
+p.links a, p.links a:visited {
+  display: inline-block;
+  margin: 0 6px 6px 0;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+p.links a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+fieldset {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 0 0 16px;
+  padding: 12px 16px;
+}
+legend { color: var(--muted); font-size: 12px; padding: 0 6px; }
+
+.scrollable { background: transparent; scrollbar-color: var(--border) transparent; }
+/* The bar of bulk actions that sticks to the bottom of a result list. */
+.footer { border: 0; border-image: none; background: transparent; margin-right: 0; }
+.footer > div { background: var(--bg); }
+.footer::before, .footer::after { display: none; }
+
+/* ---- messages --------------------------------------------------------- */
+.message, .error {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.message { border-left: 3px solid var(--ok); color: var(--text); }
+.error { border-left: 3px solid var(--danger); color: var(--danger); }
+.warning { color: var(--danger); }
+
+/* ---- tables ----------------------------------------------------------- */
+table { border-collapse: separate; border-spacing: 0; }
+table.nowrap, table.checkable, #schema {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 0 0 16px;
+}
+th, td { padding: 7px 12px; border: 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+th {
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  letter-spacing: 0.02em;
+}
+thead th, thead td, tfoot td, tfoot th { background: var(--bg); color: var(--muted); }
+th a, th a:visited { color: var(--muted); }
+th a:hover { color: var(--accent); }
+tr:last-child > td, tr:last-child > th { border-bottom: 0; }
+tr.odd td, tr.odd th { background: transparent; }
+tr.even td, tr.even th { background: transparent; }
+table.checkable tbody tr:hover td, table.nowrap tbody tr:hover td, table.nowrap tbody tr:hover th {
+  background: var(--accent-soft);
+}
+td.checked, tr.checked td { background: var(--accent-soft) !important; }
+table.layout, table.layout th, table.layout td {
+  background: none; border: 0; padding: 4px 8px 4px 0; overflow: visible; border-radius: 0;
+}
+table.layout { border: 0; margin: 0 0 12px; }
+table.layout th { color: var(--text); font-size: 13px; font-weight: 500; letter-spacing: 0; }
+.js .column { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+
+/* ---- form controls ---------------------------------------------------- */
+input, select, textarea {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 9px;
+  font: inherit;
+  font-size: 13.5px;
+}
+input[type=checkbox], input[type=radio] { padding: 0; accent-color: var(--accent); }
+input:focus, select:focus, textarea:focus {
+  outline: 0;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+input[type=file] { background: none; border: 0; padding: 0; }
+textarea.sqlarea, textarea[name=query] { width: 100%; box-sizing: border-box; }
+input[type=submit], input[type=button], button, .button {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 14px;
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+input[type=submit]:hover, input[type=button]:hover, button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* The login / run / save buttons are the page's main action. */
+input[type=submit]:not([name=drop]):not([name=truncate]):not([name=clone]):not([name=logout]) { }
+form#form > p > input[type=submit]:first-child,
+#content form > p > input[type=submit]:only-of-type,
+.layout + p > input[type=submit] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+form#form > p > input[type=submit]:first-child:hover,
+#content form > p > input[type=submit]:only-of-type:hover,
+.layout + p > input[type=submit]:hover { filter: brightness(1.08); color: #fff; }
+input[name=drop], input[name=truncate] { color: var(--danger); }
+input[name=drop]:hover, input[name=truncate]:hover { border-color: var(--danger); color: var(--danger); }
+
+/* ---- SQL highlighting & help ------------------------------------------ */
+pre, #help {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+pre { padding: 10px 12px; overflow: auto; }
+/* Adminer colors SQL with dark navy / red, unreadable on a dark page. */
+.jush a, .jush a.jush-help, code a.jush-help, [class*="_kw"] { color: var(--accent); background: none; }
+.jush a.jush-custom { color: var(--text); text-decoration: underline; }
+.jush-com, [class*="_com"] { color: var(--muted); }
+[class*="_quo"], [class*="_quo"] a { color: var(--ok); }
+.jush-op, [class*="_op"] { color: var(--muted); }
+[class*="jush"][class*="_num"], .jush-num { color: #d97706; }
+.sqlarea, textarea.sqlarea { background: var(--bg); color: var(--text); }
+
+/* ---- login page ------------------------------------------------------- */
+body.nojs > form:first-of-type #content, #content > form[action=""] { }
+#content h2:first-child { margin-top: 0; }
+form > #content table.layout { margin-bottom: 4px; }
+.lang, #lang { color: var(--muted); font-size: 12px; }
+#lang select { padding: 2px 6px; }
+.version { color: var(--muted); }
