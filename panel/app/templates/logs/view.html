@@ -66,7 +66,7 @@
 
 <section class="panel" style="padding:0;overflow:hidden;background:#0d0f12;border-color:#23272e;">
   <div style="padding:10px 14px;background:#16191f;border-bottom:1px solid #23272e;display:flex;justify-content:space-between;align-items:center;">
-    <span style="font-family:var(--mono);font-size:12px;color:#9da5b4;">
+    <span style="font-family:var(--mono);font-size:12px;color:var(--muted);">
       {% if active_target %}
         {{ active_target.label }}
         {% if active_target.file_path %}<span style="opacity:0.6;margin-left:6px;">({{ active_target.file_path }})</span>{% endif %}
@@ -74,7 +74,7 @@
         No log selected
       {% endif %}
     </span>
-    <span id="log-status" style="font-size:11px;color:#9da5b4;">Updated just now</span>
+    <span id="log-status" style="font-size:11px;color:var(--muted);">Updated just now</span>
   </div>
 
   <pre id="log-display" class="job-log" style="border-radius:0;margin:0;max-height:70vh;min-height:300px;">{{ content }}</pre>
