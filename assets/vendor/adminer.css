@@ -219,6 +219,37 @@ legend { color: var(--muted); font-size: 12px; padding: 0 6px; }
 .footer > div { background: var(--bg); }
 .footer::before, .footer::after { display: none; }
 
+/* Row browser footer (Page / Whole result / Modify / Selected / Export):
+   compact one-line pills.  The legend becomes an inline caption instead of
+   sitting on the border, which is what made each box tall. */
+.footer > div { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.footer > div > fieldset:not(:has(input[name=truncate])) {
+  display: inline-flex; align-items: center; gap: 10px;
+  margin: 0; padding: 6px 12px;
+  border-radius: 8px;
+}
+.footer > div > fieldset:not(:has(input[name=truncate])) legend {
+  float: left;           /* a floated legend is no longer drawn on the border */
+  margin: 0; padding: 0;
+  color: var(--muted);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  white-space: nowrap;
+}
+.footer > div > fieldset:not(:has(input[name=truncate])) legend a {
+  color: var(--accent);
+  font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none;
+}
+.footer > div > fieldset:not(:has(input[name=truncate])) > div {
+  display: flex; align-items: center; gap: 6px; margin: 0;
+}
+.footer > div > fieldset:not(:has(input[name=truncate])) input[type=submit] {
+  padding: 3px 11px; font-size: 13px;
+}
+/* Page numbers */
+.footer > div > fieldset > a { padding: 1px 7px; border-radius: 4px; }
+.footer > div > fieldset > a:hover { background: var(--accent-soft); text-decoration: none; }
+.footer label { display: inline-flex; align-items: center; gap: 6px; }
+
 /* ---- messages --------------------------------------------------------- */
 .message, .error {
   margin: 0 0 16px;
