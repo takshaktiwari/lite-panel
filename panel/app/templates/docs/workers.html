@@ -1,0 +1,65 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What workers are for</h2>
+<p>Some jobs must run <strong>all the time</strong>, not on a schedule: a Laravel queue worker that sends emails and processes uploads, Horizon, Reverb (WebSockets), a Celery worker, a Node job runner. A worker is a command the panel keeps running in the background: it restarts if it crashes, starts again after a reboot, and runs as the site's own unprivileged user, so it can only touch that site's files.</p>
+<p>Workers are available on <strong>every site type</strong>. Find them in the <em>Workers</em> section of a site's page.</p>
+
+<h2 id="how">How it works</h2>
+<p>The panel uses <strong>systemd</strong>, the service manager already on the server, which also runs your Node.js and Python apps. There is nothing extra to install and no separate process manager such as Supervisor to maintain. Each worker becomes a unit named <code>lite-panel-worker-&lt;site&gt;.&lt;name&gt;@N.service</code> (one per process). Output goes to the system journal, so it is rotated automatically.</p>
+<p>The units are generated from the panel's database, so <code>lite-panel rebuild</code> recreates them. Don't edit the unit files by hand: changes are overwritten.</p>
+
+<h2 id="add">Adding a worker</h2>
+<ol>
+  <li>Open the site, scroll to <em>Workers</em> and open <em>Add a worker</em>.</li>
+  <li>Pick a <strong>preset</strong> (this fills in the name and command), or type your own.</li>
+  <li>Set the number of <strong>processes</strong> and the <strong>stop timeout</strong>, then click <em>Add and start</em>.</li>
+</ol>
+<table class="table">
+  <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+  <tbody>
+  <tr><td>Name</td><td>Lowercase letters, digits and hyphens (up to 24). Unique within the site.</td></tr>
+  <tr><td>Command</td><td>The command to run. <code>{PHP}</code> is replaced by the site's PHP binary (for example <code>/usr/bin/php8.3</code>), so the worker follows the site's PHP version.</td></tr>
+  <tr><td>Processes</td><td>How many copies run in parallel (1 to 8). Use more than one to work through a queue faster.</td></tr>
+  <tr><td>Stop timeout</td><td>Seconds the worker is given to finish its current job after a stop or restart before it is killed. Set it longer than your slowest job.</td></tr>
+  </tbody>
+</table>
+<p>The command runs from the project folder. For a PHP site whose document path ends in <code>public</code> (Laravel), that is the folder <em>above</em> <code>public</code>, where <code>artisan</code> lives. For Node.js and Python sites it is the app folder.</p>
+
+<h2 id="laravel">Laravel</h2>
+<table class="table">
+  <thead><tr><th>Preset</th><th>Command</th></tr></thead>
+  <tbody>
+  <tr><td>Queue worker</td><td><code>{PHP} artisan queue:work --sleep=3 --tries=3 --max-time=3600</code></td></tr>
+  <tr><td>Horizon</td><td><code>{PHP} artisan horizon</code></td></tr>
+  <tr><td>Reverb</td><td><code>{PHP} artisan reverb:start</code></td></tr>
+  <tr><td>Scheduler</td><td><code>{PHP} artisan schedule:work</code></td></tr>
+  </tbody>
+</table>
+<ul>
+  <li>Set <code>QUEUE_CONNECTION</code> in the project's <code>.env</code> to a real driver (<code>database</code> or <code>redis</code>); with <code>sync</code> there is nothing for a worker to do.</li>
+  <li><code>--max-time=3600</code> makes the worker exit cleanly every hour so memory leaks cannot build up; systemd starts it again immediately.</li>
+  <li>The scheduler preset is an alternative to the <a href="/docs/cron">cron</a> entry for <code>schedule:run</code>. Use one or the other, not both.</li>
+</ul>
+<div class="callout"><strong class="callout-title">After every deploy</strong>Workers keep the old code in memory until they restart. After deploying, click <strong>Restart all</strong> on the site's Workers section. A restart is graceful: the current job finishes (up to the stop timeout) before the worker exits.</div>
+
+<h2 id="node-python">Node.js and Python</h2>
+<p>Workers on application sites use the same environment as the app: the environment variables from the app settings, <code>node_modules/.bin</code> (Node.js) or the virtualenv (Python) on <code>PATH</code>. Examples: <code>node worker.js</code>, <code>celery -A app worker -l info</code>, <code>rq worker</code>. Install dependencies first (see <a href="/docs/node-python">Node.js &amp; Python apps</a>).</p>
+
+<h2 id="manage">Managing workers</h2>
+<ul>
+  <li><strong>Start / Restart / Stop</strong> per worker. Stop also keeps it from starting at boot until you start it again.</li>
+  <li><strong>Restart all</strong> restarts every worker of the site.</li>
+  <li><strong>Logs</strong> shows the most recent output of all of a worker's processes. Also available in the <a href="/logs">Logs</a> page's journal view for the unit.</li>
+  <li><strong>Edit or remove</strong> changes the command, process count or stop timeout (a running worker is restarted to apply it), or deletes the worker and its units.</li>
+  <li>Changing the site's PHP version restarts its running <code>{PHP}</code> workers on the new version. Deleting the site removes all its workers.</li>
+</ul>
+
+<h2 id="problems">If a worker won't stay running</h2>
+<p>The job log shows the worker's last output when it exits right after starting. The usual causes:</p>
+<ul>
+  <li><strong>Dependencies missing</strong>: run <code>composer install</code> (PHP) or <em>Install dependencies</em> (Node.js / Python) first.</li>
+  <li><strong>Wrong folder or file</strong>: <code>artisan</code> must be in the project folder described above. Check the document path on the site page.</li>
+  <li><strong>The command uses <code>{PHP}</code> but the site has no PHP version</strong>: choose one under <em>PHP version</em> on the site page.</li>
+  <li><strong>Permissions</strong>: the worker runs as the site user, so <code>storage/</code> and <code>bootstrap/cache</code> must be writable by it.</li>
+</ul>
+{% endblock %}

@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from app.database import session_scope
 from app.jobs import JobFailed, register
-from app.models import BackupSchedule, CronJob, FtpAccount, InstalledProvider, Site, utcnow
+from app.models import BackupSchedule, CronJob, FtpAccount, InstalledProvider, Site, SiteWorker, utcnow
 from app.providers import get_provider
 from app.services import apps as apps_service
 from app.services import cron as cron_service
@@ -26,6 +26,7 @@ from app.services import sites as sites_service
 from app.services import backup as backup_service
 from app.services import security as security_service
 from app.services import swap as swap_service
+from app.services import workers as workers_service
 from app.services import fail2ban as fail2ban_service
 from app.validators import ValidationError
 
@@ -241,6 +242,80 @@ def update_site_app_settings(ctx) -> None:
                 port=ctx.payload["port"],
                 env_text=ctx.payload.get("env", ""),
             )
+        except (ValidationError, RuntimeError) as exc:
+            raise _fail(exc) from exc
+
+
+@register("site.worker_add")
+def add_site_worker(ctx) -> None:
+    with session_scope() as db:
+        site = db.get(Site, ctx.payload["site_id"])
+        if site is None:
+            raise JobFailed("That site no longer exists.")
+        try:
+            workers_service.add_worker(
+                db,
+                ctx,
+                site,
+                name=ctx.payload["name"],
+                command=ctx.payload["command"],
+                processes=ctx.payload["processes"],
+                stop_timeout=ctx.payload["stop_timeout"],
+            )
+        except (ValidationError, RuntimeError) as exc:
+            raise _fail(exc) from exc
+
+
+def _site_and_worker(db, ctx):
+    site = db.get(Site, ctx.payload["site_id"])
+    if site is None:
+        raise JobFailed("That site no longer exists.")
+    worker = db.get(SiteWorker, ctx.payload["worker_id"])
+    if worker is None or worker.site_id != site.id:
+        raise JobFailed("That worker no longer exists.")
+    return site, worker
+
+
+@register("site.worker_control")
+def control_site_worker(ctx) -> None:
+    with session_scope() as db:
+        try:
+            if ctx.payload.get("worker_id"):
+                site, worker = _site_and_worker(db, ctx)
+                workers_service.control(ctx, site, worker, ctx.payload["action"])
+            else:
+                site = db.get(Site, ctx.payload["site_id"])
+                if site is None:
+                    raise JobFailed("That site no longer exists.")
+                workers_service.control_all(ctx, site, ctx.payload["action"])
+        except (ValidationError, RuntimeError) as exc:
+            raise _fail(exc) from exc
+
+
+@register("site.worker_update")
+def update_site_worker(ctx) -> None:
+    with session_scope() as db:
+        site, worker = _site_and_worker(db, ctx)
+        try:
+            workers_service.update_worker(
+                db,
+                ctx,
+                site,
+                worker,
+                command=ctx.payload["command"],
+                processes=ctx.payload["processes"],
+                stop_timeout=ctx.payload["stop_timeout"],
+            )
+        except (ValidationError, RuntimeError) as exc:
+            raise _fail(exc) from exc
+
+
+@register("site.worker_delete")
+def delete_site_worker(ctx) -> None:
+    with session_scope() as db:
+        site, worker = _site_and_worker(db, ctx)
+        try:
+            workers_service.delete_worker(db, ctx, site, worker)
         except (ValidationError, RuntimeError) as exc:
             raise _fail(exc) from exc
 

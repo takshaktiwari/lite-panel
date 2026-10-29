@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.models import Site
 from app.providers import get_provider
 from app.services import apps as apps_service
+from app.services import workers as workers_service
 from app.services import cron as cron_service
 from app.services import databases as db_service
 from app.services import renderer, tuning
@@ -315,6 +316,7 @@ def render_site(site: Site) -> None:
 
     if apps_service.is_app(site):
         apps_service.render_files(site)
+    workers_service.render_files(site)
 
     _ = php  # provider held for symmetry; socket path is derived above
 
@@ -370,6 +372,7 @@ def set_php_version(db: OrmSession, ctx, site: Site, version: Optional[str]) -> 
     php = get_provider("php")
     for item in {previous, version} - {None}:
         ctx.run(["systemctl", "restart", php.service_for(item)])
+    workers_service.restart_php_workers(ctx, site)
 
     get_provider("nginx").reload(ctx)
     db.commit()
@@ -460,6 +463,11 @@ def delete_site(db: OrmSession, ctx, site: Site, *, remove_files: bool = False,
     version = site.php_version
 
     ctx.log(f"Deleting site {domain}")
+
+    try:
+        workers_service.teardown(ctx, site)
+    except Exception as exc:  # noqa: BLE001 - a missing unit must not block deletion
+        ctx.log(f"note: {exc}")
 
     if apps_service.is_app(site):
         try:

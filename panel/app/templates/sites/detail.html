@@ -156,6 +156,104 @@
 </section>
 {% endif %}
 
+<section class="panel" id="workers-panel" data-site-id="{{ site.id }}">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+    <h2 style="margin:0;">Workers</h2>
+    {% if worker_rows %}
+    <form method="post" action="/sites/{{ site.id }}/workers/restart-all" style="margin:0;">
+      {{ ui.csrf(session) }}
+      <button class="button button-sm" type="submit">Restart all</button>
+    </form>
+    {% endif %}
+  </div>
+  <p class="muted" style="font-size:12.5px;margin-top:0;">Background processes such as queue workers, kept running by systemd as <code>{{ site.system_user }}</code>. <a href="/docs/workers">Guide</a></p>
+
+  {% if worker_php_missing %}
+  <div class="alert alert-notice">This site has no PHP version, so <code>{PHP}</code> commands can't be used. Pick one under PHP version above, or use a plain command.</div>
+  {% endif %}
+
+  {% for row in worker_rows %}
+  {% set w = row.worker %}
+  <div class="worker-row" data-worker-id="{{ w.id }}" style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div>
+        <strong>{{ w.name }}</strong>
+        <span class="badge {{ 'success' if row.state.active else '' }}" data-worker-badge>{{ row.state.label }}</span>
+        <span class="muted" style="font-size:12px;">{{ w.processes }} process{{ 'es' if w.processes != 1 }}</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        {% for action, label in (('start', 'Start'), ('restart', 'Restart'), ('stop', 'Stop')) %}
+        <form method="post" action="/sites/{{ site.id }}/workers/{{ w.id }}/control" style="margin:0;">
+          {{ ui.csrf(session) }}
+          <input type="hidden" name="action" value="{{ action }}">
+          <button class="button button-sm" type="submit">{{ label }}</button>
+        </form>
+        {% endfor %}
+        <button type="button" class="button button-sm" data-worker-logs>Logs</button>
+      </div>
+    </div>
+    <p style="margin:8px 0 0;"><code style="font-size:12px;word-break:break-all;">{{ w.command }}</code></p>
+    <pre data-worker-logs-output hidden style="max-height:260px;overflow:auto;margin:10px 0 0;font-size:12px;white-space:pre-wrap;"></pre>
+
+    <details style="margin-top:10px;">
+      <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);">Edit or remove</summary>
+      <form method="post" action="/sites/{{ site.id }}/workers/{{ w.id }}/settings" style="margin-top:10px;max-width:640px;">
+        {{ ui.csrf(session) }}
+        <label for="worker-command-{{ w.id }}">Command</label>
+        <input type="text" id="worker-command-{{ w.id }}" name="command" value="{{ w.command }}" required spellcheck="false" autocomplete="off">
+        <div style="display:flex;gap:12px;">
+          <div style="flex:1;">
+            <label for="worker-procs-{{ w.id }}">Processes</label>
+            <input type="number" id="worker-procs-{{ w.id }}" name="processes" min="1" max="{{ worker_max_processes }}" value="{{ w.processes }}" required>
+          </div>
+          <div style="flex:1;">
+            <label for="worker-timeout-{{ w.id }}">Stop timeout (s)</label>
+            <input type="number" id="worker-timeout-{{ w.id }}" name="stop_timeout" min="5" max="3600" value="{{ w.stop_timeout }}" required>
+          </div>
+        </div>
+        <button class="button primary" type="submit">Save{{ ' and restart' if row.state.running }}</button>
+      </form>
+      <form method="post" action="/sites/{{ site.id }}/workers/{{ w.id }}/delete" style="margin-top:8px;" data-confirm="Stop and remove worker {{ w.name }}?">
+        {{ ui.csrf(session) }}
+        <button class="button" type="submit" style="color:var(--danger);">Remove worker</button>
+      </form>
+    </details>
+  </div>
+  {% else %}
+  <p class="muted">No workers yet.</p>
+  {% endfor %}
+
+  <details {{ 'open' if not worker_rows }}>
+    <summary style="cursor:pointer;font-weight:600;font-size:13px;">Add a worker</summary>
+    <form method="post" action="/sites/{{ site.id }}/workers/add" style="margin-top:10px;max-width:640px;">
+      {{ ui.csrf(session) }}
+      <label for="worker-preset">Preset</label>
+      <select id="worker-preset" data-worker-preset aria-label="Worker presets">
+        <option value="">Choose a preset…</option>
+        {% for preset in worker_presets %}
+        <option value="{{ preset.command }}" data-name="{{ preset.name }}" data-processes="{{ preset.processes }}">{{ preset.label }}</option>
+        {% endfor %}
+      </select>
+      <label for="worker-name">Name</label>
+      <input type="text" id="worker-name" name="name" placeholder="queue" required maxlength="24" autocomplete="off">
+      <label for="worker-command">Command</label>
+      <input type="text" id="worker-command" name="command" required spellcheck="false" autocomplete="off">
+      <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">{% if not is_app %}<code>{PHP}</code> is the site's PHP.{% endif %} Runs in <code>{{ workers_workdir }}</code>. <a href="/docs/workers#add">Details</a></p>
+      <div style="display:flex;gap:12px;">
+        <div style="flex:1;">
+          <label for="worker-processes">Processes</label>
+          <input type="number" id="worker-processes" name="processes" min="1" max="{{ worker_max_processes }}" value="1" required>
+        </div>
+        <div style="flex:1;">
+          <label for="worker-stop-timeout">Stop timeout (s)</label>
+          <input type="number" id="worker-stop-timeout" name="stop_timeout" min="5" max="3600" value="{{ worker_default_timeout }}" required>
+        </div>
+      </div>
+      <button class="button primary" type="submit">Add and start</button>
+    </form>
+  </details>
+</section>
+
 <section class="panel" id="dns-check-panel" data-site-id="{{ site.id }}" data-domain="{{ site.domain }}">
   <h2>DNS propagation</h2>
   <p class="muted">Check whether {{ site.domain }} already resolves to this server across a spread of independent public DNS resolvers.</p>
@@ -376,6 +474,7 @@
 {% include "databases/_modals.html" %}
 
 {% if is_app %}<script src="/static/site-app.js"></script>{% endif %}
+<script src="/static/site-workers.js"></script>
 <script src="/static/dns-check.js"></script>
 <script src="/static/webroot-edit.js"></script>
 <script src="/static/disk-usage.js"></script>

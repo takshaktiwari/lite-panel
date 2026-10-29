@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session as OrmSession, selectinload
 from app.database import get_session
 from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
-from app.models import AuditLog, BackupSchedule, CronJob, FtpAccount, Site, SiteDatabase, SshKey
+from app.models import AuditLog, BackupSchedule, CronJob, FtpAccount, Site, SiteDatabase, SiteWorker, SshKey
 from app.providers import get_provider
 from app.services import apps as apps_service
 from app.services import backup as backup_service
@@ -25,7 +25,9 @@ from app.services import dns_check as dns_check_service
 from app.services import files as files_service
 from app.services import sites as sites_service
 from app.services import system as system_service
+from app.services import workers as workers_service
 from app.validators import (
+    MAX_WORKER_PROCESSES,
     RUNTIME_APP_TYPES,
     ValidationError,
     validate_app_command,
@@ -256,7 +258,23 @@ def site_detail(
         now=datetime.now(timezone.utc),
         socket=str(sites_service.socket_for(site.name)) if site.php_version else None,
         **_app_context(site),
+        **_worker_context(site),
     )
+
+
+def _worker_context(site: Site) -> dict:
+    rows = []
+    for worker in site.workers:
+        current = workers_service.state(site, worker)
+        rows.append({"worker": worker, "state": current})
+    return {
+        "worker_rows": rows,
+        "worker_presets": workers_service.presets_for(site),
+        "worker_default_timeout": workers_service.DEFAULT_STOP_TIMEOUT,
+        "worker_max_processes": MAX_WORKER_PROCESSES,
+        "workers_workdir": str(workers_service.workdir(site)),
+        "worker_php_missing": not site.php_version and not apps_service.is_app(site),
+    }
 
 
 def _app_context(site: Site) -> dict:
@@ -648,3 +666,186 @@ def _audit(db: OrmSession, session, action: str, target: Optional[str]) -> None:
         )
     )
     db.commit()
+
+
+# --------------------------------------------------------------------------
+# Background workers (systemd units, see services/workers.py)
+# --------------------------------------------------------------------------
+
+
+def _worker_of(db: OrmSession, site_id: int, worker_id: int):
+    site = db.get(Site, site_id)
+    worker = db.get(SiteWorker, worker_id)
+    if site is None or worker is None or worker.site_id != site.id:
+        return site, None
+    return site, worker
+
+
+@router.get("/{site_id}/workers/status")
+def workers_status(
+    site_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return JSONResponse({"error": "That site no longer exists."}, status_code=404)
+    out = []
+    for worker in site.workers:
+        current = workers_service.state(site, worker)
+        out.append({"id": worker.id, "active": current.active, "label": current.label})
+    return JSONResponse({"workers": out})
+
+
+@router.get("/{site_id}/workers/{worker_id}/logs")
+def worker_logs(
+    site_id: int,
+    worker_id: int,
+    lines: int = 100,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site, worker = _worker_of(db, site_id, worker_id)
+    if worker is None:
+        return JSONResponse({"error": "That worker no longer exists."}, status_code=404)
+    return JSONResponse({"logs": workers_service.recent_logs(site, worker, lines)})
+
+
+@router.post("/{site_id}/workers/add", dependencies=[Depends(csrf_protect)])
+def worker_add(
+    site_id: int,
+    name: str = Form(""),
+    command: str = Form(""),
+    processes: str = Form("1"),
+    stop_timeout: str = Form(str(workers_service.DEFAULT_STOP_TIMEOUT)),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    try:
+        name, command, count, timeout = workers_service.validate_new(
+            site, name, command, processes, stop_timeout
+        )
+    except ValidationError as exc:
+        return _detail_error(site, str(exc))
+
+    job = enqueue(
+        db,
+        "site.worker_add",
+        f"Add worker {name} for {site.domain}",
+        payload={
+            "site_id": site.id, "name": name, "command": command,
+            "processes": count, "stop_timeout": timeout,
+        },
+        user_id=session.user_id,
+    )
+    _audit(db, session, "site.worker_add", f"{site.domain}:{name}")
+    return job_redirect(job.id, f"/sites/{site.id}")
+
+
+@router.post("/{site_id}/workers/restart-all", dependencies=[Depends(csrf_protect)])
+def workers_restart_all(
+    site_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    if not site.workers:
+        return _detail_error(site, "This site has no workers.")
+    job = enqueue(
+        db,
+        "site.worker_control",
+        f"Restart workers for {site.domain}",
+        payload={"site_id": site.id, "action": "restart"},
+        user_id=session.user_id,
+    )
+    _audit(db, session, "site.worker_restart_all", site.domain)
+    return job_redirect(job.id, f"/sites/{site.id}")
+
+
+@router.post("/{site_id}/workers/{worker_id}/control", dependencies=[Depends(csrf_protect)])
+def worker_control(
+    site_id: int,
+    worker_id: int,
+    action: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site, worker = _worker_of(db, site_id, worker_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    if worker is None:
+        return _detail_error(site, "That worker no longer exists.")
+    if action not in ("start", "stop", "restart"):
+        return _detail_error(site, "Unknown action.")
+    job = enqueue(
+        db,
+        "site.worker_control",
+        f"{action.capitalize()} worker {worker.name} for {site.domain}",
+        payload={"site_id": site.id, "worker_id": worker.id, "action": action},
+        user_id=session.user_id,
+    )
+    _audit(db, session, f"site.worker_{action}", f"{site.domain}:{worker.name}")
+    return job_redirect(job.id, f"/sites/{site.id}")
+
+
+@router.post("/{site_id}/workers/{worker_id}/settings", dependencies=[Depends(csrf_protect)])
+def worker_settings(
+    site_id: int,
+    worker_id: int,
+    command: str = Form(""),
+    processes: str = Form("1"),
+    stop_timeout: str = Form(str(workers_service.DEFAULT_STOP_TIMEOUT)),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site, worker = _worker_of(db, site_id, worker_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    if worker is None:
+        return _detail_error(site, "That worker no longer exists.")
+    try:
+        _, command, count, timeout = workers_service._clean_fields(
+            site, None, command, processes, stop_timeout
+        )
+    except ValidationError as exc:
+        return _detail_error(site, str(exc))
+    job = enqueue(
+        db,
+        "site.worker_update",
+        f"Update worker {worker.name} for {site.domain}",
+        payload={
+            "site_id": site.id, "worker_id": worker.id, "command": command,
+            "processes": count, "stop_timeout": timeout,
+        },
+        user_id=session.user_id,
+    )
+    _audit(db, session, "site.worker_update", f"{site.domain}:{worker.name}")
+    return job_redirect(job.id, f"/sites/{site.id}")
+
+
+@router.post("/{site_id}/workers/{worker_id}/delete", dependencies=[Depends(csrf_protect)])
+def worker_delete(
+    site_id: int,
+    worker_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site, worker = _worker_of(db, site_id, worker_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    if worker is None:
+        return _detail_error(site, "That worker no longer exists.")
+    job = enqueue(
+        db,
+        "site.worker_delete",
+        f"Remove worker {worker.name} from {site.domain}",
+        payload={"site_id": site.id, "worker_id": worker.id},
+        user_id=session.user_id,
+    )
+    _audit(db, session, "site.worker_delete", f"{site.domain}:{worker.name}")
+    return job_redirect(job.id, f"/sites/{site.id}")

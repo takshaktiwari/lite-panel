@@ -250,6 +250,31 @@ class Site(TimestampMixin, Base):
     backup_schedules: Mapped[List["BackupSchedule"]] = relationship(
         back_populates="site", cascade="all, delete-orphan"
     )
+    workers: Mapped[List["SiteWorker"]] = relationship(
+        back_populates="site", cascade="all, delete-orphan", order_by="SiteWorker.id"
+    )
+
+
+class SiteWorker(TimestampMixin, Base):
+    """A long-running background process of a site (queue worker, Horizon...).
+
+    Rendered as a systemd template unit; ``processes`` instances run it in
+    parallel.  Kept apart from the Node/Python ``app_*`` columns on ``Site``:
+    those describe the one process nginx proxies to, while any site (PHP
+    included) may have any number of workers.
+    """
+
+    __tablename__ = "site_workers"
+    __table_args__ = (UniqueConstraint("site_id", "name", name="uq_site_worker_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(24), nullable=False)
+    command: Mapped[str] = mapped_column(Text, nullable=False)
+    processes: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    stop_timeout: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
+
+    site: Mapped["Site"] = relationship(back_populates="workers")
 
 
 class SiteAlias(Base):

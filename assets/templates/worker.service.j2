@@ -1,0 +1,32 @@
+# {{ banner }}
+# Site: {{ site.name }} ({{ site.domain }}) -- worker "{{ worker.name }}", instance %i
+[Unit]
+Description=lite-panel worker {{ worker.name }} #%i for {{ site.domain }}
+After=network.target
+StartLimitIntervalSec=120
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User={{ site.system_user }}
+Group={{ site.system_user }}
+WorkingDirectory={{ workdir }}
+Environment="HOME={{ site.root_dir }}"
+Environment="PATH={{ path_env }}"
+{% if env_file %}
+EnvironmentFile=-{{ env_file }}
+{% endif %}
+ExecStart=/bin/bash -c "{{ exec_start }}"
+Restart=always
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec={{ worker.stop_timeout }}
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lite-panel-worker-{{ site.name }}.{{ worker.name }}
+
+[Install]
+WantedBy=multi-user.target

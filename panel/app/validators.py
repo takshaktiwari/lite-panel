@@ -308,6 +308,57 @@ def validate_app_command(value: str) -> str:
     return value
 
 
+_WORKER_NAME = re.compile(r"^[a-z][a-z0-9-]{0,22}[a-z0-9]$|^[a-z]$")
+MAX_WORKER_PROCESSES = 8
+MIN_STOP_TIMEOUT = 5
+MAX_STOP_TIMEOUT = 3600
+
+
+def validate_worker_name(value: str) -> str:
+    """A short slug naming a worker; part of its systemd unit name."""
+    value = _clean(value, "worker name").lower()
+    if not value:
+        raise ValidationError("A worker name is required, e.g. queue.")
+    if not _WORKER_NAME.match(value):
+        raise ValidationError(
+            "Worker name must be 1-24 characters: lowercase letters, digits and "
+            "hyphens, starting with a letter and not ending with a hyphen."
+        )
+    return value
+
+
+def validate_worker_command(value: str) -> str:
+    """Same rules as an app start command; the site user is the boundary."""
+    value = _clean(value, "worker command")
+    if not value:
+        raise ValidationError("A command is required, e.g. {PHP} artisan queue:work.")
+    if len(value) > _MAX_APP_COMMAND_LEN:
+        raise ValidationError(f"Command must be at most {_MAX_APP_COMMAND_LEN} characters.")
+    return value
+
+
+def validate_worker_processes(value) -> int:
+    try:
+        count = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValidationError("Processes must be a number.") from None
+    if not 1 <= count <= MAX_WORKER_PROCESSES:
+        raise ValidationError(f"Processes must be between 1 and {MAX_WORKER_PROCESSES}.")
+    return count
+
+
+def validate_stop_timeout(value) -> int:
+    try:
+        seconds = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValidationError("Stop timeout must be a number of seconds.") from None
+    if not MIN_STOP_TIMEOUT <= seconds <= MAX_STOP_TIMEOUT:
+        raise ValidationError(
+            f"Stop timeout must be between {MIN_STOP_TIMEOUT} and {MAX_STOP_TIMEOUT} seconds."
+        )
+    return seconds
+
+
 def validate_app_port(value) -> int:
     try:
         port = int(str(value).strip())

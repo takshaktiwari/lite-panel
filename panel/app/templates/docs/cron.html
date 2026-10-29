@@ -1,5 +1,6 @@
 {% extends "docs/_layout.html" %}
 {% block doc %}
+<p class="muted">For processes that must run continuously (queue workers, Horizon), use <a href="/docs/workers">Workers</a> instead of cron.</p>
 <h2 id="what">What cron jobs are</h2>
 <p>A cron job runs a command on a schedule: clearing caches, running a Laravel scheduler, importing feeds, sending reports. The <a href="/cron">Cron</a> page manages them without editing crontab by hand. The panel owns the schedule: it regenerates each user's crontab from its own list, so what you see is what runs.</p>
 

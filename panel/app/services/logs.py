@@ -30,6 +30,8 @@ ALLOWED_LOG_DIRS = (
 ALLOWED_SERVICES = frozenset({"nginx", "mariadb", "vsftpd", "lite-panel"})
 # A Node/Python site's own service (see app.services.apps).
 _APP_UNIT = re.compile(r"^lite-panel-app-[a-z0-9_-]+\.service$")
+# A site's background workers (see app.services.workers); "*" reads all instances.
+_WORKER_UNIT = re.compile(r"^lite-panel-worker-[a-z0-9_-]+\.[a-z0-9-]+@(\d+|\*)\.service$")
 
 
 @dataclass
@@ -188,6 +190,7 @@ def tail_journal(service: str, lines: int = 100) -> str:
         service not in ALLOWED_SERVICES
         and not (service.startswith("php") and service.endswith("-fpm"))
         and not _APP_UNIT.match(service)
+        and not _WORKER_UNIT.match(service)
     ):
         raise ValidationError(f"Access to journal for service '{service}' is not permitted.")
 
