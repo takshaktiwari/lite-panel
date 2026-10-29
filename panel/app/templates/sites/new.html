@@ -21,7 +21,7 @@
     <span class="input-group-text">{{ sites_root }}/</span>
     <input type="text" id="folder" name="folder" placeholder="example" value="{{ form.folder if form else '' }}">
   </div>
-  <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">Defaults to the domain name.</p>
+  <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">Filled in from the domain; change it if you like.</p>
 
   {% set current_type = (form.app_type if form and form.app_type else 'web') %}
   <label for="app_type">Site type</label>
@@ -106,5 +106,6 @@
 </form>
 {% endif %}
 
+<script src="/static/site-folder.js"></script>
 <script src="/static/site-type.js"></script>
 {% endblock %}
