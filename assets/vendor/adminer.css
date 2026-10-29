@@ -268,6 +268,9 @@ form#form:has(input[name=limit]) > fieldset > legend a {
   font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none;
 }
 form#form:has(input[name=limit]) > fieldset > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; }
+/* Select / Search / Sort hold one row per condition: stack the rows. */
+form#form:has(input[name=limit]) > fieldset > div:has(> div) { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; }
+form#form:has(input[name=limit]) > fieldset > div > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 form#form:has(input[name=limit]) > fieldset > div.hidden { display: none; }
 form#form:has(input[name=limit]) input.size { width: 74px; padding: 3px 8px; }
 form#form:has(input[name=limit]) > fieldset select,
