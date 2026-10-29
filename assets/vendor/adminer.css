@@ -136,8 +136,11 @@ p.logout, .logout {
 #menu h1 a, #menu h1 a:visited { color: var(--text); font-style: normal; }
 #menu .version { color: var(--muted); font-size: 11px; font-weight: normal; }
 #menu p { padding: 12px 18px 0; margin: 0; }
-#menu #dbs { padding: 14px 18px 0; }
-#menu #dbs select { width: 100%; box-sizing: border-box; }
+/* "DB: [select]" on one row.  The select submits itself on change, so the
+   "Use" button is redundant. */
+#menu #dbs { padding: 14px 18px 0; display: flex; align-items: center; gap: 8px; }
+#menu #dbs select { flex: 1 1 auto; min-width: 0; width: auto; box-sizing: border-box; }
+#menu #dbs input[type=submit], input.hidden { display: none; }
 #menu p.links { padding-bottom: 4px; }
 #menu a { background: transparent; }
 #menu p.links a {
@@ -180,6 +183,9 @@ p.logout, .logout {
   color: var(--muted); font-size: 11px;
   border-radius: 4px;
 }
+/* The "select" shortcut is shown as an icon (the word stays for screen readers). */
+#tables li a.select { font-size: 0; width: 24px; height: 22px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+#tables li a.select::before { content: "\2630"; font-size: 13px; line-height: 1; }
 #tables li a.select:hover { color: var(--accent); background: var(--accent-soft); text-decoration: none; }
 #tables li a.active { color: var(--accent); font-weight: 600; }
 #tables li a:hover { text-decoration: none; }
