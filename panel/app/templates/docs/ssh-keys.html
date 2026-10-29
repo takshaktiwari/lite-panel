@@ -17,7 +17,10 @@ ssh -i my-key.pem root@server-ip   # or site_name@server-ip</pre>
 </ol>
 
 <h2 id="import">Import an existing public key</h2>
-<p>If you already have a key (<code>~/.ssh/id_ed25519.pub</code> on your computer), paste its contents under <em>Import existing public key</em>. This is the best option: your private key never leaves your machine.</p>
+<p>If you already have a key (<code>~/.ssh/id_ed25519.pub</code> on your computer, shown with <code>cat ~/.ssh/id_ed25519.pub</code>), paste its contents under <em>Import existing public key</em>. This is the best option: your private key never leaves your machine, and you only paste the <em>public</em> half. Afterwards connect with <code>ssh user@server-ip</code>.</p>
+
+<h2 id="which">Generate or import?</h2>
+<p>Choose <strong>Generate</strong> to have the panel create a brand-new pair for you (the private key is downloaded once). Choose <strong>Import</strong> if you or a teammate already have a key pair.</p>
 
 <h2 id="manage">Authorized keys</h2>
 <p>The list shows every key the panel manages with its fingerprint. View the public key, or delete a key to revoke that access immediately.</p>
