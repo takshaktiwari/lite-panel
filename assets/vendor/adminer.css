@@ -245,6 +245,44 @@ legend { color: var(--muted); font-size: 12px; padding: 0 6px; }
 .footer > div > fieldset:not(:has(input[name=truncate])) input[type=submit] {
   padding: 3px 11px; font-size: 13px;
 }
+/* Row browser query bar (Select / Search / Sort / Limit / Text length / Action):
+   one line of compact pills instead of tall boxes.  Select, Search and Sort
+   start collapsed and show only their name; clicking it opens the field. */
+form#form:has(input[name=limit]) {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+  margin: 0 0 18px;
+}
+form#form:has(input[name=limit]) > fieldset {
+  display: inline-flex; align-items: center; gap: 10px;
+  margin: 0; padding: 5px 12px;
+  border-radius: 8px;
+}
+form#form:has(input[name=limit]) > fieldset > legend {
+  float: left; margin: 0; padding: 0;
+  color: var(--muted);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  white-space: nowrap;
+}
+form#form:has(input[name=limit]) > fieldset > legend a {
+  color: var(--accent);
+  font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none;
+}
+form#form:has(input[name=limit]) > fieldset > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; }
+form#form:has(input[name=limit]) > fieldset > div.hidden { display: none; }
+form#form:has(input[name=limit]) input.size { width: 74px; padding: 3px 8px; }
+form#form:has(input[name=limit]) > fieldset select,
+form#form:has(input[name=limit]) > fieldset input[type=search] { padding: 3px 8px; }
+/* The Action box is just the main button. */
+form#form:has(input[name=limit]) > fieldset:has(input[type=submit]) {
+  border: 0; background: none; padding: 0;
+}
+form#form:has(input[name=limit]) > fieldset:has(input[type=submit]) > legend { display: none; }
+form#form:has(input[name=limit]) input[type=submit] {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  padding: 4px 16px; font-size: 13px;
+}
+form#form:has(input[name=limit]) input[type=submit]:hover { filter: brightness(1.08); color: #fff; }
+
 /* "Whole result" (select every row on every page) and "Modify / Save" (inline
    cell editing) are hidden: the per-row "edit" link and the Export pill cover
    what is needed, and a Save button with no visible edit mode only confuses. */
