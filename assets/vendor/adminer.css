@@ -58,30 +58,92 @@ h2 {
 h3 { font-size: 15px; font-weight: 600; }
 p { margin: 0 0 12px; }
 
+/* ---- layout: fixed sidebar + top bar ---------------------------------- */
+:root { --side: 260px; --bar: 52px; }
+
+/* The top bar is drawn behind the breadcrumb, language and logout. */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0; left: var(--side); right: 0;
+  height: var(--bar);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  z-index: 3;
+}
+#breadcrumb {
+  position: fixed;
+  top: 0; left: var(--side);
+  height: var(--bar);
+  max-width: calc(100% - var(--side) - 340px);
+  margin: 0; padding: 0 24px;
+  line-height: var(--bar);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  z-index: 4;
+}
+#breadcrumb a { color: var(--accent); }
+#lang {
+  position: fixed;
+  top: 0; right: 108px; left: auto; width: auto;
+  height: var(--bar);
+  margin: 0; padding: 0;
+  display: flex; align-items: center; gap: 6px;
+  color: var(--muted); font-size: 12px;
+  z-index: 4;
+}
+#lang select { width: 112px; padding: 3px 8px; font-size: 12.5px; }
+p.logout, .logout {
+  position: fixed;
+  top: 0; right: 16px;
+  height: var(--bar);
+  margin: 0; padding: 0;
+  display: flex; align-items: center;
+  z-index: 4;
+}
+#logout, input#logout {
+  width: auto; margin: 0;
+  padding: 4px 12px;
+  background: var(--bg);
+  font-size: 12.5px;
+}
+
 /* ---- sidebar ---------------------------------------------------------- */
 #menu {
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  width: var(--side);
+  margin: 0; padding: 0 0 24px;
+  overflow-y: auto;
+  box-sizing: border-box;
   background: var(--surface);
   border-right: 1px solid var(--border);
   color: var(--text);
-  margin: 0;
-  padding: 0;
-  width: 240px;
+  z-index: 5;
 }
 #menu h1 {
   margin: 0;
-  padding: 16px 18px;
+  height: var(--bar);
+  box-sizing: border-box;
+  padding: 0 18px;
+  display: flex; align-items: center; gap: 8px;
   font-size: 15px;
   font-weight: 600;
   border-bottom: 1px solid var(--border);
 }
-#menu h1 a, #menu h1 a:visited { color: var(--text); }
+#menu h1 a, #menu h1 a:visited { color: var(--text); font-style: normal; }
 #menu .version { color: var(--muted); font-size: 11px; font-weight: normal; }
-#menu p, #menu #dbs { padding: 12px 18px 0; margin: 0; }
+#menu p { padding: 12px 18px 0; margin: 0; }
+#menu #dbs { padding: 14px 18px 0; }
+#menu #dbs select { width: 100%; box-sizing: border-box; }
 #menu p.links { padding-bottom: 4px; }
+#menu a { background: transparent; }
 #menu p.links a {
   display: inline-block;
-  margin: 0 8px 6px 0;
-  padding: 2px 8px;
+  margin: 0 6px 6px 0;
+  padding: 2px 9px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg);
@@ -95,31 +157,35 @@ p { margin: 0 0 12px; }
   color: var(--accent);
   font-weight: 600;
 }
-#menu #dbs select { width: 100%; }
-#tables { margin: 8px 0 0; padding: 0 10px 12px; list-style: none; }
-#tables li { margin: 0; padding: 0; }
-#menu a { background: transparent; }
-#tables li a { padding: 3px 8px; border-radius: 4px; }
-#tables li a.select { color: var(--text); }
-#tables li a.structure { color: var(--muted); font-size: 12.5px; }
-#tables li a.active, #tables li a.select:hover {
-  background: var(--accent-soft);
-  color: var(--accent);
-  text-decoration: none;
+
+/* One row per table: the name (opens the structure) takes the row, the
+   "select" shortcut is a small link at the end. */
+#tables { margin: 12px 0 0; padding: 0 10px; list-style: none; border: 0; }
+#tables li {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0; padding: 0 4px 0 0;
+  border-radius: 4px;
 }
-#logins, #logout { padding: 12px 18px; margin: 0; }
-#logout input[type=submit] { width: 100%; }
+#tables li:hover { background: var(--bg); }
+#tables li:has(a.active) { background: var(--accent-soft); }
+#tables li a.structure {
+  order: 1; flex: 1 1 auto; min-width: 0;
+  padding: 4px 8px;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  color: var(--text); font-size: 13px;
+}
+#tables li a.select {
+  order: 2; flex: 0 0 auto;
+  padding: 1px 6px;
+  color: var(--muted); font-size: 11px;
+  border-radius: 4px;
+}
+#tables li a.select:hover { color: var(--accent); background: var(--accent-soft); text-decoration: none; }
+#tables li a.active { color: var(--accent); font-weight: 600; }
+#tables li a:hover { text-decoration: none; }
 
 /* ---- content ---------------------------------------------------------- */
-#content { margin-left: 240px; padding: 24px 28px 48px; }
-#breadcrumb {
-  margin: 0 0 14px;
-  padding: 0;
-  background: none;
-  color: var(--muted);
-  font-size: 13px;
-}
-#breadcrumb a { color: var(--accent); }
+#content { margin-left: var(--side); padding: calc(var(--bar) + 24px) 28px 48px; }
 p.links { margin: 0 0 14px; }
 p.links a, p.links a:visited {
   display: inline-block;
@@ -262,6 +328,4 @@ pre { padding: 10px 12px; overflow: auto; }
 body.nojs > form:first-of-type #content, #content > form[action=""] { }
 #content h2:first-child { margin-top: 0; }
 form > #content table.layout { margin-bottom: 4px; }
-.lang, #lang { color: var(--muted); font-size: 12px; }
-#lang select { padding: 2px 6px; }
 .version { color: var(--muted); }
