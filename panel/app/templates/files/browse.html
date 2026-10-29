@@ -56,11 +56,11 @@
   </details>
 
   <button type="button" class="button button-sm" id="open-upload-dialog">Upload</button>
-  {# An empty href re-requests this exact URL, so the sort and folder are kept. #}
-  <a class="button button-sm" href="" title="Reload this folder">↻ Reload</a>
 
   <span style="flex:1 1 auto;"></span>
 
+  {# An empty href re-requests this exact URL, so the sort and folder are kept. #}
+  <a class="icon-button" href="" title="Reload this folder" aria-label="Reload this folder">↻</a>
   <button class="icon-button" type="submit" form="bulk-form" formaction="/files/bulk-move" title="Move selected to…"
           data-prompt-field="destination" data-prompt-message="Move selected item(s) to which folder? Full path, e.g. {{ root }}/path/to/folder"
           data-prompt-default="{{ current_abs }}">➡️</button>
