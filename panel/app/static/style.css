@@ -386,6 +386,12 @@ code, .mono {
 }
 .table tr:last-child td { border-bottom: 0; }
 .empty { padding: 8px 0; }
+/* "Nothing here yet" messages: quieter than body text so they read as a
+   state, not as content.  Links inside keep their normal color. */
+.muted.empty, .empty {
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  font-size: 13.5px;
+}
 
 .sort-header {
   color: inherit;

@@ -108,7 +108,7 @@
     <button class="button primary" type="submit" style="margin-bottom:14px;">Install</button>
   </form>
   {% else %}
-  <p class="muted">No additional versions available.</p>
+  <p class="muted empty">No additional versions available.</p>
   {% endif %}
 </section>
 
@@ -186,7 +186,7 @@
     <button class="button primary" type="submit" style="margin-bottom:14px;">{{ 'Switch' if node_installed else 'Install' }}</button>
   </form>
   {% elif not node_installed %}
-  <p class="muted" style="margin-top:12px;">No Node.js versions available right now.</p>
+  <p class="muted empty" style="margin-top:12px;">No Node.js versions available right now.</p>
   {% endif %}
 </section>
 {% endblock %}
