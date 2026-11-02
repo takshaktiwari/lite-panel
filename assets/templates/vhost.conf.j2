@@ -53,7 +53,11 @@ map $http_upgrade $lp_connection_{{ site.name | replace('-', '_') }} {
     include /etc/nginx/custom/lite-panel-{{ site.name }}-custom.conf;
 {% else %}
     root {{ site.webroot }};
+{% if fpm_socket %}
     index index.php index.html index.htm;
+{% else %}
+    index index.html index.htm;
+{% endif %}
 
     access_log /var/log/nginx/{{ site.name }}.access.log;
     error_log  /var/log/nginx/{{ site.name }}.error.log;
@@ -61,7 +65,11 @@ map $http_upgrade $lp_connection_{{ site.name | replace('-', '_') }} {
     client_max_body_size {{ site.upload_limit_mb }}M;
 
     location / {
+{% if fpm_socket %}
         try_files $uri $uri/ /index.php?$query_string;
+{% else %}
+        try_files $uri $uri/ =404;
+{% endif %}
     }
 
     location ~* \.(css|js|jpg|jpeg|png|gif|ico|svg|webp|avif|woff|woff2|ttf|eot|pdf|zip)$ {

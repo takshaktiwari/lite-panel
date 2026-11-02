@@ -4,7 +4,7 @@
 <p>A site is one domain with everything it owns, created together and removed together:</p>
 <ul>
   <li>a dedicated <strong>system user</strong> named <code>site_&lt;name&gt;</code> (the real isolation: one site cannot read another's files);</li>
-  <li>a folder at <code>/var/www/&lt;name&gt;</code>, readable only by that user (mode 750);</li>
+  <li>a folder at <code>/var/www/&lt;name&gt;</code>, readable only by that user (mode 750), with nginx granted read access through an ACL so other sites still cannot read it (see <a href="/docs/troubleshooting#forbidden">403 errors</a>);</li>
   <li>an <strong>nginx</strong> virtual host;</li>
   <li>for PHP sites, its own <strong>PHP-FPM pool</strong> running as that user, on the PHP version you chose;</li>
   <li>for Node.js and Python sites, a <strong>systemd service</strong> and a reverse proxy (see <a href="/docs/node-python">Node.js &amp; Python apps</a>);</li>

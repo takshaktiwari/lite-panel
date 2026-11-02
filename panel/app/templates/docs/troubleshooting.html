@@ -19,12 +19,26 @@
   <tr><th>Symptom</th><th>Likely cause and fix</th></tr>
   <tr><td>502 Bad Gateway (PHP)</td><td>PHP-FPM is down or the site's PHP version was removed. Change the site's PHP version or reinstall it on Stack.</td></tr>
   <tr><td>502 Bad Gateway (Node/Python)</td><td>The app is stopped or crashed. Open the site page, read the application logs, fix, then Start.</td></tr>
-  <tr><td>403 Forbidden</td><td>Wrong document path, missing <code>index</code> file, or permissions. Check the webroot and file modes.</td></tr>
+  <tr><td>403 Forbidden</td><td>nginx cannot read the site's files, the folder has no <code>index.html</code>/<code>index.php</code>, or the document path is wrong. Open the site and use <strong>Repair permissions</strong>; see <a href="#forbidden">below</a>.</td></tr>
   <tr><td>404 on every page except /</td><td>The framework needs its front controller; make sure the document path points at <code>public</code> (Laravel) and the site is PHP.</td></tr>
   <tr><td>413 Request Entity Too Large</td><td>Upload exceeds the limit. Raise <code>client_max_body_size</code> in the site's nginx override and PHP's <code>upload_max_filesize</code>/<code>post_max_size</code>.</td></tr>
   <tr><td>"Permission denied" in the app</td><td>The folder is not writable by the site user. Fix ownership/permissions (and avoid doing file work as root).</td></tr>
 </table>
 <p>Always check <a href="/docs/logs">Logs</a> first; the cause is usually stated there.</p>
+
+<h2 id="forbidden">Every page of a site returns 403</h2>
+<p>A site's folder is private to its own user (mode 750) so sites cannot read each other. nginx also has to read the files it serves, so the panel grants it access with a <strong>POSIX ACL</strong> for the web server user only (<code>www-data</code>), on the site's folder and, as a default, on everything created later by PHP, FTP, git or the file manager. Nothing is made world-readable, so one site still cannot read another's files.</p>
+<ol>
+  <li>Open the site in <a href="/sites">Sites</a>. <em>Web server access</em> shows whether nginx can read it, and the Sites page lists any site answering 403 or 500.</li>
+  <li>Click <strong>Repair permissions</strong>. It re-applies the ACL across the whole folder and installs the <code>acl</code> package if it is missing.</li>
+  <li>If ACLs are not available (a filesystem mounted <code>noacl</code>, or the package cannot be installed) the panel falls back to adding <code>www-data</code> to the site's group and restarting nginx. A reload would not be enough, because running workers keep their old groups.</li>
+</ol>
+<p>Sites created before this existed are repaired automatically the first time the panel starts after the update; a site you already fixed by hand with <code>setfacl</code> is detected and left exactly as it is. If it says <em>no index file</em>, the folder is readable but empty: upload an <code>index.html</code> or <code>index.php</code>.</p>
+<div class="callout"><strong class="callout-title">Do not use chmod 755</strong>Opening a site folder to everyone makes every other site's user able to read its files, including <code>.env</code>. Also note that <code>chmod 700</code> on a directory makes nginx lose access (it lowers the ACL mask); the file manager re-grants it for directories, but a command-line <code>chmod</code> needs Repair permissions afterwards. A single file you <code>chmod 600</code> is left as you set it.</div>
+<p>To verify by hand:</p>
+<pre>getfacl /var/www/&lt;site&gt;            # lists user:www-data:r-x
+getfacl -d /var/www/&lt;site&gt;         # lists default:user:www-data:r-x
+sudo -u site_a ls /var/www/site_b   # must fail: sites stay isolated</pre>
 
 <h2 id="ssl">HTTPS won't issue</h2>
 <ul>

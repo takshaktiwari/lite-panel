@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.models import Site
 from app.providers import get_provider
 from app.services import apps as apps_service
+from app.services import permissions as permissions_service
 from app.services import workers as workers_service
 from app.services import cron as cron_service
 from app.services import databases as db_service
@@ -157,6 +158,7 @@ def create_site(
     _create_directories(ctx, site)
     if not is_app:
         _write_placeholder_page(site)
+        _grant_webserver_access(ctx, site)
 
     db.add(site)
     db.flush()  # assign the id before config is rendered against it
@@ -167,6 +169,8 @@ def create_site(
     _reload_services(ctx, site)
 
     db.commit()
+    if not is_app:
+        _report_health(ctx, site)
     if is_app:
         ctx.log(
             f"Site {domain} is set up as a {apps_service.runtime_label(app_type)} app on "
@@ -176,6 +180,27 @@ def create_site(
     else:
         ctx.log(f"Site {domain} is live at http://{domain}")
     return site
+
+
+def _grant_webserver_access(ctx, site) -> None:
+    """Let nginx read the webroot (ACL).  A failure is reported, not fatal:
+    the site exists and the Repair permissions button can retry."""
+    try:
+        permissions_service.apply(ctx, site)
+    except permissions_service.PermissionsError as exc:
+        ctx.log(f"WARNING: {exc}")
+        ctx.log("The site was created, but nginx may answer 403 until you use Repair permissions.")
+
+
+def _report_health(ctx, site) -> None:
+    """Request the new site once and say clearly if it is not being served."""
+    health = permissions_service.check(site)
+    if health.ok:
+        ctx.log(health.message)
+    elif health.problem == "no_index":
+        ctx.log(f"Note: {health.message}")
+    else:
+        ctx.log(f"ERROR: {health.message}")
 
 
 def _create_system_user(ctx, username: str, home: Path) -> None:
@@ -221,8 +246,9 @@ def _create_directories(ctx, site: Site) -> None:
     # The site user owns its whole tree.
     run(["chown", "-R", f"{site.system_user}:{site.system_user}", str(root)])
     # 750, not 755: another site's user must not be able to walk in here.
-    # nginx never reads these files directly -- it goes through the FPM
-    # socket -- so it does not need access.
+    # nginx *does* read the webroot itself (static files, index checks), so
+    # it is granted access with an ACL afterwards -- see
+    # services.permissions -- never by loosening this mode.
     run(["chmod", "750", str(root)])
     run(["chmod", "700", str(sessions)])
     ctx.log(f"prepared {root}")
@@ -403,6 +429,7 @@ def set_webroot(db: OrmSession, ctx, site: Site, new_path: str) -> None:
     ctx.log(f"Moving {site.domain}'s document path to {resolved}")
     site.webroot = str(resolved)
     db.flush()
+    _grant_webserver_access(ctx, site)
     render_site(site)
 
     get_provider("nginx").reload(ctx)

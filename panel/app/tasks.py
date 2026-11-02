@@ -26,6 +26,7 @@ from app.services import sites as sites_service
 from app.services import backup as backup_service
 from app.services import security as security_service
 from app.services import swap as swap_service
+from app.services import permissions as permissions_service
 from app.services import workers as workers_service
 from app.services import fail2ban as fail2ban_service
 from app.validators import ValidationError
@@ -318,6 +319,60 @@ def delete_site_worker(ctx) -> None:
             workers_service.delete_worker(db, ctx, site, worker)
         except (ValidationError, RuntimeError) as exc:
             raise _fail(exc) from exc
+
+
+@register("site.repair_permissions")
+def repair_site_permissions(ctx) -> None:
+    """Re-grant nginx access to one site (the Repair permissions button), or to
+    every site that needs it (``all``: the upgrade migration and the "repair
+    all" button).
+
+    The migration (``force`` unset) leaves a site that is already fixed
+    completely untouched -- including one fixed by hand with setfacl -- and
+    only re-states the ACL across the tree for sites still not served.
+    """
+    force = bool(ctx.payload.get("force", not ctx.payload.get("all")))
+    with session_scope() as db:
+        if ctx.payload.get("all"):
+            sites = [s for s in db.scalars(select(Site)).all() if permissions_service.needs_webserver_access(s)]
+            ctx.log(f"Checking nginx access for {len(sites)} site(s)")
+            failed = []
+            for site in sites:
+                try:
+                    health = permissions_service.repair(ctx, site, force=force)
+                    if not health.ok and health.problem in ("permissions", "unreachable"):
+                        failed.append(site.domain)
+                except (permissions_service.PermissionsError, OSError) as exc:
+                    ctx.log(f"ERROR {site.domain}: {exc}")
+                    failed.append(site.domain)
+            if failed:
+                raise JobFailed("Could not repair: " + ", ".join(failed))
+            mark_permissions_migrated()
+            return
+
+        site = db.get(Site, ctx.payload["site_id"])
+        if site is None:
+            raise JobFailed("That site no longer exists.")
+        try:
+            health = permissions_service.repair(ctx, site, force=force)
+        except permissions_service.PermissionsError as exc:
+            raise _fail(exc) from exc
+        if not health.ok and health.problem == "permissions":
+            raise JobFailed(health.message)
+
+
+def mark_permissions_migrated(state_dir=None) -> None:
+    from app.config import get_settings
+
+    try:
+        marker = (state_dir or get_settings().state_dir) / PERMISSIONS_MIGRATION_MARKER
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("done\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+PERMISSIONS_MIGRATION_MARKER = ".nginx-acl-migrated-v1"
 
 
 @register("site.webroot")

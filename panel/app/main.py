@@ -50,6 +50,35 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _migrate_site_permissions() -> None:
+    """Once, after an upgrade: give nginx read access to existing sites.
+
+    Sites created before this existed have a 750 home nginx cannot enter, so
+    they all answer 403.  The job is idempotent and only records success in a
+    marker file, so a failed run is retried on the next start.
+    """
+    if settings.dev_mode or (settings.state_dir / tasks.PERMISSIONS_MIGRATION_MARKER).exists():
+        return
+    from sqlalchemy import func, select as _select
+
+    from app.jobs import enqueue
+    from app.models import Site
+
+    try:
+        with session_scope() as db:
+            if not db.scalar(_select(func.count()).select_from(Site)):
+                tasks.mark_permissions_migrated(settings.state_dir)
+                return
+            enqueue(
+                db,
+                "site.repair_permissions",
+                "Let nginx read existing sites' files",
+                payload={"all": True},
+            )
+    except Exception:  # noqa: BLE001 - never block startup on a migration
+        logger.exception("could not queue the site permissions migration")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.basicConfig(
@@ -78,6 +107,7 @@ async def lifespan(app: FastAPI):
             logger.warning("marked orphaned job %s (%s) as failed", job.id, job.kind)
 
     worker.start()
+    _migrate_site_permissions()
     start_metrics_sampler()
     start_backup_scheduler()
     try:

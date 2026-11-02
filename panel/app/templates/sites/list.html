@@ -12,6 +12,16 @@
 <div class="alert alert-notice">Nginx isn't installed yet. <a href="/setup">Run setup</a> first.</div>
 {% endif %}
 
+<div id="sites-health-banner" class="alert alert-notice" hidden>
+  <strong>Some sites are not being served correctly.</strong>
+  <ul id="sites-health-list" style="margin:6px 0 10px 18px;padding:0;"></ul>
+  <form method="post" action="/sites/permissions/repair-all" style="margin:0;">
+    {{ ui.csrf(session) }}
+    <button class="button primary" type="submit">Repair permissions</button>
+    <a href="/docs/troubleshooting#forbidden" style="font-size:12.5px;margin-left:8px;">About this</a>
+  </form>
+</div>
+
 <section class="panel">
   {% if sites %}
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
@@ -50,4 +60,5 @@
 </section>
 
 <script src="/static/adminer.js"></script>
+<script src="/static/sites-health.js"></script>
 {% endblock %}

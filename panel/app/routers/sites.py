@@ -24,6 +24,7 @@ from app.services import databases as db_service
 from app.services import dns_check as dns_check_service
 from app.services import files as files_service
 from app.services import sites as sites_service
+from app.services import permissions as permissions_service
 from app.services import system as system_service
 from app.services import workers as workers_service
 from app.validators import (
@@ -182,6 +183,42 @@ def create_site(
         user_id=session.user_id,
     )
     _audit(db, session, "site.create", domain)
+    return job_redirect(job.id, "/sites")
+
+
+@router.get("/health")
+def sites_health(
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """Every site nginx serves files for, tested with a real request.  The
+    Sites page shows the failures (403 / 500) with a repair button."""
+    problems = []
+    for site, health in permissions_service.check_all(db.scalars(select(Site)).all()):
+        if not health.ok and health.problem != "no_index":
+            problems.append({
+                "id": site.id,
+                "domain": site.domain,
+                "problem": health.problem,
+                "message": health.message,
+                "http_status": health.http_status,
+            })
+    return JSONResponse({"problems": problems})
+
+
+@router.post("/permissions/repair-all", dependencies=[Depends(csrf_protect)])
+def repair_all_permissions(
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    job = enqueue(
+        db,
+        "site.repair_permissions",
+        "Repair permissions for all sites",
+        payload={"all": True, "force": True},
+        user_id=session.user_id,
+    )
+    _audit(db, session, "site.repair_permissions_all", None)
     return job_redirect(job.id, "/sites")
 
 
@@ -848,4 +885,49 @@ def worker_delete(
         user_id=session.user_id,
     )
     _audit(db, session, "site.worker_delete", f"{site.domain}:{worker.name}")
+    return job_redirect(job.id, f"/sites/{site.id}")
+
+
+# --------------------------------------------------------------------------
+# Web server access (see services/permissions.py)
+# --------------------------------------------------------------------------
+
+
+@router.get("/{site_id}/health")
+def site_health(
+    site_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return JSONResponse({"error": "That site no longer exists."}, status_code=404)
+    health = permissions_service.check(site)
+    return JSONResponse({
+        "ok": health.ok,
+        "problem": health.problem,
+        "message": health.message,
+        "http_status": health.http_status,
+    })
+
+
+@router.post("/{site_id}/permissions/repair", dependencies=[Depends(csrf_protect)])
+def repair_permissions(
+    site_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    if not permissions_service.needs_webserver_access(site):
+        return _detail_error(site, "This site is proxied to an application; nginx reads no files for it.")
+    job = enqueue(
+        db,
+        "site.repair_permissions",
+        f"Repair permissions for {site.domain}",
+        payload={"site_id": site.id},
+        user_id=session.user_id,
+    )
+    _audit(db, session, "site.repair_permissions", site.domain)
     return job_redirect(job.id, f"/sites/{site.id}")

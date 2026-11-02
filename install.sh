@@ -102,7 +102,7 @@ apt-get update -qq
 # php-cli + php-mysql needed for the Adminer php -S server (mysqli/PDO_MySQL
 # is how Adminer talks to MariaDB). Other PHP stack components are installed
 # later through the panel's own setup wizard, not here.
-PKGS=(python3-venv python3-pip git curl nginx openssl php-cli php-mysql ca-certificates)
+PKGS=(python3-venv python3-pip git curl nginx openssl php-cli php-mysql ca-certificates acl)
 
 MISSING=()
 for pkg in "${PKGS[@]}"; do

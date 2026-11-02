@@ -178,6 +178,10 @@ def rebuild_all(ctx=None) -> List[str]:
             try:
                 sites_service.render_site(site)
                 note(f"re-rendered site {site.domain}")
+                if ctx:
+                    from app.services import permissions as permissions_service
+
+                    permissions_service.apply(ctx, site)
             except Exception as exc:  # noqa: BLE001
                 note(f"warning: could not render {site.domain}: {exc}")
 

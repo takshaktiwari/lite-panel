@@ -83,6 +83,24 @@
         </div>
         <button class="button primary" type="submit" style="margin-bottom:14px;">Apply</button>
       </form>
+      {% if not site.php_version %}
+      <p class="muted" style="font-size:12.5px;margin:0;">No PHP version is assigned: only static files (index.html, images) are served, and <code>.php</code> files return 404.</p>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if not is_app %}
+    <section class="panel" id="health-panel" data-site-id="{{ site.id }}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <h2 style="margin:0;">Web server access</h2>
+        <span id="health-badge" class="badge">checking…</span>
+      </div>
+      <p id="health-message" class="muted" style="font-size:12.5px;margin:8px 0 12px;">Checking that nginx can read this site's files…</p>
+      <form method="post" action="/sites/{{ site.id }}/permissions/repair" style="margin:0;">
+        {{ ui.csrf(session) }}
+        <button class="button" id="health-repair" type="submit">Repair permissions</button>
+        <a href="/docs/troubleshooting#forbidden" style="font-size:12.5px;margin-left:8px;">About this</a>
+      </form>
     </section>
     {% endif %}
 
@@ -478,6 +496,7 @@
 {% include "databases/_modals.html" %}
 
 {% if is_app %}<script src="/static/site-app.js"></script>{% endif %}
+<script src="/static/site-health.js"></script>
 <script src="/static/site-workers.js"></script>
 <script src="/static/dns-check.js"></script>
 <script src="/static/webroot-edit.js"></script>

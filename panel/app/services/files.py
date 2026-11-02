@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from app.config import get_settings
+from app.services import permissions as permissions_service
 from app.validators import (
     ValidationError,
     resolve_within,
@@ -435,6 +436,7 @@ def copy_item(
     else:
         shutil.copy2(source, destination)
     _restore_owner_recursive(destination, owner)
+    permissions_service.reassert(destination, recursive=True, files=True)
     return destination
 
 
@@ -483,6 +485,7 @@ def chmod(candidate, mode: str) -> Path:
         raise ValidationError("That path does not exist.")
 
     os.chmod(target, validate_permission_mode(mode))
+    permissions_service.reassert(target)   # a directory must stay enterable by nginx
     return target
 
 
@@ -516,6 +519,7 @@ def chmod_recursive(candidate, mode: str, scope: str) -> int:
                 continue
             os.chmod(child, numeric_mode)
             count += 1
+    permissions_service.reassert(target, recursive=True)
     return count
 
 
@@ -678,6 +682,7 @@ def extract_archive(candidate, ctx=None) -> Path:
         raise ValidationError("That file is not a valid zip archive.") from None
 
     _restore_owner_recursive(destination, _owner_of(parent))
+    permissions_service.reassert(destination, recursive=True, files=True)
     return destination
 
 
