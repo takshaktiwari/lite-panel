@@ -31,3 +31,25 @@ def test_no_template_uses_an_inline_event_handler_attribute():
         "(script-src 'self', no unsafe-inline) -- use a data-* attribute picked up "
         "by a static/*.js file instead. Found in: " + ", ".join(offenders)
     )
+
+
+def test_no_template_has_an_inline_script_block():
+    """The same CSP also refuses ``<script>...</script>`` blocks. One on the
+    Backups page left the "Automated Schedule" tab dead, and one on the SSH
+    page left "view public key" dead -- both looked fine in review."""
+    import re
+
+    offenders = []
+    for template in TEMPLATES_DIR.rglob("*.html"):
+        text = template.read_text(encoding="utf-8")
+        for match in re.finditer(r"<script(?P<attrs>[^>]*)>", text, flags=re.IGNORECASE):
+            attrs = match.group("attrs")
+            # A JSON data block is never executed, so the CSP has nothing to refuse.
+            if "src=" not in attrs and "application/json" not in attrs:
+                lineno = text.count("\n", 0, match.start()) + 1
+                offenders.append(f"{template.relative_to(TEMPLATES_DIR)}:{lineno}")
+
+    assert not offenders, (
+        "inline <script> blocks are blocked by this app's CSP (script-src 'self') -- "
+        "move the code to a static/*.js file. Found in: " + ", ".join(offenders)
+    )
