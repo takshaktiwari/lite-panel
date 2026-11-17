@@ -72,12 +72,29 @@ UPLOAD_SESSION_TTL = timedelta(hours=2)
 
 ARCHIVE_EXTENSIONS = frozenset({".zip"})
 
-TEXT_EXTENSIONS = frozenset(
+# Files are editable unless their extension says they are binary.  An allow
+# list of text extensions kept missing real config files -- .bashrc, .profile,
+# .npmrc, .env.example, Dockerfile, .editorconfig... -- so this is a deny list
+# instead.  A binary file that slips through is still refused by read_text,
+# which only opens valid UTF-8.
+BINARY_EXTENSIONS = frozenset(
     {
-        ".txt", ".md", ".html", ".htm", ".css", ".js", ".json", ".xml", ".yml",
-        ".yaml", ".ini", ".conf", ".cfg", ".env", ".php", ".py", ".rb", ".sh",
-        ".sql", ".log", ".csv", ".ts", ".jsx", ".tsx", ".vue", ".toml", ".lock",
-        ".gitignore", ".htaccess",
+        # images
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".bmp", ".ico", ".tif",
+        ".tiff", ".heic", ".psd", ".ai",
+        # audio / video
+        ".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".mp4", ".m4v", ".mov",
+        ".avi", ".mkv", ".webm", ".wmv",
+        # archives / packages
+        ".zip", ".gz", ".tgz", ".bz2", ".xz", ".zst", ".7z", ".rar", ".tar", ".jar",
+        ".war", ".deb", ".rpm", ".phar", ".whl", ".apk", ".dmg", ".iso",
+        # documents
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods",
+        # fonts
+        ".woff", ".woff2", ".ttf", ".otf", ".eot",
+        # compiled / data
+        ".so", ".o", ".a", ".dll", ".exe", ".bin", ".class", ".pyc", ".pyo", ".wasm",
+        ".sqlite", ".sqlite3", ".db", ".mo", ".dat", ".swp",
     }
 )
 
@@ -89,8 +106,7 @@ def root() -> Path:
 def _suffix(name: str) -> str:
     """Like Path(name).suffix, but treats a bare dotfile's own dot as the
     extension too -- Path(".env").suffix is "" (pathlib reads the whole name
-    as the stem), which would otherwise leave .env/.gitignore/.htaccess
-    unmatched despite being listed in TEXT_EXTENSIONS."""
+    as the stem)."""
     if "." not in name:
         return ""
     return "." + name.rsplit(".", 1)[1]
@@ -117,7 +133,7 @@ class Entry:
     def viewable(self) -> bool:
         if self.is_dir:
             return False
-        return _suffix(self.name).lower() in TEXT_EXTENSIONS or "." not in self.name
+        return _suffix(self.name).lower() not in BINARY_EXTENSIONS
 
     @property
     def editable(self) -> bool:

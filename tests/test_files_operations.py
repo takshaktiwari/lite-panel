@@ -505,9 +505,9 @@ def _entry(name, size=10):
     )
 
 
-def test_bare_dotfiles_in_text_extensions_are_editable():
+def test_bare_dotfiles_are_editable():
     # Path(".env").suffix is "" (pathlib treats the whole name as the stem),
-    # so this regressed silently despite ".env" being in TEXT_EXTENSIONS.
+    # so this regressed silently once.
     assert _entry(".env").editable
     assert _entry(".gitignore").editable
     assert _entry(".htaccess").editable
@@ -518,8 +518,29 @@ def test_named_file_with_text_extension_is_still_editable():
     assert _entry("notes.txt").editable
 
 
-def test_unknown_extension_is_not_editable():
-    assert not _entry("photo.png").editable
+@pytest.mark.parametrize("name", [
+    ".env.example", ".bashrc", ".profile", ".npmrc", ".bash_logout", ".editorconfig",
+    "Dockerfile", "Makefile", "artisan", "composer.json", "nginx.conf.sample", "app.env.local",
+])
+def test_config_and_dot_files_are_editable(name):
+    assert _entry(name).editable
+
+
+@pytest.mark.parametrize("name", ["photo.png", "font.woff2", "backup.tar.gz", "site.zip", "db.sqlite"])
+def test_binary_extensions_are_not_editable(name):
+    assert not _entry(name).editable
+
+
+def test_large_files_are_viewable_but_not_editable():
+    big = _entry(".bashrc", size=files_service.MAX_EDIT_BYTES + 1)
+    assert big.viewable and not big.editable
+
+
+def test_a_binary_file_without_a_binary_extension_is_still_refused(sites_root):
+    target = sites_root / "blob.dat2"
+    target.write_bytes(b"\x00\xff\xfe binary")
+    with pytest.raises(ValidationError, match="binary"):
+        files_service.read_text(target)
 
 
 # --------------------------------------------------------------------------
