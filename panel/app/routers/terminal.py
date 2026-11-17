@@ -187,8 +187,13 @@ async def terminal_ws(websocket: WebSocket) -> None:
         _log_event("terminal.failed", user_id, username, ip, login["value"])
         await websocket.close(code=4404 if isinstance(exc, TerminalUserError) else 4500)
         return
-    last_activity = loop.time()
+    # Two clocks.  ``last_activity`` moves on typing *and* on output, so a long
+    # build that is still printing is never idle.  ``last_input`` moves only on
+    # typing and is held to a much longer ceiling, so an unattended shell
+    # (running ``top``, say) is still closed eventually.
+    last_activity = last_input = loop.time()
     idle_seconds = settings.terminal_idle_timeout_minutes * 60
+    unattended_seconds = settings.terminal_max_unattended_minutes * 60
 
     output_queue: asyncio.Queue = asyncio.Queue()
 
@@ -243,18 +248,21 @@ async def terminal_ws(websocket: WebSocket) -> None:
     reader_thread.start()
 
     async def pump_output() -> None:
+        nonlocal last_activity
         while True:
             chunk = await output_queue.get()
             if chunk is None:
                 await websocket.close(code=1000)
                 return
             await websocket.send_bytes(chunk)
+            last_activity = loop.time()
 
     output_task = asyncio.create_task(pump_output())
 
     try:
         while True:
-            remaining = idle_seconds - (loop.time() - last_activity)
+            now = loop.time()
+            remaining = min(idle_seconds - (now - last_activity), unattended_seconds - (now - last_input))
             if remaining <= 0:
                 try:
                     await websocket.send_text(json.dumps({"type": "timeout"}))
@@ -272,9 +280,11 @@ async def terminal_ws(websocket: WebSocket) -> None:
 
             if "bytes" in message and message["bytes"] is not None:
                 term.write(message["bytes"])
-                last_activity = loop.time()
+                last_activity = last_input = loop.time()
             elif "text" in message and message["text"] is not None:
                 _handle_control_message(term, message["text"])
+                # A resize is the browser adjusting itself, not someone typing:
+                # it keeps the idle clock alive but not the unattended ceiling.
                 last_activity = loop.time()
     except WebSocketDisconnect:
         pass

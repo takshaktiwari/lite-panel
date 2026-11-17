@@ -234,3 +234,84 @@ def test_site_terminal_buttons_open_as_that_sites_user(signed_in, two_sites, db)
     site = db.scalars(__import__("sqlalchemy").select(Site).where(Site.name == "shop")).first()
     assert "/terminal?as=shop&cd=" in signed_in.get(f"/sites/{site.id}").text
     assert "/terminal?as=shop&cd=" in signed_in.get("/sites").text
+
+
+# --------------------------------------------------------------------------
+# Idle timeout: output keeps a session alive, an unattended ceiling still applies
+# --------------------------------------------------------------------------
+
+import json  # noqa: E402
+import time  # noqa: E402
+
+from app.routers import terminal as terminal_router  # noqa: E402
+
+
+def _short_timeouts(monkeypatch, idle_seconds, unattended_seconds):
+    monkeypatch.setattr(terminal_router.settings, "terminal_idle_timeout_minutes", idle_seconds / 60)
+    monkeypatch.setattr(terminal_router.settings, "terminal_max_unattended_minutes", unattended_seconds / 60)
+
+
+def _watch(ws, seconds):
+    """Read the websocket for ``seconds``; return (output bytes, timeout seen, closed)."""
+    output, timed_out, closed = b"", False, False
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            message = ws.receive()
+        except Exception:  # noqa: BLE001 - the server closed the socket
+            closed = True
+            break
+        if message["type"] == "websocket.close":
+            closed = True
+            break
+        if message.get("bytes"):
+            output += message["bytes"]
+        elif message.get("text"):
+            try:
+                timed_out = timed_out or json.loads(message["text"]).get("type") == "timeout"
+            except ValueError:
+                pass
+            if timed_out:
+                break
+    return output, timed_out, closed
+
+
+def test_a_command_that_keeps_printing_is_not_idle(signed_in, monkeypatch):
+    """No typing for 3x the idle limit, but the command prints throughout."""
+    _short_timeouts(monkeypatch, idle_seconds=1.2, unattended_seconds=60)
+    with signed_in.websocket_connect("/terminal/ws", headers={"origin": "http://testserver"}) as ws:
+        ws.send_bytes(b"for i in 1 2 3 4 5 6 7 8 9 10; do echo tick$i; sleep 0.4; done\n")
+        output, timed_out, closed = _watch(ws, 3.8)
+    assert b"tick9" in output          # still running well past the 1.2s idle limit
+    assert not timed_out and not closed
+
+
+def test_a_silent_session_times_out(signed_in, monkeypatch):
+    _short_timeouts(monkeypatch, idle_seconds=1.0, unattended_seconds=60)
+    with signed_in.websocket_connect("/terminal/ws", headers={"origin": "http://testserver"}) as ws:
+        ws.send_bytes(b"sleep 30\n")
+        _, timed_out, _ = _watch(ws, 5)
+    assert timed_out
+
+
+def test_output_cannot_hold_a_session_open_past_the_unattended_ceiling(signed_in, monkeypatch):
+    """Output resets the idle clock, but with no typing the ceiling still closes it."""
+    _short_timeouts(monkeypatch, idle_seconds=30, unattended_seconds=1.5)
+    with signed_in.websocket_connect("/terminal/ws", headers={"origin": "http://testserver"}) as ws:
+        ws.send_bytes(b"while true; do echo tick; sleep 0.2; done\n")
+        output, timed_out, _ = _watch(ws, 6)
+    assert b"tick" in output and timed_out
+
+
+def test_typing_resets_the_unattended_ceiling(signed_in, monkeypatch):
+    _short_timeouts(monkeypatch, idle_seconds=30, unattended_seconds=1.5)
+    with signed_in.websocket_connect("/terminal/ws", headers={"origin": "http://testserver"}) as ws:
+        ws.send_bytes(b"while true; do echo tick; sleep 0.2; done\n")
+        deadline = time.monotonic() + 3.5
+        timed_out = False
+        while time.monotonic() < deadline:
+            ws.send_bytes(b" ")                     # a keystroke every so often
+            _, timed_out, _ = _watch(ws, 0.5)
+            if timed_out:
+                break
+    assert not timed_out

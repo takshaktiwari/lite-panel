@@ -15,7 +15,7 @@
 
 <h2 id="behaviour">Behaviour and limits</h2>
 <ul>
-  <li>The session closes after <strong>20 minutes without input</strong>. Reload the page to start a new one.</li>
+  <li>The session closes after <strong>20 minutes with no typing and no output</strong>, so a command that is still printing (a build, <code>tail -f</code>) keeps it open. As a safety limit it also closes after <strong>8 hours without typing</strong> even if output continues. Closing ends the shell and anything running in it; reload the page to start a new one. For jobs that must outlive the browser, run them in <code>tmux</code>.</li>
   <li>Closing the tab ends the shell and everything started from it. For long-running work use a tool such as <code>tmux</code>, a <a href="/docs/cron">cron job</a>, or a <a href="/docs/node-python">managed application service</a>.</li>
   <li>The shell does not inherit the panel's secret settings.</li>
   <li>Opening and closing a terminal, and which account was used, are recorded in the audit log.</li>

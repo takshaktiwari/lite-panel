@@ -56,8 +56,13 @@ class Settings(BaseSettings):
     login_max_attempts: int = 5
     login_lockout_minutes: int = 15
 
-    # The web terminal closes itself after this long with no client input.
+    # The web terminal closes itself after this long with neither typing nor
+    # output: a command that is still printing is not idle.
     terminal_idle_timeout_minutes: int = 20
+    # ...and, as a security ceiling, after this long with no typing even if
+    # something keeps printing (``top``, ``tail -f``): an unattended shell must
+    # not stay open forever just because the screen keeps changing.
+    terminal_max_unattended_minutes: int = 480
 
     # Set by dev tooling; relaxes the checks that only make sense on a server.
     dev_mode: bool = False
