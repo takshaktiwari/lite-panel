@@ -167,6 +167,12 @@ def _check(ctx, args, what: str, **kwargs) -> None:
         raise DeployError(f"{what} failed; see the lines above.")
 
 
+def _label(site, *words: str) -> str:
+    """What the job log shows for a command: ``$ git fetch origin``, not the
+    runuser / env / ssh wrapper around it."""
+    return f"({site.system_user}) " + " ".join(words)
+
+
 # --------------------------------------------------------------------------
 # Deploy
 # --------------------------------------------------------------------------
@@ -186,8 +192,9 @@ def _prepare_folder(ctx, site, deployment, repo: Path) -> None:
     branch = deployment.branch
     url = deployment.repo_url
     if (repo / ".git").exists():
-        if ctx.run(git(site, repo, "remote", "set-url", "origin", url)) != 0:
-            _check(ctx, git(site, repo, "remote", "add", "origin", url), "Setting the git remote")
+        if ctx.run(git(site, repo, "remote", "set-url", "origin", url), label=_label(site, "git remote set-url origin", url)) != 0:
+            _check(ctx, git(site, repo, "remote", "add", "origin", url), "Setting the git remote",
+                   label=_label(site, "git remote add origin", url))
         return
 
     if not any(repo.iterdir()):
@@ -197,12 +204,14 @@ def _prepare_folder(ctx, site, deployment, repo: Path) -> None:
             as_site_user(site, ["git", "clone", "--branch", branch, "--", url, str(repo)]),
             "Cloning the repository",
             timeout=GIT_TIMEOUT,
+            label=_label(site, "git clone --branch", branch, url, str(repo)),
         )
         return
 
     ctx.log(f"{repo} already has files: connecting git to it in place (nothing is deleted)")
-    _check(ctx, git(site, repo, "init", "-q"), "git init")
-    _check(ctx, git(site, repo, "remote", "add", "origin", url), "Adding the git remote")
+    _check(ctx, git(site, repo, "init", "-q"), "git init", label=_label(site, "git init"))
+    _check(ctx, git(site, repo, "remote", "add", "origin", url), "Adding the git remote",
+           label=_label(site, "git remote add origin", url))
 
 
 def _commit_info(site, repo: Path) -> Tuple[str, str]:
@@ -243,6 +252,7 @@ def _run_script(ctx, site, deployment, repo: Path) -> None:
             ),
             cwd=repo,
             timeout=SCRIPT_TIMEOUT,
+            label=_label(site, "bash -e deploy script  (in", str(repo) + ")"),
         )
     finally:
         try:
@@ -272,7 +282,10 @@ def _after_deploy(ctx, site) -> None:
 
 def deploy(ctx, site, deployment, *, commit: Optional[str] = None) -> Tuple[str, str]:
     """Pull and run.  Returns (commit, message) of what is now live."""
+    started = time.monotonic()
     repo = Path(deployment.repo_dir)
+    ctx.log(f"Deploying {site.domain}: {deployment.repo_url} @ {commit[:7] if commit else deployment.branch}")
+    ctx.log(f"Code folder: {repo}   (commands run as {site.system_user})")
     if is_ssh_repo_url(deployment.repo_url) and not key_path(site).exists():
         ensure_deploy_key(site)
 
@@ -285,14 +298,17 @@ def deploy(ctx, site, deployment, *, commit: Optional[str] = None) -> Tuple[str,
         git(site, repo, "fetch", "--prune", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}"),
         "Fetching from the repository (is the deploy key added to the repo?)",
         timeout=GIT_TIMEOUT,
+        label=_label(site, "git fetch --prune origin", branch),
     )
     target = commit or f"origin/{branch}"
-    _check(ctx, git(site, repo, "checkout", "-q", "-f", "-B", branch, target), f"Checking out {target}")
+    _check(ctx, git(site, repo, "checkout", "-q", "-f", "-B", branch, target), f"Checking out {target}",
+           label=_label(site, "git checkout -f -B", branch, target))
 
     sha, message = _commit_info(site, repo)
     ctx.log(f"Now at {sha[:7]} {message}")
 
     _run_script(ctx, site, deployment, repo)
     _after_deploy(ctx, site)
-    ctx.log("Deploy finished")
+    seconds = int(time.monotonic() - started)
+    ctx.log(f"Deploy finished in {seconds // 60}m {seconds % 60:02d}s: {sha[:7]} {message}")
     return sha, message

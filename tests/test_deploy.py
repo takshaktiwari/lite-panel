@@ -151,7 +151,8 @@ class RealCtx:
         self.lines.append(line)
 
     def run(self, args, **kwargs):
-        self.lines.append("$ " + " ".join(map(str, args)))
+        label = kwargs.pop("label", None)
+        self.lines.append("$ " + (label or " ".join(map(str, args))))
         return stream(args, self.lines.append, **kwargs)
 
     def check(self, args, **kwargs):
@@ -599,3 +600,33 @@ def test_github_form_encoded_payloads_work(db, hook):
         "X-GitHub-Event": "push", "X-Hub-Signature-256": _signed(body),
     })
     assert response.status_code == 202
+
+
+# --------------------------------------------------------------------------
+# Readable job log
+# --------------------------------------------------------------------------
+
+
+def test_the_log_shows_short_commands_not_the_runuser_env_ssh_wrapper(tmp_path, origin, real_git):
+    site = _site(tmp_path)
+    ctx = RealCtx()
+    deploy_service.deploy(ctx, site, _deployment(site, origin.url, script="echo hi"))
+    text = "\n".join(ctx.lines)
+    assert "$ (site_shop) git clone --branch main" in text
+    assert "GIT_SSH_COMMAND" not in text and "UserKnownHostsFile" not in text
+    assert "Deploying shop.example.com:" in text and "commands run as site_shop" in text
+    assert text.rstrip().splitlines()[-1].startswith("Deploy finished in 0m ")
+    assert "+ echo hi" in text                                            # script lines still echoed
+
+
+def test_job_log_strips_terminal_colour_codes():
+    from app.jobs import JobContext, strip_ansi
+
+    coloured = "  \x1b[37;44m INFO \x1b[39;49m Discovering packages.  \x1b[32;1mDONE\x1b[39;22m"
+    assert strip_ansi(coloured) == "   INFO  Discovering packages.  DONE"
+    assert strip_ansi("plain text, 100% [ok]") == "plain text, 100% [ok]"
+    assert strip_ansi("\x1b[2K\x1b[1Gprogress") == "progress"
+
+    ctx = JobContext(job_id=987654, payload={})
+    ctx.log("\x1b[31;1merror:\x1b[0m failed")
+    assert ctx._pending == ["error: failed"]

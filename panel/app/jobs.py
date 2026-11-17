@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import queue
+import re
 import threading
 import time
 from collections import defaultdict, deque
@@ -107,6 +108,16 @@ progress_tracker = JobProgress()
 PROGRESS_FLUSH_INTERVAL = 0.5
 
 
+# Terminal colour / cursor codes.  Tools like composer and artisan are told to
+# print colour (``--ansi``) even into a pipe; the browser would show the
+# leftover "[37;44m" instead of a colour.
+_ANSI = re.compile(r"\x1b(?:\[[0-9;?]*[ -/]*[@-~]|[@-Z\\-_])")
+
+
+def strip_ansi(text: str) -> str:
+    return _ANSI.sub("", text)
+
+
 class JobContext:
     """Handed to a job handler: how it logs and how it runs commands."""
 
@@ -119,7 +130,7 @@ class JobContext:
 
     def log(self, line: str) -> None:
         """Record one line of progress, visible to the browser immediately."""
-        text = str(line).rstrip("\n")
+        text = strip_ansi(str(line).rstrip("\n"))
         log_buffer.append(self.job_id, text)
         self._pending.append(text)
         if len(self._pending) >= 20:
@@ -152,8 +163,13 @@ class JobContext:
                 job.progress_total = total
 
     def run(self, args, **kwargs) -> int:
-        """Run a command, streaming its output into the job log."""
-        self.log(f"$ {' '.join(str(a) for a in args)}")
+        """Run a command, streaming its output into the job log.
+
+        ``label`` replaces the echoed command line, for commands whose real
+        argument list is long and uninteresting (wrappers, environment).
+        """
+        label = kwargs.pop("label", None)
+        self.log(f"$ {label or ' '.join(str(a) for a in args)}")
         code = shell_stream(args, self.log, **kwargs)
         if code != 0:
             self.log(f"[exit {code}]")
