@@ -16,7 +16,7 @@ from app.validators import ValidationError
 
 def test_blank_folder_falls_back_to_a_name_derived_from_the_domain():
     name, subfolder = _split_folder("", "blog.example.com")
-    assert name == "blog-example"
+    assert name == "blog-example_com"
     assert subfolder == ""
 
 
@@ -88,3 +88,18 @@ def test_clean_subfolder_rejects_traversal():
         _clean_subfolder("../etc")
     with pytest.raises(ValidationError):
         _clean_subfolder("public/../../etc")
+
+
+def test_derived_name_keeps_the_tld_and_trims_the_start_when_too_long():
+    from app.routers.sites import _name_from_domain
+
+    assert _name_from_domain("ai.eoschambersoflaw.com") == "ai-eoschambersoflaw_com"
+    assert _name_from_domain("my.thehelm.co.in") == "my-thehelm-co_in"
+    assert _name_from_domain("example.com") != _name_from_domain("example.in")
+    long = _name_from_domain("a-very-long-subdomain-name.example-company.com")
+    assert len(long) <= 27 and long.endswith("_com")
+    # the default must always give a valid Linux user (site_<name>, max 32)
+    from app.validators import site_username
+
+    assert len(site_username(long)) <= 32
+    assert _name_from_domain("localhost") == "localhost"

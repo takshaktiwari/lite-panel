@@ -1,0 +1,134 @@
+{% import "_macros.html" as ui %}
+{# Git deployment section of the site page. Driven by site-deploy.js (presets, copy buttons). #}
+{% macro deploy_form(d) %}
+<form method="post" action="/sites/{{ site.id }}/deploy/settings">
+  {{ ui.csrf(session) }}
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <div style="flex:3 1 320px;">
+      <label for="deploy-repo">Repository URL</label>
+      <input type="text" id="deploy-repo" name="repo_url" value="{{ d.repo_url if d else '' }}" placeholder="git@github.com:you/app.git" required spellcheck="false" autocomplete="off">
+    </div>
+    <div style="flex:1 1 140px;">
+      <label for="deploy-branch">Branch</label>
+      <input type="text" id="deploy-branch" name="branch" value="{{ d.branch if d else 'main' }}" required spellcheck="false" autocomplete="off">
+    </div>
+  </div>
+  <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">Private repo: use the <code>git@…</code> URL; the panel gives you a deploy key to add. Public repo: <code>https://…</code> works too.</p>
+  <label for="deploy-dir">Code folder</label>
+  <input type="text" id="deploy-dir" name="repo_dir" value="{{ d.repo_dir if d else deploy_default_repo_dir }}" spellcheck="false" autocomplete="off">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+    <label for="deploy-script" style="margin-bottom:6px;">Deploy script <span class="muted" style="font-weight:normal;">(runs after each pull, as {{ site.system_user }})</span></label>
+    <select data-deploy-preset aria-label="Script presets" style="width:auto;margin-bottom:6px;padding:3px 8px;">
+      <option value="">Use a preset…</option>
+      {% for key, preset in deploy_presets.items() %}
+      <option value="{{ key }}" data-script="{{ preset.script }}">{{ preset.label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <textarea id="deploy-script" name="script" rows="5" spellcheck="false" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;">{{ d.script if d else deploy_presets[deploy_default_preset].script }}</textarea>
+  <p class="muted" style="margin:-8px 0 14px;font-size:12.5px;">One command per line; stops at the first failure. <code>{PHP}</code> is the site's PHP. <a href="/docs/deploy#script">Details</a></p>
+  <button class="button primary" type="submit">{{ 'Save settings' if d else 'Save and set up' }}</button>
+</form>
+{% endmacro %}
+
+<section class="panel" id="deploy-panel" data-site-id="{{ site.id }}">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
+    <h2 style="margin:0;">Deployment</h2>
+    {% if deployment %}
+    <form method="post" action="/sites/{{ site.id }}/deploy" style="margin:0;">
+      {{ ui.csrf(session) }}
+      <button class="button primary" type="submit">Deploy now</button>
+    </form>
+    {% endif %}
+  </div>
+  <p class="muted" style="font-size:12.5px;margin-top:0;">Pull the latest code from git and run your deploy script. <a href="/docs/deploy">Guide</a></p>
+
+  {% if not deployment %}
+  {{ deploy_form(None) }}
+  {% else %}
+  {% set last = deploy_history[0] if deploy_history else None %}
+  <dl class="stats" style="margin-bottom:14px;">
+    <div><dt>Repository</dt><dd style="word-break:break-all;">{{ deployment.repo_url }}</dd></div>
+    <div><dt>Branch</dt><dd>{{ deployment.branch }}</dd></div>
+    <div><dt>Code folder</dt><dd>{{ deployment.repo_dir }}</dd></div>
+    <div><dt>Last deploy</dt><dd>
+      {% if last %}
+        {{ ui.badge(last.status, 'success' if last.status == 'success' else '') }}
+        {% if last.short_commit %}<code>{{ last.short_commit }}</code>{% endif %}
+        <span class="muted" style="font-size:12px;">{{ last.started_at.strftime('%b %d, %H:%M') }}</span>
+      {% else %}<span class="muted">never</span>{% endif %}
+    </dd></div>
+  </dl>
+
+  {% if deploy_is_ssh %}
+  <div style="margin-bottom:14px;">
+    <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 6px;font-weight:600;">Deploy key</h3>
+    <p class="muted" style="font-size:12.5px;margin:0 0 6px;">Add this once in your repo: GitHub → Settings → Deploy keys → Add (leave "write access" off). GitLab: Settings → Repository → Deploy keys.</p>
+    <div style="display:flex;gap:8px;align-items:flex-start;">
+      <textarea id="deploy-key" readonly rows="2" style="flex:1;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;margin:0;">{{ deployment.deploy_key_public or '' }}</textarea>
+      <button type="button" class="button button-sm" data-copy-target="deploy-key">Copy</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <div style="margin-bottom:14px;">
+    <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 6px;font-weight:600;">Auto-deploy on push</h3>
+    {% if deployment.webhook_enabled %}
+    <p class="muted" style="font-size:12.5px;margin:0 0 6px;">On: every push to <code>{{ deployment.branch }}</code> deploys. In GitHub → Settings → Webhooks → Add webhook, use these (content type <code>application/json</code>). <a href="/docs/deploy#webhook">Details</a></p>
+    <label for="deploy-hook-url" style="font-size:12px;">Payload URL</label>
+    <div style="display:flex;gap:8px;"><input type="text" id="deploy-hook-url" readonly value="{{ deploy_webhook_path }}" data-origin-path="{{ deploy_webhook_path }}" style="flex:1;font-size:12.5px;"><button type="button" class="button button-sm" data-copy-target="deploy-hook-url" style="margin-bottom:14px;">Copy</button></div>
+    <label for="deploy-hook-secret" style="font-size:12px;">Secret</label>
+    <div style="display:flex;gap:8px;"><input type="text" id="deploy-hook-secret" readonly value="{{ deployment.webhook_secret }}" style="flex:1;font-size:12.5px;"><button type="button" class="button button-sm" data-copy-target="deploy-hook-secret" style="margin-bottom:14px;">Copy</button></div>
+    <div style="display:flex;gap:8px;">
+      <form method="post" action="/sites/{{ site.id }}/deploy/webhook" style="margin:0;">{{ ui.csrf(session) }}<input type="hidden" name="action" value="disable"><button class="button button-sm" type="submit">Turn off</button></form>
+      <form method="post" action="/sites/{{ site.id }}/deploy/webhook" style="margin:0;" data-confirm="Create a new URL and secret? The old ones stop working.">{{ ui.csrf(session) }}<input type="hidden" name="action" value="rotate"><button class="button button-sm" type="submit">New URL and secret</button></form>
+    </div>
+    {% else %}
+    <form method="post" action="/sites/{{ site.id }}/deploy/webhook" style="margin:0;display:flex;align-items:center;gap:10px;">
+      {{ ui.csrf(session) }}<input type="hidden" name="action" value="enable">
+      <span class="muted" style="font-size:12.5px;">Off: deploys only happen when you click Deploy now.</span>
+      <button class="button button-sm" type="submit">Turn on</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <details style="margin-bottom:14px;">
+    <summary style="cursor:pointer;font-weight:600;font-size:13px;">Settings and deploy script</summary>
+    <div style="margin-top:10px;">
+      {{ deploy_form(deployment) }}
+      <form method="post" action="/sites/{{ site.id }}/deploy/disconnect" style="margin-top:10px;" data-confirm="Disconnect the repository? Files, the .git folder and the history are kept.">
+        {{ ui.csrf(session) }}
+        <button class="button" type="submit" style="color:var(--danger);">Disconnect repository</button>
+      </form>
+    </div>
+  </details>
+
+  <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 6px;font-weight:600;">History</h3>
+  {% if deploy_history %}
+  <table class="table">
+    <thead><tr><th>When</th><th>Commit</th><th>Status</th><th>Trigger</th><th>Time</th><th></th></tr></thead>
+    <tbody>
+      {% for d in deploy_history %}
+      <tr>
+        <td style="white-space:nowrap;">{{ d.started_at.strftime('%b %d, %H:%M') }}</td>
+        <td>{% if d.short_commit %}<code>{{ d.short_commit }}</code> {% endif %}<span style="font-size:12.5px;">{{ (d.message or d.error or '')[:80] }}</span></td>
+        <td>{{ ui.badge(d.status, 'success' if d.status == 'success' else '') }}{% if d.job_id %} <a href="/jobs/{{ d.job_id }}" style="font-size:12px;">log</a>{% endif %}</td>
+        <td class="muted" style="font-size:12.5px;">{{ d.trigger }}{% if d.username %} · {{ d.username }}{% endif %}</td>
+        <td class="muted" style="font-size:12.5px;">{{ (d.duration_seconds ~ 's') if d.duration_seconds is not none else '—' }}</td>
+        <td style="text-align:right;">
+          {% if d.status == 'success' and d.commit and not loop.first %}
+          <form method="post" action="/sites/{{ site.id }}/deploy" style="margin:0;" data-confirm="Deploy {{ d.short_commit }} again? This rolls the site back to that commit.">
+            {{ ui.csrf(session) }}<input type="hidden" name="commit" value="{{ d.commit }}">
+            <button class="button button-sm" type="submit">Redeploy</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted empty">No deploys yet. Click <strong>Deploy now</strong> for the first one.</p>
+  {% endif %}
+  {% endif %}
+</section>

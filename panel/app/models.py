@@ -253,6 +253,12 @@ class Site(TimestampMixin, Base):
     workers: Mapped[List["SiteWorker"]] = relationship(
         back_populates="site", cascade="all, delete-orphan", order_by="SiteWorker.id"
     )
+    deployment: Mapped[Optional["SiteDeployment"]] = relationship(
+        back_populates="site", cascade="all, delete-orphan", uselist=False
+    )
+    deploys: Mapped[List["SiteDeploy"]] = relationship(
+        back_populates="site", cascade="all, delete-orphan", order_by="SiteDeploy.id.desc()"
+    )
 
 
 class SiteWorker(TimestampMixin, Base):
@@ -275,6 +281,60 @@ class SiteWorker(TimestampMixin, Base):
     stop_timeout: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
 
     site: Mapped["Site"] = relationship(back_populates="workers")
+
+
+class SiteDeployment(TimestampMixin, Base):
+    """Git deployment settings of a site: where the code comes from and what
+    runs after it is pulled.  At most one per site."""
+
+    __tablename__ = "site_deployments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), unique=True, nullable=False)
+    repo_url: Mapped[str] = mapped_column(String(300), nullable=False)
+    branch: Mapped[str] = mapped_column(String(100), default="main", nullable=False)
+    # The folder the repository is checked out in (inside the site's home).
+    repo_dir: Mapped[str] = mapped_column(String(255), nullable=False)
+    script: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # Read-only deploy key: the public half is shown to paste into GitHub; the
+    # private half lives only in the site's ~/.ssh.
+    deploy_key_public: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    webhook_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    webhook_token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    webhook_secret: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    site: Mapped["Site"] = relationship(back_populates="deployment")
+
+
+class SiteDeploy(Base):
+    """One deploy run, for the history list and one-click rollback."""
+
+    __tablename__ = "site_deploys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), nullable=False, index=True)
+    job_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    trigger: Mapped[str] = mapped_column(String(16), default="manual", nullable=False)  # manual|webhook|redeploy
+    requested_commit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    commit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="queued", nullable=False)  # queued|running|success|failed
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    site: Mapped["Site"] = relationship(back_populates="deploys")
+
+    @property
+    def short_commit(self) -> str:
+        return (self.commit or self.requested_commit or "")[:7]
+
+    @property
+    def duration_seconds(self) -> Optional[int]:
+        if not self.finished_at or not self.started_at:
+            return None
+        return int((self.finished_at - self.started_at).total_seconds())
 
 
 class SiteAlias(Base):

@@ -359,6 +359,66 @@ def validate_stop_timeout(value) -> int:
     return seconds
 
 
+# git@github.com:owner/repo.git, ssh://git@host:22/owner/repo.git, https://host/owner/repo.git
+_SSH_REPO = re.compile(
+    r"^(?:ssh://)?[A-Za-z0-9._-]+@[A-Za-z0-9.-]+(?::\d{1,5})?[:/][A-Za-z0-9._~-][A-Za-z0-9._~/-]*$"
+)
+# No user:password@ part: credentials in a URL end up in logs and process lists.
+_HTTPS_REPO = re.compile(r"^https://[A-Za-z0-9.-]+(?::\d{1,5})?/[A-Za-z0-9._~-][A-Za-z0-9._~/-]*$")
+_BRANCH = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._/-]{0,99}$")
+_COMMIT = re.compile(r"^[0-9a-f]{7,40}$")
+MAX_DEPLOY_SCRIPT_LEN = 20000
+
+
+def is_ssh_repo_url(url: str) -> bool:
+    return bool(_SSH_REPO.match(url or ""))
+
+
+def validate_repo_url(value: str) -> str:
+    value = _clean(value, "repository URL")
+    if not value:
+        raise ValidationError("A repository URL is required, e.g. git@github.com:you/app.git.")
+    if (
+        len(value) > 300
+        or value.startswith("-")
+        or not (_SSH_REPO.match(value) or _HTTPS_REPO.match(value))
+    ):
+        raise ValidationError(
+            "Use an SSH URL like git@github.com:you/app.git (private repos), or an "
+            "https:// URL without a username or password (public repos)."
+        )
+    return value
+
+
+def validate_branch(value: str) -> str:
+    value = _clean(value, "branch").strip() or "main"
+    if (
+        not _BRANCH.match(value)
+        or ".." in value
+        or "//" in value
+        or value.endswith(("/", ".", ".lock"))
+        or "@{" in value
+    ):
+        raise ValidationError("That is not a valid branch name.")
+    return value
+
+
+def validate_commit(value: str) -> str:
+    value = (value or "").strip().lower()
+    if not _COMMIT.match(value):
+        raise ValidationError("That is not a valid commit id.")
+    return value
+
+
+def validate_deploy_script(value: str) -> str:
+    value = (value or "").replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+    if "\x00" in value:
+        raise ValidationError("The deploy script contains an invalid character.")
+    if len(value) > MAX_DEPLOY_SCRIPT_LEN:
+        raise ValidationError(f"The deploy script must be at most {MAX_DEPLOY_SCRIPT_LEN} characters.")
+    return value
+
+
 def validate_app_port(value) -> int:
     try:
         port = int(str(value).strip())

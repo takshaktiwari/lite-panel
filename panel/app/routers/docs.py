@@ -28,6 +28,7 @@ GROUPS = [
         [
             ("sites", "Sites", "Create websites, assign PHP versions, enable HTTPS and manage each site's account."),
             ("node-python", "Node.js & Python apps", "Run Node.js and Python applications behind nginx as managed services."),
+            ("deploy", "Git deployment", "Deploy from GitHub or GitLab with one click, or automatically on every push."),
             ("workers", "Workers", "Keep queue workers, Horizon and other background processes running with systemd."),
             ("databases", "Databases", "MariaDB databases and users, import/export, and Adminer."),
             ("files", "File manager", "Browse, edit, upload, archive and set permissions on site files."),

@@ -1,0 +1,56 @@
+{% extends "docs/_layout.html" %}
+{% block doc %}
+<h2 id="what">What it does</h2>
+<p>Push your code to GitHub or GitLab, then click <strong>Deploy now</strong> on the site's page (or let a push do it for you). The panel pulls the latest commit of your branch into the site's folder, runs your deploy script, and restarts whatever needs the new code. Every deploy runs as a job with a live log and is kept in the site's deploy history.</p>
+<p>It deploys in place: the code folder is a normal git checkout. Files that are not in git (<code>.env</code>, <code>vendor/</code>, <code>node_modules/</code>, uploads in <code>storage/</code>) are never touched.</p>
+
+<h2 id="setup">Setting it up</h2>
+<ol>
+  <li>Open the site and find <em>Deployment</em>. Enter the <strong>repository URL</strong> and <strong>branch</strong>.
+    <ul>
+      <li>Private repository: use the SSH URL, like <code>git@github.com:you/app.git</code>.</li>
+      <li>Public repository: an <code>https://</code> URL also works. Do not put a username or password in the URL.</li>
+    </ul>
+  </li>
+  <li>Check the <strong>code folder</strong>. The default is the project folder: the folder <em>above</em> <code>public</code> for Laravel, the app folder for Node.js and Python.</li>
+  <li>Pick a <strong>deploy script</strong> preset or write your own, then click <em>Save and set up</em>.</li>
+  <li>For an SSH URL the panel shows a <strong>deploy key</strong>. Add it once to the repository: GitHub → Settings → Deploy keys → Add deploy key (leave write access off). GitLab: Settings → Repository → Deploy keys. The key only lets this server <em>read</em> this one repository.</li>
+  <li>Click <strong>Deploy now</strong>.</li>
+</ol>
+<p>On the first deploy an empty folder is cloned into. A folder that already holds your site (for example one uploaded by FTP) is connected to git in place: files that are in the repository are updated to the repository's version, everything else is left as it is.</p>
+
+<h2 id="script">The deploy script</h2>
+<p>Runs after every pull, in the code folder, as the site's own user (never root). One command per line; the deploy stops at the first command that fails, and the log shows each command with a <code>+</code> in front of it. <code>{PHP}</code> is replaced by the site's PHP binary.</p>
+<table class="table">
+  <thead><tr><th>Preset</th><th>Script</th></tr></thead>
+  <tbody>
+  <tr><td>Laravel</td><td><code>composer install --no-dev --optimize-autoloader --no-interaction</code><br><code>{PHP} artisan migrate --force</code><br><code>{PHP} artisan optimize</code></td></tr>
+  <tr><td>PHP with Composer</td><td><code>composer install --no-dev --optimize-autoloader --no-interaction</code></td></tr>
+  <tr><td>Node.js</td><td><code>npm ci</code><br><code>npm run build --if-present</code></td></tr>
+  <tr><td>Python</td><td><code>[ -d .venv ] || python3 -m venv .venv</code><br><code>pip install -r requirements.txt</code></td></tr>
+  <tr><td>Static</td><td>(nothing)</td></tr>
+  </tbody>
+</table>
+<p>After the script the panel restarts the Node.js / Python app if it is running, restarts running <a href="/docs/workers">workers</a> (queue workers keep old code in memory), reloads PHP-FPM (which clears OPcache) and makes sure nginx can read new files. You do not need to add those steps.</p>
+<div class="callout"><strong class="callout-title">Composer</strong>The Laravel and PHP presets need <code>composer</code>; install it from <a href="/stack">Stack</a> if the log says it is missing.</div>
+
+<h2 id="webhook">Auto-deploy on push</h2>
+<ol>
+  <li>Under <em>Auto-deploy on push</em> click <strong>Turn on</strong>. The panel shows a <strong>Payload URL</strong> and a <strong>Secret</strong>.</li>
+  <li>GitHub: repository → Settings → Webhooks → Add webhook. Paste the URL, set content type to <code>application/json</code>, paste the secret, keep "Just the push event". If the panel uses its self-signed certificate, set SSL verification to disabled.</li>
+  <li>GitLab: Settings → Webhooks. Paste the URL, put the secret in <em>Secret token</em>, tick <em>Push events</em>.</li>
+</ol>
+<p>Only pushes to the configured branch deploy; other branches are ignored. Requests without a valid signature are refused, so the URL alone is not enough to trigger a deploy. <em>New URL and secret</em> replaces both if they ever leak. The panel must be reachable from the internet on its port (8443) for GitHub to call it.</p>
+
+<h2 id="history">History and rollback</h2>
+<p>Each deploy is listed with its commit, message, trigger (manual, webhook or redeploy), who started it, how long it took and a link to its full log. <strong>Redeploy</strong> on an older successful deploy checks out that exact commit and runs the script again, which is a one-click rollback. The next normal deploy goes back to the latest commit of the branch.</p>
+<p>Database migrations are not undone by a rollback; roll those back yourself if needed.</p>
+
+<h2 id="problems">If a deploy fails</h2>
+<ul>
+  <li><strong>Fetching from the repository failed</strong>: the deploy key is not added to the repository (or was added to a different one), or the URL or branch is wrong.</li>
+  <li><strong>The deploy script stopped</strong>: the last command in the log is the one that failed, with its error above it.</li>
+  <li><strong>Permission denied</strong> in the script: a file in the code folder is owned by root (for example created with <code>sudo</code>). Fix ownership in the <a href="/docs/files">file manager</a> or the terminal.</li>
+</ul>
+<p><em>Disconnect repository</em> only forgets the settings; the code, its <code>.git</code> folder and the history stay.</p>
+{% endblock %}

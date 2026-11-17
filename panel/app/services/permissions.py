@@ -246,6 +246,9 @@ def apply(ctx, site, *, force: bool = False) -> bool:
         # PHP's session / upload scratch space is never for the web server,
         # even though the grant above covers the whole site folder.
         _revoke_tree(root / "tmp", user)
+        # ~/.ssh holds the deploy key and authorized_keys; ssh refuses a key
+        # anyone else can read, and nginx has no business there anyway.
+        _revoke_tree(root / ".ssh", user)
     except PermissionsError as exc:
         ctx.log(f"ACLs are not available ({exc}); using group membership instead")
         _fallback_group(ctx, site, user)

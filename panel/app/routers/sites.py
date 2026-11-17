@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session as OrmSession, selectinload
 from app.database import get_session
 from app.deps import csrf_protect, job_redirect, render, require_session
 from app.jobs import enqueue
-from app.models import AuditLog, BackupSchedule, CronJob, FtpAccount, Site, SiteDatabase, SiteWorker, SshKey
+from app.models import AuditLog, BackupSchedule, CronJob, FtpAccount, Site, SiteDatabase, SiteDeploy, SiteDeployment, SiteWorker, SshKey
 from app.providers import get_provider
 from app.services import apps as apps_service
 from app.services import backup as backup_service
@@ -24,6 +24,7 @@ from app.services import databases as db_service
 from app.services import dns_check as dns_check_service
 from app.services import files as files_service
 from app.services import sites as sites_service
+from app.services import deploy as deploy_service
 from app.services import permissions as permissions_service
 from app.services import system as system_service
 from app.services import workers as workers_service
@@ -35,6 +36,11 @@ from app.validators import (
     validate_app_env,
     validate_app_port,
     validate_app_type,
+    validate_branch,
+    validate_commit,
+    validate_deploy_script,
+    validate_repo_url,
+    is_ssh_repo_url,
     validate_domain,
     validate_site_name,
 )
@@ -296,7 +302,23 @@ def site_detail(
         socket=str(sites_service.socket_for(site.name)) if site.php_version else None,
         **_app_context(site),
         **_worker_context(site),
+        **_deploy_context(site),
     )
+
+
+def _deploy_context(site: Site) -> dict:
+    deployment = site.deployment
+    return {
+        "deployment": deployment,
+        "deploy_history": site.deploys[:15],
+        "deploy_presets": deploy_service.PRESETS,
+        "deploy_default_preset": deploy_service.default_preset(site),
+        "deploy_default_repo_dir": str(deploy_service.default_repo_dir(site)),
+        "deploy_is_ssh": bool(deployment and is_ssh_repo_url(deployment.repo_url)),
+        # Only the path: behind nginx the app never sees the real scheme and
+        # port (https, :8443), so site-deploy.js prefixes the browser's own origin.
+        "deploy_webhook_path": f"/hooks/deploy/{deployment.webhook_token}" if deployment else "",
+    }
 
 
 def _worker_context(site: Site) -> dict:
@@ -629,12 +651,28 @@ def delete_site(
 # --------------------------------------------------------------------------
 
 
+DERIVED_NAME_MAX = 27  # 32 (Linux username limit) - len("site_")
+
+
 def _name_from_domain(domain: str) -> str:
-    """Derive a slug from a domain: blog.example.com -> blog-example."""
-    parts = domain.split(".")
-    stem = "-".join(parts[:-1]) if len(parts) > 1 else domain
-    cleaned = "".join(ch if ch.isalnum() or ch == "-" else "-" for ch in stem.lower())
-    return cleaned.strip("-")[:32] or "site"
+    """Derive a slug from a domain: blog.example.com -> blog-example_com.
+
+    Dots become hyphens and the top-level domain is kept after an underscore,
+    so example.com and example.in get different folders.  When the result
+    must be shortened, the name before the TLD is cut: the site's Linux user
+    is ``site_<name>`` and Linux allows 32 characters, so 27 is the most.
+    """
+
+    def clean(text: str) -> str:
+        return "".join(ch if ch.isalnum() or ch == "-" else "-" for ch in text.lower()).strip("-")
+
+    parts = [part for part in domain.split(".") if part]
+    if len(parts) < 2:
+        return clean(domain)[:DERIVED_NAME_MAX].strip("-") or "site"
+    tld = clean(parts[-1])
+    suffix = f"_{tld}" if tld else ""
+    stem = clean("-".join(parts[:-1]))[: DERIVED_NAME_MAX - len(suffix)].strip("-")
+    return (stem + suffix if stem else tld) or "site"
 
 
 def _split_folder(folder: str, domain: str) -> tuple:
@@ -931,3 +969,150 @@ def repair_permissions(
     )
     _audit(db, session, "site.repair_permissions", site.domain)
     return job_redirect(job.id, f"/sites/{site.id}")
+
+
+# --------------------------------------------------------------------------
+# Git deployment (see services/deploy.py)
+# --------------------------------------------------------------------------
+
+
+@router.post("/{site_id}/deploy/settings", dependencies=[Depends(csrf_protect)])
+def deploy_settings(
+    site_id: int,
+    repo_url: str = Form(""),
+    branch: str = Form("main"),
+    repo_dir: str = Form(""),
+    script: str = Form(""),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    try:
+        repo_url = validate_repo_url(repo_url)
+        branch = validate_branch(branch)
+        folder = deploy_service.resolve_repo_dir(site, repo_dir)
+        script = validate_deploy_script(script)
+    except ValidationError as exc:
+        return _detail_error(site, str(exc))
+
+    deployment = site.deployment
+    if deployment is None:
+        deployment = SiteDeployment(
+            site_id=site.id,
+            repo_url=repo_url,
+            branch=branch,
+            repo_dir=str(folder),
+            script=script,
+            webhook_token=deploy_service.new_webhook_token(),
+            webhook_secret=deploy_service.new_webhook_secret(),
+        )
+        db.add(deployment)
+    else:
+        deployment.repo_url = repo_url
+        deployment.branch = branch
+        deployment.repo_dir = str(folder)
+        deployment.script = script
+
+    if is_ssh_repo_url(repo_url) and not deployment.deploy_key_public:
+        try:
+            deployment.deploy_key_public = deploy_service.ensure_deploy_key(site)
+        except (deploy_service.DeployError, OSError) as exc:
+            db.rollback()
+            return _detail_error(site, f"Could not create the deploy key: {exc}")
+    db.commit()
+    _audit(db, session, "site.deploy_settings", site.domain)
+    return RedirectResponse(f"/sites/{site.id}#deploy-panel", status_code=303)
+
+
+@router.post("/{site_id}/deploy", dependencies=[Depends(csrf_protect)])
+def deploy_now(
+    site_id: int,
+    commit: str = Form(""),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    if site.deployment is None:
+        return _detail_error(site, "Set up the repository first.")
+    try:
+        commit = validate_commit(commit) if commit.strip() else ""
+    except ValidationError as exc:
+        return _detail_error(site, str(exc))
+    job = queue_deploy(
+        db, site,
+        trigger="redeploy" if commit else "manual",
+        commit=commit or None,
+        username=session.user.username,
+        user_id=session.user_id,
+    )
+    _audit(db, session, "site.deploy", f"{site.domain}{' @' + commit[:7] if commit else ''}")
+    return job_redirect(job.id, f"/sites/{site.id}#deploy-panel")
+
+
+def queue_deploy(db, site, *, trigger: str, commit=None, username=None, user_id=None):
+    """Record a deploy in the history and hand it to the job worker."""
+    record = SiteDeploy(
+        site_id=site.id, trigger=trigger, requested_commit=commit, username=username, status="queued"
+    )
+    db.add(record)
+    db.flush()
+    label = f"Deploy {site.domain}" + (f" at {commit[:7]}" if commit else "")
+    job = enqueue(
+        db,
+        "site.deploy",
+        label,
+        payload={"site_id": site.id, "deploy_id": record.id, "commit": commit},
+        user_id=user_id,
+    )
+    record.job_id = job.id
+    db.commit()
+    return job
+
+
+@router.post("/{site_id}/deploy/webhook", dependencies=[Depends(csrf_protect)])
+def deploy_webhook_settings(
+    site_id: int,
+    action: str = Form(...),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    deployment = site.deployment
+    if deployment is None:
+        return _detail_error(site, "Set up the repository first.")
+    if action == "enable":
+        deployment.webhook_enabled = True
+    elif action == "disable":
+        deployment.webhook_enabled = False
+    elif action == "rotate":
+        deployment.webhook_token = deploy_service.new_webhook_token()
+        deployment.webhook_secret = deploy_service.new_webhook_secret()
+    else:
+        return _detail_error(site, "Unknown action.")
+    db.commit()
+    _audit(db, session, f"site.deploy_webhook_{action}", site.domain)
+    return RedirectResponse(f"/sites/{site.id}#deploy-panel", status_code=303)
+
+
+@router.post("/{site_id}/deploy/disconnect", dependencies=[Depends(csrf_protect)])
+def deploy_disconnect(
+    site_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """Forget the repository settings.  The code, its .git folder and the
+    deploy history stay; nothing on disk is deleted."""
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    if site.deployment is not None:
+        db.delete(site.deployment)
+        db.commit()
+        _audit(db, session, "site.deploy_disconnect", site.domain)
+    return RedirectResponse(f"/sites/{site.id}", status_code=303)

@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from app.database import session_scope
 from app.jobs import JobFailed, register
-from app.models import BackupSchedule, CronJob, FtpAccount, InstalledProvider, Site, SiteWorker, utcnow
+from app.models import BackupSchedule, CronJob, FtpAccount, InstalledProvider, Site, SiteDeploy, SiteWorker, utcnow
 from app.providers import get_provider
 from app.services import apps as apps_service
 from app.services import cron as cron_service
@@ -26,6 +26,7 @@ from app.services import sites as sites_service
 from app.services import backup as backup_service
 from app.services import security as security_service
 from app.services import swap as swap_service
+from app.services import deploy as deploy_service
 from app.services import permissions as permissions_service
 from app.services import workers as workers_service
 from app.services import fail2ban as fail2ban_service
@@ -373,6 +374,39 @@ def mark_permissions_migrated(state_dir=None) -> None:
 
 
 PERMISSIONS_MIGRATION_MARKER = ".nginx-acl-migrated-v1"
+
+
+@register("site.deploy")
+def deploy_site(ctx) -> None:
+    """Pull the site's repository and run its deploy script.
+
+    The history row is committed at every step, so a failed deploy is still
+    recorded (with its error) even though the job itself fails.
+    """
+    with session_scope() as db:
+        record = db.get(SiteDeploy, ctx.payload["deploy_id"])
+        site = db.get(Site, ctx.payload["site_id"])
+        if site is None or record is None:
+            raise JobFailed("That site no longer exists.")
+        deployment = site.deployment
+        if deployment is None:
+            record.status, record.error, record.finished_at = "failed", "Deployment is not set up.", utcnow()
+            db.commit()
+            raise JobFailed("Deployment is not set up for this site.")
+
+        record.status = "running"
+        record.started_at = utcnow()
+        db.commit()
+        try:
+            sha, message = deploy_service.deploy(
+                ctx, site, deployment, commit=ctx.payload.get("commit") or None
+            )
+        except (deploy_service.DeployError, ValidationError, RuntimeError, OSError, JobFailed) as exc:
+            record.status, record.error, record.finished_at = "failed", str(exc)[:1000], utcnow()
+            db.commit()
+            raise _fail(exc) from exc
+        record.status, record.commit, record.message, record.finished_at = "success", sha, message[:500], utcnow()
+        db.commit()
 
 
 @register("site.webroot")

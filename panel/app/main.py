@@ -25,6 +25,7 @@ from app.routers import (
     docs,
     fail2ban,
     files,
+    hooks,
     firewall,
     ftp,
     internal,
@@ -155,6 +156,7 @@ def create_app() -> FastAPI:
     app.include_router(backup.router)
     app.include_router(docs.router)
     app.include_router(swap.router)
+    app.include_router(hooks.router)
 
     @app.get("/health", include_in_schema=False)
     def health_check():

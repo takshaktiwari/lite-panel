@@ -276,6 +276,8 @@
   </details>
 </section>
 
+{% include "sites/_deploy.html" %}
+
 <section class="panel" id="dns-check-panel" data-site-id="{{ site.id }}" data-domain="{{ site.domain }}">
   <h2>DNS propagation</h2>
   <p class="muted">Check whether {{ site.domain }} already resolves to this server across a spread of independent public DNS resolvers.</p>
@@ -498,6 +500,7 @@
 {% if is_app %}<script src="/static/site-app.js"></script>{% endif %}
 <script src="/static/site-health.js"></script>
 <script src="/static/site-workers.js"></script>
+<script src="/static/site-deploy.js"></script>
 <script src="/static/dns-check.js"></script>
 <script src="/static/webroot-edit.js"></script>
 <script src="/static/disk-usage.js"></script>
