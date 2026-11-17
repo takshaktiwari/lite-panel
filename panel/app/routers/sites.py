@@ -1023,7 +1023,7 @@ def deploy_settings(
             return _detail_error(site, f"Could not create the deploy key: {exc}")
     db.commit()
     _audit(db, session, "site.deploy_settings", site.domain)
-    return RedirectResponse(f"/sites/{site.id}#deploy-panel", status_code=303)
+    return RedirectResponse(f"/sites/{site.id}#deploy-details", status_code=303)
 
 
 @router.post("/{site_id}/deploy", dependencies=[Depends(csrf_protect)])
@@ -1097,7 +1097,7 @@ def deploy_webhook_settings(
         return _detail_error(site, "Unknown action.")
     db.commit()
     _audit(db, session, f"site.deploy_webhook_{action}", site.domain)
-    return RedirectResponse(f"/sites/{site.id}#deploy-panel", status_code=303)
+    return RedirectResponse(f"/sites/{site.id}#deploy-details", status_code=303)
 
 
 @router.post("/{site_id}/deploy/disconnect", dependencies=[Depends(csrf_protect)])

@@ -630,3 +630,53 @@ def test_job_log_strips_terminal_colour_codes():
     ctx = JobContext(job_id=987654, payload={})
     ctx.log("\x1b[31;1merror:\x1b[0m failed")
     assert ctx._pending == ["error: failed"]
+
+
+# --------------------------------------------------------------------------
+# Folded section and the Overview button
+# --------------------------------------------------------------------------
+
+
+def test_once_set_up_only_the_header_buttons_show_and_the_rest_is_folded(web, db, tmp_path):
+    site = _db_site(db, tmp_path)
+    page = web.get(f"/sites/{site.id}").text
+    assert 'id="deploy-details" hidden' in page                      # folded by default
+    assert 'data-toggle-target="deploy-details"' in page             # the Details button
+    assert 'data-toggle-label-show="Details" data-toggle-label-hide="Hide details"' in page
+    # The folded block holds everything but the header, subtitle and buttons.
+    head, folded = page.split('id="deploy-details" hidden', 1)
+    assert "Deploy now" in head and "Pull the latest code from git" in head
+    for text in ("Deploy key", "Auto-deploy on push", "History", "Settings and deploy script"):
+        assert text in folded and text not in head.split('id="deploy-panel"', 1)[1]
+
+
+def test_the_setup_form_is_not_folded_before_a_repository_is_connected(web, db, tmp_path):
+    site = _db_site(db, tmp_path, with_deployment=False)
+    page = web.get(f"/sites/{site.id}").text
+    assert 'id="deploy-details"' not in page and "Save and set up" in page
+    assert 'data-toggle-target="deploy-details"' not in page
+
+
+def test_the_overview_has_a_deploy_button_only_when_deployment_is_set_up(web, db, tmp_path):
+    site = _db_site(db, tmp_path)
+    page = web.get(f"/sites/{site.id}").text
+    overview = page.split("<h2>Overview</h2>", 1)[1].split("</section>", 1)[0]
+    assert f'action="/sites/{site.id}/deploy"' in overview and ">Deploy</button>" in overview
+
+    db.delete(_last(db, SiteDeployment))
+    db.commit()
+    overview = web.get(f"/sites/{site.id}").text.split("<h2>Overview</h2>", 1)[1].split("</section>", 1)[0]
+    assert "/deploy" not in overview
+
+
+def test_saving_settings_comes_back_with_the_details_open(web, db, tmp_path):
+    site = _db_site(db, tmp_path, with_deployment=False)
+    response = web.post(f"/sites/{site.id}/deploy/settings", data={
+        "csrf_token": _csrf(web, f"/sites/{site.id}"), "repo_url": "git@github.com:you/app.git",
+        "branch": "main", "script": "",
+    })
+    assert response.headers["location"].endswith("#deploy-details")      # the deploy key is shown
+    token = _csrf(web, f"/sites/{site.id}")
+    response = web.post(f"/sites/{site.id}/deploy/webhook", data={"csrf_token": token, "action": "enable"})
+    assert response.headers["location"].endswith("#deploy-details")
+    assert "window.location.hash" in Path("panel/app/static/site-deploy.js").read_text()

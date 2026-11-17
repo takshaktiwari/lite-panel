@@ -6,6 +6,16 @@
   const panel = document.getElementById("deploy-panel");
   if (!panel) return;
 
+  // After saving settings or changing the webhook the page comes back with
+  // #deploy-details: keep the folded section open so the result is visible.
+  const details = document.getElementById("deploy-details");
+  if (details && window.location.hash === "#deploy-details") {
+    details.hidden = false;
+    const toggle = panel.querySelector('[data-toggle-target="deploy-details"]');
+    if (toggle) toggle.textContent = toggle.getAttribute("data-toggle-label-hide") || toggle.textContent;
+    details.scrollIntoView({ block: "nearest" });
+  }
+
   panel.querySelectorAll("[data-deploy-preset]").forEach((select) => {
     select.addEventListener("change", () => {
       const option = select.options[select.selectedIndex];

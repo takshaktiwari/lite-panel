@@ -35,17 +35,23 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
     <h2 style="margin:0;">Deployment</h2>
     {% if deployment %}
-    <form method="post" action="/sites/{{ site.id }}/deploy" style="margin:0;">
-      {{ ui.csrf(session) }}
-      <button class="button primary" type="submit">Deploy now</button>
-    </form>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button type="button" class="button" data-toggle-target="deploy-details"
+              data-toggle-label-show="Details" data-toggle-label-hide="Hide details">Details</button>
+      <form method="post" action="/sites/{{ site.id }}/deploy" style="margin:0;">
+        {{ ui.csrf(session) }}
+        <button class="button primary" type="submit">Deploy now</button>
+      </form>
+    </div>
     {% endif %}
   </div>
-  <p class="muted" style="font-size:12.5px;margin-top:0;">Pull the latest code from git and run your deploy script. <a href="/docs/deploy">Guide</a></p>
+  <p class="muted" style="font-size:12.5px;margin-top:0;{{ 'margin-bottom:0;' if deployment }}">Pull the latest code from git and run your deploy script. <a href="/docs/deploy">Guide</a></p>
 
   {% if not deployment %}
   {{ deploy_form(None) }}
   {% else %}
+  {# Once set up, everything below stays folded away until "Details" is clicked. #}
+  <div id="deploy-details" hidden style="margin-top:16px;">
   {% set last = deploy_history[0] if deploy_history else None %}
   <dl class="stats" style="margin-bottom:14px;">
     <div><dt>Repository</dt><dd style="word-break:break-all;">{{ deployment.repo_url }}</dd></div>
@@ -130,5 +136,6 @@
   {% else %}
   <p class="muted empty">No deploys yet. Click <strong>Deploy now</strong> for the first one.</p>
   {% endif %}
+  </div>
   {% endif %}
 </section>
