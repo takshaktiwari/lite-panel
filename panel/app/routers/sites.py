@@ -25,6 +25,7 @@ from app.services import dns_check as dns_check_service
 from app.services import files as files_service
 from app.services import sites as sites_service
 from app.services import deploy as deploy_service
+from app.services import notify as notify_service
 from app.services import permissions as permissions_service
 from app.services import system as system_service
 from app.services import workers as workers_service
@@ -39,6 +40,10 @@ from app.validators import (
     validate_branch,
     validate_commit,
     validate_deploy_script,
+    validate_health_path,
+    validate_notify_url,
+    validate_poll_minutes,
+    POLL_MINUTES_CHOICES,
     validate_repo_url,
     is_ssh_repo_url,
     validate_domain,
@@ -313,6 +318,8 @@ def _deploy_context(site: Site) -> dict:
         "deploy_history": site.deploys[:15],
         "deploy_presets": deploy_service.PRESETS,
         "deploy_default_preset": deploy_service.default_preset(site),
+        "deploy_poll_choices": POLL_MINUTES_CHOICES,
+        "deploy_poll_recommended": deploy_service.RECOMMENDED_POLL_MINUTES,
         "deploy_default_repo_dir": str(deploy_service.default_repo_dir(site)),
         "deploy_is_ssh": bool(deployment and is_ssh_repo_url(deployment.repo_url)),
         # Only the path: behind nginx the app never sees the real scheme and
@@ -1042,35 +1049,103 @@ def deploy_now(
         commit = validate_commit(commit) if commit.strip() else ""
     except ValidationError as exc:
         return _detail_error(site, str(exc))
-    job = queue_deploy(
-        db, site,
-        trigger="redeploy" if commit else "manual",
-        commit=commit or None,
-        username=session.user.username,
-        user_id=session.user_id,
-    )
+    try:
+        job = deploy_service.queue_deploy(
+            db, site,
+            trigger="redeploy" if commit else "manual",
+            commit=commit or None,
+            username=session.user.username,
+            user_id=session.user_id,
+        )
+    except deploy_service.DeployError as exc:
+        return _detail_error(site, str(exc))
     _audit(db, session, "site.deploy", f"{site.domain}{' @' + commit[:7] if commit else ''}")
     return job_redirect(job.id, f"/sites/{site.id}#deploy-panel")
 
 
-def queue_deploy(db, site, *, trigger: str, commit=None, username=None, user_id=None):
-    """Record a deploy in the history and hand it to the job worker."""
-    record = SiteDeploy(
-        site_id=site.id, trigger=trigger, requested_commit=commit, username=username, status="queued"
-    )
-    db.add(record)
-    db.flush()
-    label = f"Deploy {site.domain}" + (f" at {commit[:7]}" if commit else "")
-    job = enqueue(
-        db,
-        "site.deploy",
-        label,
-        payload={"site_id": site.id, "deploy_id": record.id, "commit": commit},
-        user_id=user_id,
-    )
-    record.job_id = job.id
+@router.post("/{site_id}/deploy/auto", dependencies=[Depends(csrf_protect)])
+def deploy_auto_settings(
+    site_id: int,
+    poll_minutes: str = Form("0"),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """How often the panel checks git for a new commit (0 = off)."""
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    deployment = site.deployment
+    if deployment is None:
+        return _detail_error(site, "Set up the repository first.")
+    try:
+        minutes = validate_poll_minutes(poll_minutes)
+    except ValidationError as exc:
+        return _detail_error(site, str(exc))
+    deployment.poll_minutes = minutes
+    # Starting (or restarting) polling re-evaluates from scratch on the next check.
+    deployment.last_checked_at = None
+    deployment.last_check_error = None
+    deployment.last_remote_head = None
     db.commit()
-    return job
+    _audit(db, session, "site.deploy_auto", f"{site.domain}: {minutes or 'off'}")
+    return RedirectResponse(f"/sites/{site.id}#deploy-details", status_code=303)
+
+
+@router.post("/{site_id}/deploy/safety", dependencies=[Depends(csrf_protect)])
+def deploy_safety_settings(
+    site_id: int,
+    health_path: str = Form("/"),
+    rollback_on_failure: str = Form(""),
+    notify_url: str = Form(""),
+    notify_success: str = Form(""),
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """Health check path, automatic rollback and the alert webhook."""
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    deployment = site.deployment
+    if deployment is None:
+        return _detail_error(site, "Set up the repository first.")
+    try:
+        path = validate_health_path(health_path)
+        url = validate_notify_url(notify_url)
+    except ValidationError as exc:
+        return _detail_error(site, str(exc))
+    deployment.health_path = path
+    deployment.rollback_on_failure = bool(rollback_on_failure)
+    deployment.notify_url = url or None
+    deployment.notify_success = bool(notify_success) and bool(url)
+    db.commit()
+    _audit(db, session, "site.deploy_safety", site.domain)
+    return RedirectResponse(f"/sites/{site.id}#deploy-details", status_code=303)
+
+
+@router.post("/{site_id}/deploy/notify-test", dependencies=[Depends(csrf_protect)])
+def deploy_notify_test(
+    site_id: int,
+    session=Depends(require_session),
+    db: OrmSession = Depends(get_session),
+):
+    """Send a test alert to the saved webhook, so a typo shows up now rather
+    than during the first real failure."""
+    site = db.get(Site, site_id)
+    if site is None:
+        return _back(error="That site no longer exists.")
+    deployment = site.deployment
+    if deployment is None or not deployment.notify_url:
+        return _detail_error(site, "Save an alert webhook URL first.")
+    try:
+        notify_service.send(
+            deployment.notify_url, f"\u2705 {site.domain}: test message from lite-panel",
+            event="test", site=site.domain,
+        )
+    except notify_service.NotifyError as exc:
+        return _detail_error(site, f"Test message failed: {exc}")
+    return RedirectResponse(
+        f"/sites/{site.id}?notice={quote('Test message sent. Check your chat.')}#deploy-details", status_code=303
+    )
 
 
 @router.post("/{site_id}/deploy/webhook", dependencies=[Depends(csrf_protect)])

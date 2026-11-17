@@ -120,6 +120,12 @@ def sh(*args, cwd=None):
     return subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
 
+@pytest.fixture(autouse=True)
+def no_health_waits(monkeypatch):
+    monkeypatch.setattr(deploy_service, "HEALTH_DELAY_SECONDS", 0)
+    monkeypatch.setattr(deploy_service, "HEALTH_FIRST_WAIT_SECONDS", 0)
+
+
 @pytest.fixture
 def origin(tmp_path):
     """A bare repo with two commits on main, plus a working copy to push from."""
@@ -646,7 +652,7 @@ def test_once_set_up_only_the_header_buttons_show_and_the_rest_is_folded(web, db
     # The folded block holds everything but the header, subtitle and buttons.
     head, folded = page.split('id="deploy-details" hidden', 1)
     assert "Deploy now" in head and "Pull the latest code from git" in head
-    for text in ("Deploy key", "Auto-deploy on push", "History", "Settings and deploy script"):
+    for text in ("Deploy key", "Check git for new commits", "History", "Settings and deploy script"):
         assert text in folded and text not in head.split('id="deploy-panel"', 1)[1]
 
 

@@ -75,10 +75,13 @@ async def deploy_hook(token: str, request: Request, db: OrmSession = Depends(get
     if ref != wanted:
         return JSONResponse({"ignored": f"push to {ref or 'unknown ref'}, deploying only {wanted}"}, status_code=202)
 
-    from app.routers.sites import queue_deploy
+    from app.services.deploy import queue_deploy
 
     site = deployment.site
     job = queue_deploy(db, site, trigger="webhook", username="webhook")
     db.add(AuditLog(user_id=None, username="webhook", action="site.deploy", target=f"{site.domain} (push)"))
     db.commit()
+    if job is None:
+        # A deploy is already running; this push is deployed right after it.
+        return JSONResponse({"queued": "after the running deploy"}, status_code=202)
     return JSONResponse({"queued": job.id}, status_code=202)

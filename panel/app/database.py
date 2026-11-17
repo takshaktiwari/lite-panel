@@ -74,6 +74,20 @@ _ADDITIVE_COLUMNS: dict = {
     "backup_schedules": [
         ("keep_count", "INTEGER DEFAULT 7"),
     ],
+    "site_deployments": [
+        ("poll_minutes", "INTEGER NOT NULL DEFAULT 0"),
+        ("last_checked_at", "DATETIME"),
+        ("last_check_error", "VARCHAR(300)"),
+        ("last_remote_head", "VARCHAR(64)"),
+        ("rerun_pending", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("health_path", "VARCHAR(200) NOT NULL DEFAULT '/'"),
+        ("rollback_on_failure", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("notify_url", "VARCHAR(400)"),
+        ("notify_success", "BOOLEAN NOT NULL DEFAULT 0"),
+    ],
+    "site_deploys": [
+        ("health", "VARCHAR(100)"),
+    ],
     "sites": [
         ("app_type", "VARCHAR(16) NOT NULL DEFAULT 'web'"),
         ("app_command", "TEXT"),

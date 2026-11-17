@@ -34,13 +34,40 @@
 <p>After the script the panel restarts the Node.js / Python app if it is running, restarts running <a href="/docs/workers">workers</a> (queue workers keep old code in memory), reloads PHP-FPM (which clears OPcache) and makes sure nginx can read new files. You do not need to add those steps.</p>
 <div class="callout"><strong class="callout-title">Composer</strong>The Laravel and PHP presets need <code>composer</code>; install it from <a href="/stack">Stack</a> if the log says it is missing.</div>
 
-<h2 id="webhook">Auto-deploy on push</h2>
+<h2 id="polling">Auto-deploy by checking git</h2>
+<p>Under <em>Auto-deploy</em> choose how often the panel should check the repository, then Save. Every interval it asks the git host which commit your branch points to (one tiny <code>git ls-remote</code> request over the deploy key) and, if there is a new commit, deploys it. Nothing has to reach your server from the internet, so this works behind a firewall, on a private IP and with the self-signed certificate. You still need the first deploy by hand: the panel only starts auto-deploying a site that has been deployed once.</p>
+<table class="table">
+  <thead><tr><th>Interval</th><th>Good for</th></tr></thead>
+  <tbody>
+  <tr><td>1 or 2 minutes</td><td>Staging, or a project you are actively working on: a push is live within a minute or two.</td></tr>
+  <tr><td><strong>5 minutes (recommended)</strong></td><td>Most sites: live within minutes, and the checks cost the server almost nothing.</td></tr>
+  <tr><td>15 to 60 minutes</td><td>Production sites where there is no rush, or repositories that rarely change.</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li><strong>One deploy at a time.</strong> If more commits arrive while a deploy is running, the panel deploys once more afterwards with the newest commit instead of stacking up deploys.</li>
+  <li><strong>A rollback stays.</strong> After you use <em>Redeploy</em> on an older commit, auto-deploy does not move the site forward again until a new commit is pushed.</li>
+  <li><strong>A failed deploy is not retried by itself.</strong> Fix the problem and push again, or click <em>Deploy now</em>.</li>
+  <li>The section shows when the last check ran and whether it failed. A failure with "permission denied" usually means the deploy key is not added to the repository.</li>
+</ul>
+
+<h2 id="webhook">Instant auto-deploy on push (webhook)</h2>
+<p>Checking git is the simplest option. If you want a deploy the second you push, and your panel can be reached from GitHub or GitLab, use a webhook instead (you can use both).</p>
 <ol>
   <li>Under <em>Auto-deploy on push</em> click <strong>Turn on</strong>. The panel shows a <strong>Payload URL</strong> and a <strong>Secret</strong>.</li>
   <li>GitHub: repository → Settings → Webhooks → Add webhook. Paste the URL, set content type to <code>application/json</code>, paste the secret, keep "Just the push event". If the panel uses its self-signed certificate, set SSL verification to disabled.</li>
   <li>GitLab: Settings → Webhooks. Paste the URL, put the secret in <em>Secret token</em>, tick <em>Push events</em>.</li>
 </ol>
 <p>Only pushes to the configured branch deploy; other branches are ignored. Requests without a valid signature are refused, so the URL alone is not enough to trigger a deploy. <em>New URL and secret</em> replaces both if they ever leak. The panel must be reachable from the internet on its port (8443) for GitHub to call it.</p>
+
+<h2 id="safety">Safety: health check, automatic rollback and alerts</h2>
+<p>After every deploy the panel requests the site through nginx (the <em>Health check path</em>, <code>/</code> by default; use something like <code>/up</code> if your home page needs a login or is slow). It waits a few seconds for the app to come back and tries up to five times. <strong>HTTP 403 and 5xx count as broken</strong>; a redirect or a 404 counts as up. If nginx cannot be reached at all the check cannot tell, and the deploy is not marked as failed. The result shows in the history ("HTTP 200").</p>
+<ul>
+  <li><strong>Automatic rollback</strong> (off by default). If the site is broken after a deploy, the panel redeploys the last deploy that worked, checks again and records both steps: the broken deploy shows as <em>rolled back</em> and a <em>rollback</em> row appears for the good one. Polling and the webhook do not try the broken commit again; the next deploy waits for a new commit. Database migrations are <strong>not</strong> undone, so write migrations that old code can still run against.</li>
+  <li>With rollback off, a broken deploy stays live and is marked <em>unhealthy</em> so you notice; use <em>Redeploy</em> on an earlier commit to go back by hand.</li>
+  <li><strong>Alerts.</strong> Paste an incoming-webhook URL from Slack, Discord or Mattermost under <em>Alert webhook</em>, then use <em>Send a test message</em>. Failed deploys, unhealthy sites, rollbacks (and a rollback that also fails) and a repository that cannot be reached for auto-deploy are always sent; tick the box to also hear about successful deploys. A repository problem is reported once, not on every check.</li>
+</ul>
+<p>The alert address must be a public <code>https://</code> URL. The panel refuses addresses that point to a private network, and never follows redirects, so the setting cannot be used to reach other services on the server. A webhook that is down never fails a deploy.</p>
 
 <h2 id="history">History and rollback</h2>
 <p>Each deploy is listed with its commit, message, trigger (manual, webhook or redeploy), who started it, how long it took and a link to its full log. <strong>Redeploy</strong> on an older successful deploy checks out that exact commit and runs the script again, which is a one-click rollback. The next normal deploy goes back to the latest commit of the branch.</p>

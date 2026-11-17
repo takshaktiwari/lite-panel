@@ -381,8 +381,17 @@ def deploy_site(ctx) -> None:
     """Pull the site's repository and run its deploy script.
 
     The history row is committed at every step, so a failed deploy is still
-    recorded (with its error) even though the job itself fails.
+    recorded (with its error) even though the job itself fails.  If a push
+    arrived while this one was running (``rerun_pending``) one more deploy is
+    queued afterwards, whatever this one's outcome.
     """
+    try:
+        _run_site_deploy(ctx)
+    finally:
+        _queue_pending_rerun(ctx.payload.get("site_id"))
+
+
+def _run_site_deploy(ctx) -> None:
     with session_scope() as db:
         record = db.get(SiteDeploy, ctx.payload["deploy_id"])
         site = db.get(Site, ctx.payload["site_id"])
@@ -397,16 +406,115 @@ def deploy_site(ctx) -> None:
         record.status = "running"
         record.started_at = utcnow()
         db.commit()
+        pinned = ctx.payload.get("commit") or None
         try:
-            sha, message = deploy_service.deploy(
-                ctx, site, deployment, commit=ctx.payload.get("commit") or None
-            )
+            sha, message = deploy_service.deploy(ctx, site, deployment, commit=pinned)
         except (deploy_service.DeployError, ValidationError, RuntimeError, OSError, JobFailed) as exc:
             record.status, record.error, record.finished_at = "failed", str(exc)[:1000], utcnow()
             db.commit()
+            deploy_service.alert(
+                deployment, site, "deploy_failed",
+                f"deploy failed ({record.trigger}): {str(exc)[:200]}", log=ctx.log,
+            )
             raise _fail(exc) from exc
-        record.status, record.commit, record.message, record.finished_at = "success", sha, message[:500], utcnow()
+        record.commit, record.message = sha, message[:500]
+        if not pinned:
+            # Deployed the branch head: auto-deploy now waits for the *next* push.
+            # (A pinned redeploy / rollback leaves the recorded head alone.)
+            deployment.last_remote_head = sha
+
+        health = deploy_service.check_health(ctx, site, deployment)
+        record.health = health.text
+        record.finished_at = utcnow()
+        if health.ok:
+            record.status = "success"
+            db.commit()
+            deploy_service.alert(
+                deployment, site, "deploy_succeeded", f"deployed {sha[:7]}: {message[:120]}", level="ok", log=ctx.log
+            )
+            return
+
+        _handle_unhealthy(ctx, db, site, deployment, record, health)
+
+
+def _handle_unhealthy(ctx, db, site, deployment, record, health) -> None:
+    """The deploy ran but the site is broken: roll back if asked to, and fail loudly."""
+    short = (record.commit or "")[:7]
+    broken = f"{short} deployed, but the site answers {health.text}"
+    target = deploy_service.rollback_target(db, site, record) if deployment.rollback_on_failure else None
+
+    if not deployment.rollback_on_failure:
+        record.status, record.error = "unhealthy", broken
         db.commit()
+        deploy_service.alert(
+            deployment, site, "deploy_unhealthy",
+            f"{broken}. Automatic rollback is off; fix it or use Redeploy on an earlier commit.", log=ctx.log,
+        )
+        raise JobFailed(broken)
+
+    if target is None:
+        record.status, record.error = "unhealthy", broken + " (no earlier successful deploy to roll back to)"
+        db.commit()
+        deploy_service.alert(deployment, site, "deploy_unhealthy", record.error, log=ctx.log)
+        raise JobFailed(record.error)
+
+    ctx.log(f"{broken}. Rolling back to {target[:7]}.")
+    rollback = SiteDeploy(
+        site_id=site.id, trigger="rollback", requested_commit=target, status="running",
+        username="auto-rollback", started_at=utcnow(),
+    )
+    db.add(rollback)
+    db.commit()
+    try:
+        sha, message = deploy_service.deploy(ctx, site, deployment, commit=target)
+        rollback.commit, rollback.message = sha, message[:500]
+        back = deploy_service.check_health(ctx, site, deployment)
+        rollback.health = back.text
+    except (deploy_service.DeployError, ValidationError, RuntimeError, OSError, JobFailed) as exc:
+        rollback.status, rollback.error, rollback.finished_at = "failed", str(exc)[:1000], utcnow()
+        record.status, record.error = "unhealthy", broken + f"; the rollback failed too: {str(exc)[:200]}"
+        db.commit()
+        deploy_service.alert(
+            deployment, site, "rollback_failed",
+            f"{record.error}. The site is still broken, act now.", log=ctx.log,
+        )
+        raise JobFailed(record.error) from exc
+
+    rollback.finished_at = utcnow()
+    if back.ok:
+        rollback.status = "success"
+        record.status = "rolled_back"
+        record.error = f"{broken}; rolled back to {target[:7]}"
+        db.commit()
+        deploy_service.alert(
+            deployment, site, "rolled_back",
+            f"{short} was unhealthy ({health.text}) and was rolled back to {target[:7]}. "
+            "Database migrations are not undone.", level="warn", log=ctx.log,
+        )
+        raise JobFailed(record.error)
+
+    rollback.status = "unhealthy"
+    record.status, record.error = "unhealthy", broken + f"; still {back.text} after rolling back to {target[:7]}"
+    db.commit()
+    deploy_service.alert(deployment, site, "rollback_failed", f"{record.error}. Act now.", log=ctx.log)
+    raise JobFailed(record.error)
+
+
+def _queue_pending_rerun(site_id) -> None:
+    if not site_id:
+        return
+    with session_scope() as db:
+        site = db.get(Site, site_id)
+        deployment = site.deployment if site else None
+        if deployment is None or not deployment.rerun_pending:
+            return
+        deployment.rerun_pending = False
+        db.commit()
+        try:
+            deploy_service.queue_deploy(db, site, trigger="auto", username="auto-deploy")
+        except deploy_service.DeployError:
+            deployment.rerun_pending = True      # still busy: try again after that one
+            db.commit()
 
 
 @register("site.webroot")

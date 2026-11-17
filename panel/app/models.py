@@ -299,6 +299,24 @@ class SiteDeployment(TimestampMixin, Base):
     # Read-only deploy key: the public half is shown to paste into GitHub; the
     # private half lives only in the site's ~/.ssh.
     deploy_key_public: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Polling: every ``poll_minutes`` the panel asks the git host whether the
+    # branch moved and deploys if it did.  0 = off.
+    poll_minutes: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    last_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_check_error: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    # The branch head at the last decision.  Auto-deploy fires only when the
+    # remote head *changes* from this, so a rollback is not undone and a failed
+    # deploy is not retried in a loop.
+    last_remote_head: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # A push arrived while a deploy was running: deploy once more afterwards.
+    rerun_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    # After every deploy the site is requested; a 403 / 5xx is "unhealthy".
+    health_path: Mapped[str] = mapped_column(String(200), default="/", server_default="/", nullable=False)
+    # Unhealthy after a deploy: go back to the last deploy that worked.
+    rollback_on_failure: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    # Chat / generic webhook (Slack, Discord, Mattermost...) told about failures.
+    notify_url: Mapped[Optional[str]] = mapped_column(String(400), nullable=True)
+    notify_success: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     webhook_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     webhook_token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     webhook_secret: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -314,11 +332,14 @@ class SiteDeploy(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), nullable=False, index=True)
     job_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    trigger: Mapped[str] = mapped_column(String(16), default="manual", nullable=False)  # manual|webhook|redeploy
+    trigger: Mapped[str] = mapped_column(String(16), default="manual", nullable=False)  # manual|webhook|auto|redeploy|rollback
     requested_commit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     commit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(16), default="queued", nullable=False)  # queued|running|success|failed
+    # queued | running | success | failed | unhealthy | rolled_back
+    status: Mapped[str] = mapped_column(String(16), default="queued", nullable=False)
+    # Result of the post-deploy request, e.g. "HTTP 200"; None = not checked.
+    health: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)

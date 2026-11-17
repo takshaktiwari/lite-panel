@@ -78,9 +78,36 @@
   {% endif %}
 
   <div style="margin-bottom:14px;">
-    <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 6px;font-weight:600;">Auto-deploy on push</h3>
+    <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 6px;font-weight:600;">Auto-deploy</h3>
+    <form method="post" action="/sites/{{ site.id }}/deploy/auto" style="margin:0 0 4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      {{ ui.csrf(session) }}
+      <label for="deploy-poll" style="margin:0;font-weight:normal;">Check git for new commits</label>
+      <select id="deploy-poll" name="poll_minutes" style="width:auto;margin:0;padding:3px 8px;">
+        {% for minutes in deploy_poll_choices %}
+        <option value="{{ minutes }}" {{ 'selected' if minutes == deployment.poll_minutes }}>
+          {%- if minutes == 0 %}Off{% elif minutes == 1 %}Every minute{% else %}Every {{ minutes }} minutes{% endif %}{{ ' (recommended)' if minutes == deploy_poll_recommended }}
+        </option>
+        {% endfor %}
+      </select>
+      <button class="button button-sm" type="submit">Save</button>
+    </form>
+    <p class="muted" style="font-size:12.5px;margin:0 0 14px;">
+      {% if deployment.poll_minutes %}
+        {% if deployment.last_check_error %}
+          <span style="color:var(--danger);">Last check failed: {{ deployment.last_check_error }}</span>
+          {% if 'denied' in deployment.last_check_error or 'Permission' in deployment.last_check_error %}(is the deploy key added to the repository?){% endif %}
+        {% elif deployment.last_checked_at %}
+          Last checked {{ deployment.last_checked_at.strftime('%b %d, %H:%M') }} (UTC): no problems. A new commit on <code>{{ deployment.branch }}</code> deploys by itself.
+        {% else %}
+          Waiting for the first check (within a minute).
+        {% endif %}
+      {% else %}
+        Off. When on, the panel asks git every few minutes and deploys when the branch has a new commit; nothing needs to reach this server. <a href="/docs/deploy#polling">Details</a>
+      {% endif %}
+    </p>
+
     {% if deployment.webhook_enabled %}
-    <p class="muted" style="font-size:12.5px;margin:0 0 6px;">On: every push to <code>{{ deployment.branch }}</code> deploys. In GitHub → Settings → Webhooks → Add webhook, use these (content type <code>application/json</code>). <a href="/docs/deploy#webhook">Details</a></p>
+    <p class="muted" style="font-size:12.5px;margin:0 0 6px;"><strong>Instant (webhook):</strong> on: every push to <code>{{ deployment.branch }}</code> deploys. In GitHub → Settings → Webhooks → Add webhook, use these (content type <code>application/json</code>). <a href="/docs/deploy#webhook">Details</a></p>
     <label for="deploy-hook-url" style="font-size:12px;">Payload URL</label>
     <div style="display:flex;gap:8px;"><input type="text" id="deploy-hook-url" readonly value="{{ deploy_webhook_path }}" data-origin-path="{{ deploy_webhook_path }}" style="flex:1;font-size:12.5px;"><button type="button" class="button button-sm" data-copy-target="deploy-hook-url" style="margin-bottom:14px;">Copy</button></div>
     <label for="deploy-hook-secret" style="font-size:12px;">Secret</label>
@@ -92,10 +119,44 @@
     {% else %}
     <form method="post" action="/sites/{{ site.id }}/deploy/webhook" style="margin:0;display:flex;align-items:center;gap:10px;">
       {{ ui.csrf(session) }}<input type="hidden" name="action" value="enable">
-      <span class="muted" style="font-size:12.5px;">Off: deploys only happen when you click Deploy now.</span>
+      <span class="muted" style="font-size:12.5px;"><strong>Instant (webhook):</strong> off. GitHub tells the panel the moment you push; needs the panel reachable from the internet.</span>
       <button class="button button-sm" type="submit">Turn on</button>
     </form>
     {% endif %}
+  </div>
+
+  <div style="margin-bottom:14px;">
+    <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 6px;font-weight:600;">Safety and alerts</h3>
+    <p class="muted" style="font-size:12.5px;margin:0 0 8px;">After every deploy the panel requests the site. A 403 or a 5xx error means it is broken. <a href="/docs/deploy#safety">Details</a></p>
+    <form method="post" action="/sites/{{ site.id }}/deploy/safety" id="deploy-safety-form" style="margin:0;">
+      {{ ui.csrf(session) }}
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1 1 160px;">
+          <label for="deploy-health-path">Health check path</label>
+          <input type="text" id="deploy-health-path" name="health_path" value="{{ deployment.health_path or '/' }}" spellcheck="false" autocomplete="off">
+        </div>
+        <div style="flex:3 1 300px;">
+          <label for="deploy-notify-url">Alert webhook (Slack, Discord, Mattermost) <span class="muted" style="font-weight:normal;">optional</span></label>
+          <input type="text" id="deploy-notify-url" name="notify_url" value="{{ deployment.notify_url or '' }}" placeholder="https://hooks.slack.com/services/..." spellcheck="false" autocomplete="off">
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
+        <input type="checkbox" name="rollback_on_failure" value="1" style="width:auto;margin:0;" {{ 'checked' if deployment.rollback_on_failure }}>
+        Roll back automatically to the last working deploy if the site is broken after a deploy
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
+        <input type="checkbox" name="notify_success" value="1" style="width:auto;margin:0;" {{ 'checked' if deployment.notify_success }}>
+        Also send a message when a deploy succeeds (failures are always sent)
+      </label>
+    </form>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="button primary" type="submit" form="deploy-safety-form">Save</button>
+      {% if deployment.notify_url %}
+      <form method="post" action="/sites/{{ site.id }}/deploy/notify-test" style="margin:0;">
+        {{ ui.csrf(session) }}<button class="button" type="submit">Send a test message</button>
+      </form>
+      {% endif %}
+    </div>
   </div>
 
   <details style="margin-bottom:14px;">
@@ -118,8 +179,8 @@
       <tr>
         <td style="white-space:nowrap;">{{ d.started_at.strftime('%b %d, %H:%M') }}</td>
         <td>{% if d.short_commit %}<code>{{ d.short_commit }}</code> {% endif %}<span style="font-size:12.5px;">{{ (d.message or d.error or '')[:80] }}</span></td>
-        <td>{{ ui.badge(d.status, 'success' if d.status == 'success' else '') }}{% if d.job_id %} <a href="/jobs/{{ d.job_id }}" style="font-size:12px;">log</a>{% endif %}</td>
-        <td class="muted" style="font-size:12.5px;">{{ d.trigger }}{% if d.username %} · {{ d.username }}{% endif %}</td>
+        <td>{{ ui.badge(d.status | replace('_', ' '), 'success' if d.status == 'success' else '') }}{% if d.job_id %} <a href="/jobs/{{ d.job_id }}" style="font-size:12px;">log</a>{% endif %}{% if d.health %}<div class="muted" style="font-size:11.5px;">{{ d.health }}</div>{% endif %}</td>
+        <td class="muted" style="font-size:12.5px;">{{ d.trigger }}{% if d.username and d.username not in ('webhook', 'auto-deploy') %} · {{ d.username }}{% endif %}</td>
         <td class="muted" style="font-size:12.5px;">{{ (d.duration_seconds ~ 's') if d.duration_seconds is not none else '—' }}</td>
         <td style="text-align:right;">
           {% if d.status == 'success' and d.commit and not loop.first %}

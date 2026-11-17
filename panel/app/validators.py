@@ -410,6 +410,44 @@ def validate_commit(value: str) -> str:
     return value
 
 
+POLL_MINUTES_CHOICES = (0, 1, 2, 5, 10, 15, 30, 60)
+
+
+def validate_poll_minutes(value) -> int:
+    """How often to check the git host for a new commit; 0 turns it off."""
+    try:
+        minutes = int(str(value).strip() or "0")
+    except (TypeError, ValueError):
+        raise ValidationError("Check interval must be a number of minutes.") from None
+    if minutes not in POLL_MINUTES_CHOICES:
+        raise ValidationError(
+            "Check interval must be one of: off, " + ", ".join(str(m) for m in POLL_MINUTES_CHOICES[1:]) + " minutes."
+        )
+    return minutes
+
+
+def validate_health_path(value: str) -> str:
+    """The URL path requested after a deploy to see whether the site is up."""
+    value = (value or "").strip() or "/"
+    if not value.startswith("/") or len(value) > 200 or not re.match(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/?-]*$", value):
+        raise ValidationError("The health check path must start with / and contain no spaces, e.g. / or /up.")
+    return value
+
+
+def validate_notify_url(value: str) -> str:
+    """An https webhook for failure alerts; empty turns alerts off.
+
+    The panel connects to this address itself, so it is checked again at send
+    time against private networks (see services.notify).
+    """
+    value = _clean(value or "", "alert webhook URL")
+    if not value:
+        return ""
+    if len(value) > 400 or not re.match(r"^https://[A-Za-z0-9.-]+(?::\d{1,5})?/[^\s]*$", value):
+        raise ValidationError("The alert webhook must be a public https:// URL, e.g. a Slack or Discord webhook.")
+    return value
+
+
 def validate_deploy_script(value: str) -> str:
     value = (value or "").replace("\r\n", "\n").replace("\r", "\n").strip("\n")
     if "\x00" in value:

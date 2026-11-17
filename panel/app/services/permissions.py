@@ -331,7 +331,7 @@ def _as_web_user(user: str, test: List[str]) -> bool:
     return result.ok
 
 
-def http_status(domain: str, *, https: bool) -> Optional[int]:
+def http_status(domain: str, *, https: bool, path: str = "/") -> Optional[int]:
     """GET / on this machine with the site's Host header (and SNI for HTTPS),
     the equivalent of ``curl -sk --resolve <domain>:443:127.0.0.1 https://<domain>/``."""
     try:
@@ -345,7 +345,7 @@ def http_status(domain: str, *, https: bool) -> Optional[int]:
             sock = socket.create_connection(("127.0.0.1", 80), timeout=5)
         with sock:
             sock.sendall(
-                f"GET / HTTP/1.1\r\nHost: {domain}\r\nConnection: close\r\n\r\n".encode("ascii")
+                f"GET {path} HTTP/1.1\r\nHost: {domain}\r\nConnection: close\r\n\r\n".encode("ascii")
             )
             first = sock.recv(64).decode("latin-1", "replace")
         match = re.match(r"HTTP/\d\.\d (\d{3})", first)

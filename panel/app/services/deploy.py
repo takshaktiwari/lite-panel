@@ -21,12 +21,16 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+import threading
 import time
+from datetime import timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from app.models import SiteDeploy, SiteDeployment, utcnow
 from app.providers import get_provider
 from app.services import apps as apps_service
+from app.services import notify as notify_service
 from app.services import permissions as permissions_service
 from app.services import workers as workers_service
 from app.shell import run, which
@@ -37,6 +41,15 @@ logger = logging.getLogger(__name__)
 KEY_NAME = "lite_panel_deploy"
 SCRIPT_TIMEOUT = 3600
 GIT_TIMEOUT = 600
+REMOTE_CHECK_TIMEOUT = 60
+# A deploy that has been "running" longer than this is a stale row (the panel
+# was restarted mid-deploy); it must not lock the site forever.
+STALE_DEPLOY_AFTER = timedelta(hours=2)
+POLL_TICK_SECONDS = 30
+HEALTH_ATTEMPTS = 5      # the app / PHP may need a few seconds after a restart
+HEALTH_DELAY_SECONDS = 3
+HEALTH_FIRST_WAIT_SECONDS = 1
+RECOMMENDED_POLL_MINUTES = 5
 
 PRESETS: Dict[str, Dict[str, str]] = {
     "laravel": {
@@ -312,3 +325,290 @@ def deploy(ctx, site, deployment, *, commit: Optional[str] = None) -> Tuple[str,
     seconds = int(time.monotonic() - started)
     ctx.log(f"Deploy finished in {seconds // 60}m {seconds % 60:02d}s: {sha[:7]} {message}")
     return sha, message
+
+
+# --------------------------------------------------------------------------
+# Queueing and the per-site lock
+# --------------------------------------------------------------------------
+
+
+def active_deploy(db, site_id: int) -> Optional[SiteDeploy]:
+    """A deploy of this site that is queued or running (and not a stale row)."""
+    from sqlalchemy import select
+
+    cutoff = utcnow() - STALE_DEPLOY_AFTER
+    return db.scalars(
+        select(SiteDeploy)
+        .where(SiteDeploy.site_id == site_id)
+        .where(SiteDeploy.status.in_(("queued", "running")))
+        .where(SiteDeploy.started_at >= cutoff)
+        .order_by(SiteDeploy.id.desc())
+    ).first()
+
+
+def queue_deploy(db, site, *, trigger: str, commit: Optional[str] = None, username=None, user_id=None):
+    """Record a deploy in the history and hand it to the job worker.
+
+    One deploy per site at a time.  Returns the ``Job``, or ``None`` when a
+    deploy is already running and ``trigger`` is automatic (webhook / auto): that
+    push is remembered (``rerun_pending``) and deployed right after the current
+    one, so several quick pushes collapse into one more deploy of the newest
+    commit.  A person clicking Deploy now while one runs gets an error instead.
+    """
+    from app.jobs import enqueue
+
+    running = active_deploy(db, site.id)
+    if running is not None:
+        if trigger in ("webhook", "auto") and site.deployment is not None:
+            site.deployment.rerun_pending = True
+            db.commit()
+            return None
+        raise DeployError(f"A deploy is already running for {site.domain}; wait for it to finish.")
+
+    record = SiteDeploy(
+        site_id=site.id, trigger=trigger, requested_commit=commit, username=username, status="queued"
+    )
+    db.add(record)
+    db.flush()
+    label = f"Deploy {site.domain}" + (f" at {commit[:7]}" if commit else "")
+    job = enqueue(
+        db,
+        "site.deploy",
+        label,
+        payload={"site_id": site.id, "deploy_id": record.id, "commit": commit},
+        user_id=user_id,
+    )
+    record.job_id = job.id
+    db.commit()
+    return job
+
+
+def mark_interrupted(db) -> int:
+    """After a restart: deploys that were queued / running died with the old process."""
+    from sqlalchemy import select
+
+    stale = db.scalars(select(SiteDeploy).where(SiteDeploy.status.in_(("queued", "running")))).all()
+    for record in stale:
+        record.status = "failed"
+        record.error = "The panel restarted while this deploy was running."
+        record.finished_at = utcnow()
+    return len(stale)
+
+
+# --------------------------------------------------------------------------
+# Polling: deploy when the branch moves
+# --------------------------------------------------------------------------
+
+
+def remote_head(site, deployment) -> str:
+    """The commit the branch points to on the git host (``git ls-remote``)."""
+    if is_ssh_repo_url(deployment.repo_url) and not key_path(site).exists():
+        ensure_deploy_key(site)
+    ref = f"refs/heads/{deployment.branch}"
+    result = run(
+        as_site_user(site, ["git", "ls-remote", "--", deployment.repo_url, ref]),
+        check=False,
+        timeout=REMOTE_CHECK_TIMEOUT,
+    )
+    if not result.ok:
+        message = (result.stderr or result.stdout or "").strip().splitlines()
+        raise DeployError((message[-1] if message else "git ls-remote failed")[:250])
+    for line in (result.stdout or "").splitlines():
+        sha, _, name = line.partition("\t")
+        if name.strip() == ref and sha:
+            return sha.strip()
+    raise DeployError(f"Branch '{deployment.branch}' was not found in the repository.")
+
+
+def local_head(site, deployment) -> Optional[str]:
+    repo = Path(deployment.repo_dir)
+    if not (repo / ".git").exists():
+        return None
+    result = run(git(site, repo, "rev-parse", "HEAD"), check=False, timeout=30)
+    sha = (result.stdout or "").strip()
+    return sha if result.ok and sha else None
+
+
+def _naive_utc(moment):
+    """SQLite hands datetimes back without a timezone while ``utcnow()`` is
+    aware; compare them on the same footing (both UTC, no tzinfo)."""
+    if moment is not None and moment.tzinfo is not None:
+        return moment.astimezone(timezone.utc).replace(tzinfo=None)
+    return moment
+
+
+def poll_due(deployment, now) -> bool:
+    if not deployment.poll_minutes:
+        return False
+    if deployment.last_checked_at is None:
+        return True
+    return _naive_utc(now) - _naive_utc(deployment.last_checked_at) >= timedelta(minutes=deployment.poll_minutes)
+
+
+def poll_deployment(db, site, deployment, *, now=None) -> Optional[str]:
+    """Check one site.  Returns "deployed" / "queued" / "current" / "error:...".
+
+    A deploy is started only when the remote head *changed* since the last
+    decision (or, on the very first check, differs from what is checked out).
+    The head is recorded at decision time, so a failed deploy is not retried in
+    a loop and a rollback is not undone: the next deploy waits for a new push.
+    """
+    now = now or utcnow()
+    deployment.last_checked_at = now
+    try:
+        remote = remote_head(site, deployment)
+    except (DeployError, ValidationError, OSError) as exc:
+        first_failure = deployment.last_check_error is None
+        deployment.last_check_error = str(exc)[:300]
+        db.commit()
+        if first_failure:      # once per streak, not every check
+            alert(deployment, site, "check_failed",
+                  f"cannot reach the repository to check for new commits: {str(exc)[:200]}", level="warn")
+        return f"error: {exc}"
+    deployment.last_check_error = None
+
+    previous = deployment.last_remote_head
+    if previous is None:
+        local = local_head(site, deployment)
+        if local is None:                       # never deployed: the first deploy is manual
+            deployment.last_remote_head = remote
+            db.commit()
+            return "current"
+        changed = local != remote
+    else:
+        changed = remote != previous
+    deployment.last_remote_head = remote
+    db.commit()
+    if not changed:
+        return "current"
+
+    job = queue_deploy(db, site, trigger="auto", username="auto-deploy")
+    return "queued" if job is not None else "pending"
+
+
+def poll_once(*, now=None) -> int:
+    """One pass over every deployment that is due.  Returns how many were checked."""
+    from sqlalchemy import select
+
+    from app.database import session_scope
+
+    now = now or utcnow()
+    checked = 0
+    with session_scope() as db:
+        for deployment in db.scalars(select(SiteDeployment).where(SiteDeployment.poll_minutes > 0)).all():
+            if not poll_due(deployment, now):
+                continue
+            site = deployment.site
+            try:
+                result = poll_deployment(db, site, deployment, now=now)
+                checked += 1
+                if result not in ("current",):
+                    logger.info("deploy poll %s: %s", site.domain, result)
+            except Exception:  # noqa: BLE001 - one site must never stop the others
+                logger.exception("deploy poll failed for %s", site.domain)
+                db.rollback()
+    return checked
+
+
+_poller_thread: Optional[threading.Thread] = None
+_poller_stop = threading.Event()
+
+
+def _poller_loop() -> None:
+    while not _poller_stop.wait(POLL_TICK_SECONDS):
+        try:
+            poll_once()
+        except Exception:  # noqa: BLE001
+            logger.exception("deploy poller pass failed")
+
+
+def start_poller() -> None:
+    global _poller_thread
+    if _poller_thread and _poller_thread.is_alive():
+        return
+    _poller_stop.clear()
+    _poller_thread = threading.Thread(target=_poller_loop, daemon=True, name="deploy-poller")
+    _poller_thread.start()
+
+
+def stop_poller() -> None:
+    _poller_stop.set()
+    if _poller_thread and _poller_thread.is_alive():
+        _poller_thread.join(timeout=3)
+
+
+# --------------------------------------------------------------------------
+# Health check after a deploy, and rolling back
+# --------------------------------------------------------------------------
+
+
+class HealthResult:
+    def __init__(self, ok: bool, text: str, status: Optional[int] = None) -> None:
+        self.ok = ok
+        self.text = text          # "HTTP 200" / "HTTP 500" / "no answer"
+        self.status = status
+
+
+def check_health(ctx, site, deployment) -> HealthResult:
+    """Request the site (through nginx, with its Host header) until it answers.
+
+    403 and 5xx mean broken; anything else, a redirect or a 404 included, means
+    the site is up.  A new deploy needs a moment to come back, so an unhealthy
+    answer is retried a few times before it counts.  If nginx does not answer
+    at all the check cannot tell, which is not treated as a failure.
+    """
+    path = deployment.health_path or "/"
+    last: Optional[int] = None
+    for attempt in range(1, HEALTH_ATTEMPTS + 1):
+        time.sleep(HEALTH_DELAY_SECONDS if attempt > 1 else HEALTH_FIRST_WAIT_SECONDS)
+        last = permissions_service.http_status(site.domain, https=bool(site.ssl_enabled), path=path)
+        if last is None:
+            ctx.log("Health check: nginx did not answer a local request, so it could not be verified.")
+            return HealthResult(True, "not verified")
+        if last != 403 and last < 500:
+            ctx.log(f"Health check: {path} answered HTTP {last}")
+            return HealthResult(True, f"HTTP {last}", last)
+        ctx.log(f"Health check {attempt}/{HEALTH_ATTEMPTS}: {path} answered HTTP {last}")
+    return HealthResult(False, f"HTTP {last}", last)
+
+
+def rollback_target(db, site, record) -> Optional[str]:
+    """The newest earlier deploy that worked and is not the broken commit."""
+    from sqlalchemy import select
+
+    rows = db.scalars(
+        select(SiteDeploy)
+        .where(SiteDeploy.site_id == site.id)
+        .where(SiteDeploy.status == "success")
+        .where(SiteDeploy.id != record.id)
+        .where(SiteDeploy.commit.is_not(None))
+        .order_by(SiteDeploy.id.desc())
+    ).all()
+    for row in rows:
+        if row.commit != record.commit:
+            return row.commit
+    return None
+
+
+# --------------------------------------------------------------------------
+# Alerts
+# --------------------------------------------------------------------------
+
+_EMOJI = {"ok": "\u2705", "warn": "\u26a0\ufe0f", "bad": "\u274c"}
+
+
+def alert(deployment, site, event: str, text: str, *, level: str = "bad", log=None) -> bool:
+    """Tell the configured webhook.  Never raises: an alert must not break a deploy."""
+    url = getattr(deployment, "notify_url", None)
+    if not url:
+        return False
+    if level == "ok" and not deployment.notify_success:
+        return False
+    say = log or (lambda line: logger.info("%s", line))
+    try:
+        notify_service.send(url, f"{_EMOJI.get(level, '')} {site.domain}: {text}", event=event, site=site.domain)
+    except notify_service.NotifyError as exc:
+        say(f"Could not send the alert: {exc}")
+        return False
+    say("Alert sent.")
+    return True

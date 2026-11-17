@@ -107,13 +107,23 @@ async def lifespan(app: FastAPI):
             job.error = "Service restarted while this job was running. Check the log above for partial output."
             logger.warning("marked orphaned job %s (%s) as failed", job.id, job.kind)
 
+        from app.services import deploy as _deploy
+
+        interrupted = _deploy.mark_interrupted(db)
+        if interrupted:
+            logger.warning("marked %s interrupted deploy(s) as failed", interrupted)
+
     worker.start()
     _migrate_site_permissions()
     start_metrics_sampler()
     start_backup_scheduler()
+    from app.services import deploy as deploy_service
+
+    deploy_service.start_poller()
     try:
         yield
     finally:
+        deploy_service.stop_poller()
         stop_backup_scheduler()
         stop_metrics_sampler()
         worker.stop()
