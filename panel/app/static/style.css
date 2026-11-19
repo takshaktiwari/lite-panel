@@ -302,6 +302,7 @@ code, .mono {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
+.stack-flush { margin-bottom: 14px; }
 .stack-flush > .panel { margin-bottom: 0; }
 
 .columns {

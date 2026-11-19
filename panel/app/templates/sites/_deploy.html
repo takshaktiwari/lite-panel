@@ -97,12 +97,12 @@
           <span style="color:var(--danger);">Last check failed: {{ deployment.last_check_error }}</span>
           {% if 'denied' in deployment.last_check_error or 'Permission' in deployment.last_check_error %}(is the deploy key added to the repository?){% endif %}
         {% elif deployment.last_checked_at %}
-          Last checked {{ deployment.last_checked_at.strftime('%b %d, %H:%M') }} (UTC): no problems. A new commit on <code>{{ deployment.branch }}</code> deploys by itself.
+          Last checked {{ deployment.last_checked_at.strftime('%b %d, %H:%M') }} UTC · no problems
         {% else %}
           Waiting for the first check (within a minute).
         {% endif %}
       {% else %}
-        Off. When on, the panel asks git every few minutes and deploys when the branch has a new commit; nothing needs to reach this server. <a href="/docs/deploy#polling">Details</a>
+        Off. <a href="/docs/deploy#polling">How it works</a>
       {% endif %}
     </p>
 
@@ -119,7 +119,8 @@
     {% else %}
     <form method="post" action="/sites/{{ site.id }}/deploy/webhook" style="margin:0;display:flex;align-items:center;gap:10px;">
       {{ ui.csrf(session) }}<input type="hidden" name="action" value="enable">
-      <span class="muted" style="font-size:12.5px;"><strong>Instant (webhook):</strong> off. GitHub tells the panel the moment you push; needs the panel reachable from the internet.</span>
+      <span style="font-size:13px;" title="GitHub notifies the panel the moment you push. The panel must be reachable from the internet.">Deploy instantly on push (webhook)</span>
+      <span class="muted" style="font-size:12.5px;">Off</span>
       <button class="button button-sm" type="submit">Turn on</button>
     </form>
     {% endif %}
@@ -127,30 +128,30 @@
 
   <div style="margin-bottom:14px;">
     <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 6px;font-weight:600;">Safety and alerts</h3>
-    <p class="muted" style="font-size:12.5px;margin:0 0 8px;">After every deploy the panel requests the site. A 403 or a 5xx error means it is broken. <a href="/docs/deploy#safety">Details</a></p>
     <form method="post" action="/sites/{{ site.id }}/deploy/safety" id="deploy-safety-form" style="margin:0;">
       {{ ui.csrf(session) }}
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
         <div style="flex:1 1 160px;">
-          <label for="deploy-health-path">Health check path</label>
+          <label for="deploy-health-path" title="After each deploy the panel opens this page. A 403 or 5xx error marks the deploy as broken.">Page to test after deploy</label>
           <input type="text" id="deploy-health-path" name="health_path" value="{{ deployment.health_path or '/' }}" spellcheck="false" autocomplete="off">
         </div>
         <div style="flex:3 1 300px;">
-          <label for="deploy-notify-url">Alert webhook (Slack, Discord, Mattermost) <span class="muted" style="font-weight:normal;">optional</span></label>
+          <label for="deploy-notify-url" title="A Slack, Discord or Mattermost incoming-webhook URL. Failed deploys are always reported.">Chat alerts URL <span class="muted" style="font-weight:normal;">optional · Slack, Discord</span></label>
           <input type="text" id="deploy-notify-url" name="notify_url" value="{{ deployment.notify_url or '' }}" placeholder="https://hooks.slack.com/services/..." spellcheck="false" autocomplete="off">
         </div>
       </div>
       <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
         <input type="checkbox" name="rollback_on_failure" value="1" style="width:auto;margin:0;" {{ 'checked' if deployment.rollback_on_failure }}>
-        Roll back automatically to the last working deploy if the site is broken after a deploy
+        Roll back if the site breaks
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
         <input type="checkbox" name="notify_success" value="1" style="width:auto;margin:0;" {{ 'checked' if deployment.notify_success }}>
-        Also send a message when a deploy succeeds (failures are always sent)
+        Also alert on successful deploys
       </label>
     </form>
     <div style="display:flex;gap:8px;margin-top:6px;">
       <button class="button primary" type="submit" form="deploy-safety-form">Save</button>
+      <a href="/docs/deploy#safety" style="font-size:12.5px;align-self:center;">Details</a>
       {% if deployment.notify_url %}
       <form method="post" action="/sites/{{ site.id }}/deploy/notify-test" style="margin:0;">
         {{ ui.csrf(session) }}<button class="button" type="submit">Send a test message</button>
