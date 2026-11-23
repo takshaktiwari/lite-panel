@@ -28,6 +28,17 @@
       <div><dt>FPM socket</dt><dd>{{ socket or '—' }}</dd></div>
       {% endif %}
       <div><dt>SSL</dt><dd>{{ 'Enabled' if site.ssl_enabled else 'Disabled' }}</dd></div>
+      {% if deployment %}
+      {% set last_deploy = deploy_history[0] if deploy_history else None %}
+      <div><dt>Last deploy</dt><dd>
+        {% if last_deploy %}
+          {{ (last_deploy.finished_at or last_deploy.started_at).strftime('%b %d, %Y %H:%M') }} UTC
+          <span style="font-size:12.5px;color:{{ 'var(--ok)' if last_deploy.status == 'success' else ('var(--danger)' if last_deploy.status == 'failed' else 'var(--muted)') }};">· {{ last_deploy.status | replace('_', ' ') }}</span>
+        {% else %}
+          <span class="muted">Never</span>
+        {% endif %}
+      </dd></div>
+      {% endif %}
     </dl>
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <a class="button" href="/files?path={{ site.name }}" style="font-size:12px;padding:3px 10px;" target="_blank" rel="noopener">Browse files</a>
